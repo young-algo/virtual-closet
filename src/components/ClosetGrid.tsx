@@ -17,6 +17,9 @@ interface ClosetGridProps {
   packedItemIds: string[];
   onUpdateItem: (item: ClosetItem) => void;
   onDeleteItem?: (itemId: string) => void;
+  selectionMode?: boolean;
+  selectedItemIds?: string[];
+  onToggleSelectItem?: (item: ClosetItem) => void;
 }
 
 export const ClosetGrid: React.FC<ClosetGridProps> = ({
@@ -24,7 +27,10 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
   onAddToPackingList,
   packedItemIds,
   onUpdateItem,
-  onDeleteItem
+  onDeleteItem,
+  selectionMode = false,
+  selectedItemIds = [],
+  onToggleSelectItem
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -352,6 +358,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
         }}>
           {filteredItems.map(item => {
             const isPacked = packedItemIds.includes(item.id);
+            const isSelected = selectionMode && selectedItemIds.includes(item.id);
             return (
               <article
                 key={item.id}
@@ -361,9 +368,12 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  outline: isSelected ? '2px solid var(--accent-primary)' : 'none',
+                  outlineOffset: '-2px',
+                  backgroundColor: isSelected ? 'var(--accent-muted)' : undefined
                 }}
-                onClick={() => handleOpenDetails(item)}
+                onClick={() => selectionMode ? onToggleSelectItem?.(item) : handleOpenDetails(item)}
               >
                 {/* Image Wrapper */}
                 <div style={{
@@ -389,42 +399,68 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   />
 
                   {/* Actions overlay panel */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '12px',
-                      right: '12px',
-                      display: 'flex',
-                      gap: '8px',
-                      zIndex: 2
-                    }}
-                    onClick={(e) => e.stopPropagation()} // Prevent card click
-                  >
-                    {/* Add / Packed button */}
-                    <button
-                      onClick={() => onAddToPackingList(item)}
-                      className="tap-target"
-                      title={isPacked ? "Remove from packing list" : "Add to packing list"}
+                  {selectionMode ? (
+                    /* Outfit selection indicator — card click toggles, so no stopPropagation */
+                    <div
                       style={{
-                        width: '36px',
-                        height: '36px',
+                        position: 'absolute',
+                        top: '12px',
+                        right: '12px',
+                        width: '28px',
+                        height: '28px',
                         borderRadius: '50%',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        border: '1px solid',
-                        backgroundColor: isPacked ? 'var(--accent-primary)' : 'rgba(15, 15, 15, 0.65)',
-                        borderColor: isPacked ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.25)',
-                        color: isPacked ? 'var(--bg-surface)' : '#ffffff',
-                        backdropFilter: 'blur(4px)',
-                        cursor: 'pointer',
+                        border: '2px solid',
+                        borderColor: isSelected ? 'var(--accent-primary)' : 'var(--border-color-hover)',
+                        backgroundColor: isSelected ? 'var(--accent-primary)' : 'var(--bg-surface)',
+                        color: 'var(--bg-surface)',
                         transition: 'var(--transition-fast)',
-                        boxShadow: 'var(--shadow-sm)'
+                        boxShadow: 'var(--shadow-sm)',
+                        zIndex: 2
                       }}
                     >
-                      {isPacked ? <Check size={16} strokeWidth={2.5} /> : <Plus size={16} />}
-                    </button>
-                  </div>
+                      {isSelected && <Check size={16} strokeWidth={3} />}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '12px',
+                        right: '12px',
+                        display: 'flex',
+                        gap: '8px',
+                        zIndex: 2
+                      }}
+                      onClick={(e) => e.stopPropagation()} // Prevent card click
+                    >
+                      {/* Add / Packed button */}
+                      <button
+                        onClick={() => onAddToPackingList(item)}
+                        className="tap-target"
+                        title={isPacked ? "Remove from packing list" : "Add to packing list"}
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '1px solid',
+                          backgroundColor: isPacked ? 'var(--accent-primary)' : 'rgba(15, 15, 15, 0.65)',
+                          borderColor: isPacked ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.25)',
+                          color: isPacked ? 'var(--bg-surface)' : '#ffffff',
+                          backdropFilter: 'blur(4px)',
+                          cursor: 'pointer',
+                          transition: 'var(--transition-fast)',
+                          boxShadow: 'var(--shadow-sm)'
+                        }}
+                      >
+                        {isPacked ? <Check size={16} strokeWidth={2.5} /> : <Plus size={16} />}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Info block */}

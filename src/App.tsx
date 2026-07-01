@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import ClosetGrid from './components/ClosetGrid';
 import type { ClosetItem } from './components/ClosetGrid';
 import PackingList from './components/PackingList';
+import OutfitBuilder from './components/OutfitBuilder';
+import type { Outfit } from './components/OutfitBuilder';
 import UploadModal from './components/UploadModal';
 import { Shirt, Plus } from 'lucide-react';
 import closetData from './data/closet.json';
@@ -50,7 +52,24 @@ function App() {
     return [];
   });
 
+  // Load saved outfits with localStorage persistence
+  const [outfits, setOutfits] = useState<Outfit[]>(() => {
+    const savedOutfits = localStorage.getItem('closet_outfits');
+    if (savedOutfits) {
+      try {
+        return JSON.parse(savedOutfits);
+      } catch (e) {
+        console.error('Failed to parse outfits from localStorage', e);
+      }
+    }
+    return [];
+  });
+
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  // Outfit builder selection mode state
+  const [isBuildingOutfit, setIsBuildingOutfit] = useState(false);
+  const [selectedOutfitItemIds, setSelectedOutfitItemIds] = useState<string[]>([]);
 
   // Sync items to localStorage
   useEffect(() => {
@@ -62,6 +81,11 @@ function App() {
     const packedIds = packedItems.map(item => item.id);
     localStorage.setItem('closet_packed_items', JSON.stringify(packedIds));
   }, [packedItems]);
+
+  // Sync outfits to localStorage
+  useEffect(() => {
+    localStorage.setItem('closet_outfits', JSON.stringify(outfits));
+  }, [outfits]);
 
   const handleTogglePackingItem = (item: ClosetItem) => {
     setPackedItems(prev => {
@@ -91,6 +115,58 @@ function App() {
   const handleDeleteItem = (itemId: string) => {
     setItems(prev => prev.filter(item => item.id !== itemId));
     setPackedItems(prev => prev.filter(item => item.id !== itemId));
+    // Keep saved outfits consistent when a garment is removed from the closet
+    setOutfits(prev => prev.map(outfit => ({
+      ...outfit,
+      itemIds: outfit.itemIds.filter(id => id !== itemId)
+    })));
+    setSelectedOutfitItemIds(prev => prev.filter(id => id !== itemId));
+  };
+
+  // --- Outfit builder handlers ---
+
+  const handleStartBuildingOutfit = () => {
+    setSelectedOutfitItemIds([]);
+    setIsBuildingOutfit(true);
+  };
+
+  const handleCancelBuildingOutfit = () => {
+    setSelectedOutfitItemIds([]);
+    setIsBuildingOutfit(false);
+  };
+
+  const handleToggleOutfitItem = (item: ClosetItem) => {
+    setSelectedOutfitItemIds(prev =>
+      prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]
+    );
+  };
+
+  const handleSaveOutfit = (name: string) => {
+    const newOutfit: Outfit = {
+      id: `outfit_${Date.now()}`,
+      name,
+      itemIds: selectedOutfitItemIds,
+      createdAt: Date.now()
+    };
+    setOutfits(prev => [newOutfit, ...prev]);
+    setSelectedOutfitItemIds([]);
+    setIsBuildingOutfit(false);
+  };
+
+  const handleDeleteOutfit = (outfitId: string) => {
+    setOutfits(prev => prev.filter(outfit => outfit.id !== outfitId));
+  };
+
+  // Add every garment in an outfit to the packing list, skipping already-packed ones
+  const handleAddOutfitToPackingList = (outfit: Outfit) => {
+    setPackedItems(prev => {
+      const packedIds = new Set(prev.map(item => item.id));
+      const itemsToAdd = outfit.itemIds
+        .filter(id => !packedIds.has(id))
+        .map(id => items.find(item => item.id === id))
+        .filter((item): item is ClosetItem => item !== undefined);
+      return [...prev, ...itemsToAdd];
+    });
   };
 
   const handleAddGarment = (newItem: ClosetItem) => {
@@ -192,12 +268,30 @@ function App() {
             </p>
           </div>
 
+          <OutfitBuilder
+            outfits={outfits}
+            items={items}
+            isBuilding={isBuildingOutfit}
+            selectedItems={selectedOutfitItemIds
+              .map(id => items.find(item => item.id === id))
+              .filter((item): item is ClosetItem => item !== undefined)}
+            onStartBuilding={handleStartBuildingOutfit}
+            onCancelBuilding={handleCancelBuildingOutfit}
+            onSaveOutfit={handleSaveOutfit}
+            onToggleSelectItem={handleToggleOutfitItem}
+            onDeleteOutfit={handleDeleteOutfit}
+            onAddOutfitToPackingList={handleAddOutfitToPackingList}
+          />
+
           <ClosetGrid
             items={items}
             onAddToPackingList={handleTogglePackingItem}
             packedItemIds={packedItemIds}
             onUpdateItem={handleUpdateItem}
             onDeleteItem={handleDeleteItem}
+            selectionMode={isBuildingOutfit}
+            selectedItemIds={selectedOutfitItemIds}
+            onToggleSelectItem={handleToggleOutfitItem}
           />
         </div>
 
