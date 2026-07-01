@@ -1,0 +1,229 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* OKLCH Light Color Palette - Shaker Wardrobe */
+  --bg-primary: oklch(0.98 0.003 70); /* Light Linen #faf9f5 */
+  --bg-surface: oklch(1.0 0.0 0); /* Pure White Paper */
+  --bg-surface-hover: oklch(0.96 0.005 150); /* Subtle Sage Tint */
+  
+  --text-primary: oklch(0.20 0.01 250); /* Slate Ink #1e2022 */
+  --text-secondary: oklch(0.42 0.01 250); /* Muted Slate Ink */
+  --text-muted: oklch(0.62 0.01 250); /* Delicate gray text */
+  
+  --accent-primary: oklch(0.48 0.04 155); /* Muted Sage Green #4a6b5d */
+  --accent-primary-hover: oklch(0.40 0.03 155); /* Darker Sage */
+  --accent-muted: oklch(0.94 0.01 155); /* Soft Sage background tint */
+  
+  --border-color: oklch(0.92 0.005 70); /* Warm light border #e4e2db */
+  --border-color-hover: oklch(0.82 0.01 150);
+  
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);
+  
+  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Outfit', system-ui, -apple-system, sans-serif;
+  
+  --radius-sm: 4px; /* Crisp geometric corners for buttons/inputs */
+  --radius-md: 8px; /* Classic radius for cards */
+  --radius-lg: 12px; /* Dialog overlay corners */
+  --radius-full: 9999px; /* Capsule pills and circular shapes */
+  
+  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  
+  color-scheme: light;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background-color: var(--bg-primary);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* App Shell Layout */
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+}
+
+/* Typography elements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+  max-width: 70ch;
+}
+
+label {
+  letter-spacing: 0.08em;
+}
+
+input, select, textarea, button {
+  font-family: var(--font-sans);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  outline: none;
+  transition: var(--transition-fast);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+}
+
+dialog {
+  border: none;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+  margin: auto;
+}
+
+dialog::backdrop {
+  background-color: rgba(30, 32, 34, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+/* Dialog Container */
+dialog > div {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 24px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-width: 500px;
+  width: 90%;
+  margin: auto;
+}
+
+/* Animation utilities */
+@starting-style {
+  dialog[open] {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+dialog[open] {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+dialog[open]::backdrop {
+  opacity: 1;
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Custom classes for micro-interactions */
+.tap-target {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tap-target:active {
+  transform: scale(0.97);
+}
+
+.interactive-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: var(--transition-smooth);
+}
+
+.interactive-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-color-hover);
+  box-shadow: var(--shadow-md);
+}
+
+/* Product image blending system for premium light mode aesthetics */
+.product-image-container {
+  background-color: var(--bg-surface) !important; /* Pure white card background */
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.product-image-container img {
+  mix-blend-mode: multiply; /* Blends white photo backdrop cleanly into the card surface */
+  opacity: 0.95;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.interactive-card:hover .product-image-container img {
+  transform: scale(1.05);
+}
+
+/* Reduced Motion overrides */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0s !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+  .interactive-card:hover {
+    transform: none;
+  }
+  .interactive-card:hover .product-image-container img {
+    transform: none;
+  }
+}
+
+.dialog-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 600px) {
+  .dialog-grid {
+    grid-template-columns: 1fr 1.2fr;
+  }
+}
