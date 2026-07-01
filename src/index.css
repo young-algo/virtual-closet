@@ -124,18 +124,6 @@ dialog::backdrop {
   backdrop-filter: blur(8px);
 }
 
-/* Dialog Container */
-dialog > div {
-  background-color: var(--bg-surface);
-  color: var(--text-primary);
-  padding: 24px;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  max-width: 500px;
-  width: 90%;
-  margin: auto;
-}
-
 /* Animation utilities */
 @starting-style {
   dialog[open] {
@@ -219,11 +207,13 @@ dialog[open]::backdrop {
 
 .dialog-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* minmax(0, …) lets tracks shrink below content min-size, preventing the
+     aspect-ratio photo box from forcing the column wide and overflowing */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (min-width: 600px) {
   .dialog-grid {
-    grid-template-columns: 1fr 1.2fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
   }
 }
