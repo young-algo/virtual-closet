@@ -111,7 +111,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
 
   const tagImageWithGemini = async (base64Image: string, key: string): Promise<any> => {
     const base64Data = base64Image.split(',')[1] || base64Image;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-image:generateContent?key=${key}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -120,7 +120,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
         contents: [
           {
             parts: [
-              { text: "Analyze this clothing item image and return a JSON object with: { \"name\": \"Title of item\", \"category\": \"one of (T-Shirts, Polos, Long Sleeves, Pants, Shorts, Hoodies, Sweatshirts, Jerseys)\", \"color\": \"Primary color (single word)\", \"brand\": \"Brand name (e.g. Nike, Adidas, Uniqlo, Generic)\", \"description\": \"Short description of style\", \"generationPrompt\": \"A detailed prompt to generate a flat-lay product photo of this exact garment on a solid pure white background, centered, with no model, no hanger, and no wrinkles (e.g., 'A professional flat-lay studio product photo of a blue knit long-sleeve polo shirt with white stripes... laid flat, perfectly centered, showing the front, on a solid pure white background, wrinkle-free')\" }. Return ONLY raw JSON, no markdown blocks." },
+              { text: "Analyze this clothing item image and return a JSON object with: { \"name\": \"Title of item\", \"category\": \"one of (T-Shirts, Polos, Long Sleeves, Pants, Shorts, Hoodies, Sweatshirts, Jerseys)\", \"color\": \"Primary color (single word)\", \"brand\": \"Brand name (e.g. Nike, Adidas, Uniqlo, Generic)\", \"description\": \"Short description of style\" }. Return ONLY raw JSON, no markdown blocks." },
               {
                 inlineData: {
                   mimeType: 'image/jpeg',
@@ -149,59 +149,67 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
     return JSON.parse(text);
   };
 
-  const generateFlatLay = async (prompt: string, key: string): Promise<string> => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${key}`, {
+  const generateFlatLay = async (base64Image: string, key: string): Promise<string> => {
+    const base64Data = base64Image.split(',')[1] || base64Image;
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-image:generateContent?key={key}`.replace('{key}', key), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        instances: [
-          { prompt: prompt }
+        contents: [
+          {
+            parts: [
+              {
+                text: "A professional flat-lay studio product photo of this exact garment, laid flat, perfectly centered, showing the front, on a solid pure white background, wrinkle-free, no model, no hanger, no shadows."
+              },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: base64Data
+                }
+              }
+            ]
+          }
         ],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: "1:1"
+        generationConfig: {
+          responseModalities: ["IMAGE"]
         }
       })
     });
     
     if (!response.ok) {
-      throw new Error('Imagen 4 generation failed. Fallback to isolated original photo.');
+      throw new Error('Gemini Image processing failed. Fallback to isolated original photo.');
     }
     
     const result = await response.json();
-    const base64Data = result.predictions?.[0]?.bytesBase64Encoded;
-    if (!base64Data) {
-      throw new Error('No image generated from Imagen.');
+    const generatedBase64 = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!generatedBase64) {
+      throw new Error('No image generated from Gemini Image model.');
     }
     
-    const mimeType = result.predictions?.[0]?.mimeType || 'image/jpeg';
-    return `data:${mimeType};base64,${base64Data}`;
+    const mimeType = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || 'image/jpeg';
+    return `data:${mimeType};base64,${generatedBase64}`;
   };
 
   const runPipeline = async () => {
     if (!selectedFile) return;
     setError('');
     
+    let finalImage = '';
+    let tags: any = null;
+
     try {
-      // Step 1: Background Removal
-      setStatusStep('cleaning');
-      setStatusMessage('Smoothing wrinkles and isolating garment background...');
-      
-      const cleanedBlob = await removeBackground(selectedFile);
-      const base64Jpeg = await processAndResizeImage(cleanedBlob);
-      setProcessedImageBase64(base64Jpeg);
-      setPreviewUrl(base64Jpeg);
-      
-      // Step 2: Auto-Tagging
-      let tags: any = null;
+      // Step 1: Prep raw original image for AI analysis
+      const base64Raw = await processAndResizeImage(selectedFile);
+
+      // Step 2: Auto-Tagging & Prompt Generation
       if (apiKey.trim()) {
         setStatusStep('tagging');
         setStatusMessage('Analyzing garment details with Gemini AI...');
         
         try {
-          tags = await tagImageWithGemini(base64Jpeg, apiKey.trim());
+          tags = await tagImageWithGemini(base64Raw, apiKey.trim());
           setName(tags.name || '');
           setBrand(tags.brand || '');
           setCategory(tags.category || 'T-Shirts');
@@ -212,7 +220,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
           setError('AI tagging failed. You can fill out the metadata manually.');
         }
       } else {
-        // Fallback defaults
+        // Fallback defaults if no API key
         setName(selectedFile.name.replace(/\.[^/.]+$/, ""));
         setBrand('Generic');
         setCategory('T-Shirts');
@@ -220,20 +228,37 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
         setDescription('Manually uploaded clothing item.');
       }
 
-      // Step 3: Imagen AI Flattening & Wrinkle Smoothing
-      if (apiKey.trim() && enableFlattening && tags && tags.generationPrompt) {
+      // Step 3: Gemini Image AI Flattening & Wrinkle Smoothing
+      if (apiKey.trim() && enableFlattening) {
         setStatusStep('generating');
         setStatusMessage('Flattening garment layout and smoothing wrinkles...');
         try {
-          const generatedFlatLayBase64 = await generateFlatLay(tags.generationPrompt, apiKey.trim());
-          setProcessedImageBase64(generatedFlatLayBase64);
-          setPreviewUrl(generatedFlatLayBase64);
+          const generatedFlatLayBase64 = await generateFlatLay(base64Raw, apiKey.trim());
+          finalImage = generatedFlatLayBase64;
         } catch (genErr: any) {
           console.error(genErr);
           setError(`Flattening failed: ${genErr.message || genErr}. Proceeding with isolated photo.`);
         }
       }
+
+      // Step 4: Fallback to local background removal if no AI image was generated
+      if (!finalImage) {
+        setStatusStep('cleaning');
+        setStatusMessage('Smoothing wrinkles and isolating garment background...');
+        try {
+          const cleanedBlob = await removeBackground(selectedFile, {
+            device: 'cpu'
+          });
+          finalImage = await processAndResizeImage(cleanedBlob);
+        } catch (cleanErr) {
+          console.error(cleanErr);
+          // If both AI and background removal fail, use the resized original photo
+          finalImage = base64Raw;
+        }
+      }
       
+      setProcessedImageBase64(finalImage);
+      setPreviewUrl(finalImage);
       setStatusStep('review');
       setStatusMessage('');
     } catch (err: any) {
@@ -581,6 +606,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
                     <option value="Polos">Polos</option>
                     <option value="Long Sleeves">Long Sleeves</option>
                     <option value="Pants">Pants</option>
+                    <option value="Shorts">Shorts</option>
+                    <option value="Sweatshirts">Sweatshirts</option>
+                    <option value="Jerseys">Jerseys</option>
+                    <option value="Hoodies">Hoodies</option>
+                    <option value="Shirts">Shirts</option>
+                    <option value="Outerwear">Outerwear</option>
                   </select>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

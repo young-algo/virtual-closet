@@ -14,7 +14,18 @@ function App() {
     const savedItems = localStorage.getItem('closet_items');
     if (savedItems) {
       try {
-        const localItems: ClosetItem[] = JSON.parse(savedItems);
+        let localItems: ClosetItem[] = JSON.parse(savedItems);
+        
+        // Remove any base manifest items that have been deleted from the base database manifest
+        const baseManifestIds = new Set((closetData as ClosetItem[]).map(item => item.id));
+        localItems = localItems.filter(item => {
+          // If it is a base item (doesn't start with 'user_'), it must exist in the base manifest
+          if (!item.id.startsWith('user_')) {
+            return baseManifestIds.has(item.id);
+          }
+          return true;
+        });
+
         const localIds = new Set(localItems.map(item => item.id));
         
         // Find any new items in the base database manifest (closetData) not yet in localStorage
@@ -22,7 +33,8 @@ function App() {
           item => !localIds.has(item.id)
         );
         
-        if (newManifestItems.length > 0) {
+        const originalSavedCount = JSON.parse(savedItems).length;
+        if (newManifestItems.length > 0 || localItems.length !== originalSavedCount) {
           const merged = [...newManifestItems, ...localItems];
           localStorage.setItem('closet_items', JSON.stringify(merged));
           return merged;
