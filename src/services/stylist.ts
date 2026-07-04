@@ -96,7 +96,9 @@ export type GeminiPart =
   | { inlineData: { mimeType: string; data: string } };
 
 // Session-only thumbnail cache; never persisted (localStorage already holds
-// full-size uploads and doesn't need ~1MB more).
+// full-size uploads and doesn't need ~1MB more). Keyed by item id and never
+// invalidated within a session — if a photo is replaced mid-session, the
+// stylist keeps using the stale thumbnail until the page reloads.
 const thumbnailCache = new Map<string, string>();
 
 const getThumbnailBase64 = async (item: ClosetItem): Promise<string> => {
