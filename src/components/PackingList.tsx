@@ -21,7 +21,7 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
   };
 
   const handleExportList = () => {
-    const header = `🧳 Packing List: ${tripName}\n\n`;
+    const header = `Packing List: ${tripName}\n\n`;
     const body = packedItems.map(item => {
       const isPhysicallyPacked = physicallyPacked.includes(item.id) ? '[x]' : '[ ]';
       return `${isPhysicallyPacked} ${item.name} (${item.brand} / ${item.color})`;
@@ -49,12 +49,10 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
     <aside style={{
       width: '100%',
       backgroundColor: 'var(--bg-surface)',
-      borderLeft: '1px solid var(--border-color)',
-      padding: '24px',
+      padding: '40px 32px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '24px',
-      boxShadow: 'var(--shadow-sm)'
+      gap: '24px'
     }}>
       {/* Trip metadata inputs */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -65,8 +63,9 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
             onChange={(e) => setTripName(e.target.value)}
             placeholder="Trip Name"
             style={{
-              fontSize: '1.4rem',
-              fontWeight: 600,
+              fontSize: '1.5rem',
+              fontWeight: 400,
+              letterSpacing: '-0.01em',
               fontFamily: 'var(--font-heading)',
               border: 'none',
               borderBottom: '1px solid transparent',
@@ -85,22 +84,32 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
       {/* Checklist Header and Progress */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '1rem', fontFamily: 'var(--font-heading)' }}>Suitcase Contents</h3>
+          <h3 style={{ fontSize: '1rem', fontFamily: 'var(--font-heading)' }}>Packing List</h3>
           {totalItems > 0 && progressPercent === 100 ? (
             <span style={{
-              fontSize: '0.8rem',
-              color: 'var(--accent-primary)',
+              fontSize: '0.7rem',
+              color: 'var(--text-primary)',
               fontWeight: 600,
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              animation: 'pulse 2s infinite'
+              gap: '4px'
             }}>
-              Ready for takeoff! ✈️
+              <Check size={12} strokeWidth={3} />
+              Fully packed
             </span>
           ) : (
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-              {packedCount} / {totalItems} Packed
+            <span style={{
+              fontSize: '0.7rem',
+              color: 'var(--text-secondary)',
+              fontWeight: 500,
+              fontFamily: 'var(--font-mono)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              {packedCount} / {totalItems} packed
             </span>
           )}
         </div>
@@ -108,9 +117,8 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
         {totalItems > 0 && (
           <div style={{
             width: '100%',
-            height: '6px',
-            backgroundColor: 'var(--bg-primary)',
-            borderRadius: 'var(--radius-full)',
+            height: '2px',
+            backgroundColor: 'var(--border-color)',
             overflow: 'hidden'
           }}>
             <div style={{
@@ -139,19 +147,19 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
             color: 'var(--text-muted)',
             padding: '24px'
           }}>
-            <span style={{ fontSize: '2rem' }}>🧳</span>
-            <p style={{ fontSize: '0.85rem' }}>Your suitcase is empty. Click garments in your closet to pack them!</p>
+            <p style={{ fontSize: '0.85rem' }}>Nothing packed yet. Add garments from your closet to start a list.</p>
           </div>
         ) : (
           Object.entries(groupedItems).map(([category, items]) => (
             <div key={category} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <span style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--accent-primary)',
+                fontSize: '0.65rem',
+                fontWeight: 500,
+                color: 'var(--text-muted)',
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                paddingBottom: '2px',
+                letterSpacing: '0.08em',
+                fontFamily: 'var(--font-mono)',
+                paddingBottom: '4px',
                 borderBottom: '1px solid var(--border-color)'
               }}>
                 {category}
@@ -166,9 +174,8 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '8px 10px',
-                        backgroundColor: 'var(--bg-primary)',
-                        borderRadius: 'var(--radius-sm)',
+                        padding: '10px 0',
+                        borderBottom: '1px solid var(--border-color)',
                         transition: 'var(--transition-fast)'
                       }}
                     >
@@ -180,7 +187,7 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                           style={{
                             width: '18px',
                             height: '18px',
-                            borderRadius: '4px',
+                            borderRadius: '0',
                             border: '1px solid',
                             borderColor: isChecked ? 'var(--accent-primary)' : 'var(--text-muted)',
                             backgroundColor: isChecked ? 'var(--accent-primary)' : 'transparent',
@@ -219,7 +226,7 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}
-                        onMouseOver={(e) => (e.currentTarget.style.color = '#ff6b6b')}
+                        onMouseOver={(e) => (e.currentTarget.style.color = 'var(--error)')}
                         onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                       >
                         <Trash2 size={14} />
@@ -269,8 +276,8 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                   padding: '10px',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid transparent',
-                  backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                  color: '#ff6b6b',
+                  backgroundColor: 'var(--error-bg)',
+                  color: 'var(--error)',
                   fontSize: '0.85rem',
                   cursor: 'pointer',
                   display: 'flex',
@@ -279,8 +286,8 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                   transition: 'var(--transition-fast)'
                 }}
                 title="Clear packing list"
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.2)')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 107, 107, 0.1)')}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'var(--error-border)')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'var(--error-bg)')}
               >
                 <Trash2 size={16} />
               </button>
@@ -290,12 +297,12 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
-              backgroundColor: 'rgba(255, 107, 107, 0.05)',
+              backgroundColor: 'var(--error-bg)',
               padding: '12px',
               borderRadius: 'var(--radius-sm)',
-              border: '1px solid rgba(255, 107, 107, 0.2)'
+              border: '1px solid var(--error-border)'
             }}>
-              <p style={{ fontSize: '0.8rem', color: '#ff6b6b', fontWeight: 500, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <p style={{ fontSize: '0.8rem', color: 'var(--error)', fontWeight: 500, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                 <AlertCircle size={14} />
                 Are you sure you want to clear your suitcase?
               </p>
@@ -311,7 +318,7 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                     padding: '8px',
                     borderRadius: 'var(--radius-sm)',
                     border: 'none',
-                    backgroundColor: '#ff6b6b',
+                    backgroundColor: 'var(--error)',
                     color: 'white',
                     fontSize: '0.8rem',
                     fontWeight: 600,
