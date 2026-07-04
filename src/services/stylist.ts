@@ -128,3 +128,105 @@ export const buildInventoryParts = async (items: ClosetItem[]): Promise<GeminiPa
   }
   return parts;
 };
+
+export interface GenerateOutfitInput {
+  apiKey: string;
+  prompt: string;
+  items: ClosetItem[];
+  locked: LockedIds;
+  rejected: RejectedCombo[];
+}
+
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    topId: { type: 'STRING' },
+    bottomId: { type: 'STRING' },
+    shoeId: { type: 'STRING' },
+    layerIds: { type: 'ARRAY', items: { type: 'STRING' } },
+    outfitName: { type: 'STRING' },
+    stylistNote: { type: 'STRING' }
+  },
+  required: ['topId', 'bottomId', 'shoeId', 'layerIds', 'outfitName', 'stylistNote']
+} as const;
+
+const PREAMBLE =
+  "You are a personal stylist for Kevin's real wardrobe, shown below as photos with metadata. " +
+  'You may ONLY use the item ids listed. Build one outfit: exactly one top (slot=top), one bottom ' +
+  '(slot=bottom), one pair of shoes (slot=shoes), plus zero or more optional layers (slot=layer) when ' +
+  'the occasion or styling calls for it. Judge each item primarily by its photo; metadata may be sparse. ' +
+  'Also return a short evocative outfitName (2-4 words) and a stylistNote of 1-2 sentences explaining ' +
+  'why the combination works for the request.';
+
+const describeConstraints = (locked: LockedIds, rejected: RejectedCombo[]): string => {
+  const lines: string[] = [];
+  const lockedList = [
+    locked.topId && `top=${locked.topId}`,
+    locked.bottomId && `bottom=${locked.bottomId}`,
+    locked.shoeId && `shoes=${locked.shoeId}`,
+    locked.layerIds?.length ? `layers=${locked.layerIds.join('+')}` : undefined
+  ].filter(Boolean);
+  if (lockedList.length > 0) {
+    lines.push(`LOCKED ITEMS (fixed — you must include these exact ids in these slots and build around them): ${lockedList.join(', ')}`);
+  }
+  if (rejected.length > 0) {
+    const combos = rejected
+      .map(c => `[top=${c.topId}, bottom=${c.bottomId}, shoes=${c.shoeId}, layers=${c.layerIds.join('+') || 'none'}]`)
+      .join(' ');
+    lines.push(`ALREADY REJECTED (do not repeat any of these exact combinations): ${combos}`);
+  }
+  return lines.join('\n');
+};
+
+const callGemini = async (apiKey: string, parts: GeminiPart[]): Promise<StylistRecommendation> => {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: RESPONSE_SCHEMA
+        }
+      })
+    }
+  );
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      detail = body?.error?.message ?? detail;
+    } catch { /* keep the HTTP status as the detail */ }
+    throw new Error(`Gemini request failed: ${detail}`);
+  }
+  const result = await response.json();
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('The stylist returned an empty response. Try again.');
+  return JSON.parse(text) as StylistRecommendation;
+};
+
+export const generateOutfit = async (input: GenerateOutfitInput): Promise<StylistRecommendation> => {
+  const inventoryParts = await buildInventoryParts(input.items);
+  const constraints = describeConstraints(input.locked, input.rejected);
+  const parts: GeminiPart[] = [
+    { text: PREAMBLE },
+    ...inventoryParts,
+    { text: `OCCASION / STYLE REQUEST: ${input.prompt}` },
+    ...(constraints ? [{ text: constraints }] : [])
+  ];
+
+  let rec = await callGemini(input.apiKey, parts);
+  let error = validateRecommendation(rec, input.items, input.locked);
+  if (error) {
+    // One silent retry with the validation error fed back.
+    rec = await callGemini(input.apiKey, [
+      ...parts,
+      { text: `Your previous answer was invalid: ${error}. Return a corrected outfit that fixes this.` }
+    ]);
+    error = validateRecommendation(rec, input.items, input.locked);
+    if (error) throw new Error(`The stylist returned an invalid outfit twice (${error}). Try regenerating.`);
+  }
+  return rec;
+};
