@@ -1,88 +1,97 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Check, X, Edit2, AlertCircle, Shirt } from 'lucide-react';
+import { Search, Plus, Check, X, Edit2, AlertCircle, Footprints } from 'lucide-react';
+import type { ClosetItem } from './ClosetGrid';
+import { resizeImageToDataUrl } from '../utils/image';
 
-export interface ClosetItem {
-  id: string;
-  name: string;
-  category: string;
-  color: string;
-  brand: string;
-  image: string;
-  description: string;
+// A sneaker is a closet item catalogued by style code, with an optional
+// second (top-down) product view. Conforming to ClosetItem lets sneakers
+// flow through outfits and the packing list unchanged.
+export interface SneakerItem extends ClosetItem {
+  styleCode: string;
+  imageTop?: string;
 }
 
-interface ClosetGridProps {
-  items: ClosetItem[];
+interface SneakerGridProps {
+  sneakers: SneakerItem[];
   onAddToPackingList: (item: ClosetItem) => void;
   packedItemIds: string[];
-  onUpdateItem: (item: ClosetItem) => void;
-  onDeleteItem?: (itemId: string) => void;
+  onUpdateSneaker: (item: SneakerItem) => void;
+  onDeleteSneaker?: (itemId: string) => void;
   selectionMode?: boolean;
   selectedItemIds?: string[];
   onToggleSelectItem?: (item: ClosetItem) => void;
 }
 
-export const ClosetGrid: React.FC<ClosetGridProps> = ({
-  items,
+export const SneakerGrid: React.FC<SneakerGridProps> = ({
+  sneakers,
   onAddToPackingList,
   packedItemIds,
-  onUpdateItem,
-  onDeleteItem,
+  onUpdateSneaker,
+  onDeleteSneaker,
   selectionMode = false,
   selectedItemIds = [],
   onToggleSelectItem
 }) => {
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedBrand, setSelectedBrand] = useState<string>('All');
   const [selectedColor, setSelectedColor] = useState<string>('All');
-  const [activeDetailItem, setActiveDetailItem] = useState<ClosetItem | null>(null);
+  const [activeDetailItem, setActiveDetailItem] = useState<SneakerItem | null>(null);
+  const [detailView, setDetailView] = useState<'side' | 'top'>('side');
 
-  // Edit States
+  // Edit states
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editBrand, setEditBrand] = useState('');
-  const [editCategory, setEditCategory] = useState('');
   const [editColor, setEditColor] = useState('');
+  const [editStyleCode, setEditStyleCode] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editImage, setEditImage] = useState('');
+  const [editImageTop, setEditImageTop] = useState('');
   const [validationError, setValidationError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const sideFileRef = useRef<HTMLInputElement>(null);
+  const topFileRef = useRef<HTMLInputElement>(null);
 
-  // Extract unique categories, brands, and colors dynamically from the items prop
-  const categories = useMemo(() => ['All', ...Array.from(new Set(items.map(item => item.category)))], [items]);
-  const brands = useMemo(() => ['All', ...Array.from(new Set(items.map(item => item.brand)))], [items]);
-  const colors = useMemo(() => ['All', ...Array.from(new Set(items.map(item => item.color)))], [items]);
+  const brands = useMemo(
+    () => Array.from(new Set(sneakers.map(s => s.brand).filter(Boolean))),
+    [sneakers]
+  );
+  // Colorways are user-entered and start out blank; only offer the filter once values exist
+  const colors = useMemo(
+    () => Array.from(new Set(sneakers.map(s => s.color).filter(Boolean))),
+    [sneakers]
+  );
 
-  // Filter items based on search and selected filters
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
-                            item.brand.toLowerCase().includes(search.toLowerCase()) ||
-                            item.description.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-      const matchesBrand = selectedBrand === 'All' || item.brand === selectedBrand;
-      const matchesColor = selectedColor === 'All' || item.color === selectedColor;
-
-      return matchesSearch && matchesCategory && matchesBrand && matchesColor;
+  const filteredSneakers = useMemo(() => {
+    const q = search.toLowerCase();
+    return sneakers.filter(s => {
+      const matchesSearch =
+        s.name.toLowerCase().includes(q) ||
+        s.brand.toLowerCase().includes(q) ||
+        s.styleCode.toLowerCase().includes(q) ||
+        s.color.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q);
+      const matchesBrand = selectedBrand === 'All' || s.brand === selectedBrand;
+      const matchesColor = selectedColor === 'All' || s.color === selectedColor;
+      return matchesSearch && matchesBrand && matchesColor;
     });
-  }, [items, search, selectedCategory, selectedBrand, selectedColor]);
+  }, [sneakers, search, selectedBrand, selectedColor]);
 
-  // Check if any filter is active
-  const isAnyFilterActive = search !== '' || selectedCategory !== 'All' || selectedBrand !== 'All' || selectedColor !== 'All';
+  const isAnyFilterActive = search !== '' || selectedBrand !== 'All' || selectedColor !== 'All';
 
   const clearAllFilters = () => {
     setSearch('');
-    setSelectedCategory('All');
     setSelectedBrand('All');
     setSelectedColor('All');
   };
 
-  const handleOpenDetails = (item: ClosetItem) => {
+  const handleOpenDetails = (item: SneakerItem) => {
     setActiveDetailItem(item);
-    setIsEditing(false); // Reset edit state
+    setDetailView('side');
+    setIsEditing(false);
     setValidationError('');
     setSaveSuccess(false);
     setTimeout(() => {
@@ -106,9 +115,11 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
     setShowDeleteConfirm(false);
   };
 
-  // Close details dialog if user clicks on backdrop
   const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
-    if (dialogRef.current) {
+    // Only clicks landing on the dialog element itself can be backdrop clicks.
+    // Programmatic clicks (e.g. fileRef.current.click()) bubble up from children
+    // with (0,0) coordinates and must not close the dialog.
+    if (dialogRef.current && e.target === dialogRef.current) {
       const rect = dialogRef.current.getBoundingClientRect();
       const isInDialog = (
         rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
@@ -124,9 +135,11 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
     if (activeDetailItem) {
       setEditName(activeDetailItem.name);
       setEditBrand(activeDetailItem.brand);
-      setEditCategory(activeDetailItem.category);
       setEditColor(activeDetailItem.color);
+      setEditStyleCode(activeDetailItem.styleCode);
       setEditDescription(activeDetailItem.description);
+      setEditImage(activeDetailItem.image);
+      setEditImageTop(activeDetailItem.imageTop ?? '');
       setValidationError('');
       setSaveSuccess(false);
       setIsEditing(true);
@@ -135,37 +148,30 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
 
   const saveEditing = () => {
     if (!editName.trim()) {
-      setValidationError('Garment name cannot be empty.');
+      setValidationError('Sneaker name cannot be empty.');
       return;
     }
     if (!editBrand.trim()) {
       setValidationError('Brand cannot be empty.');
       return;
     }
-    if (!editCategory.trim()) {
-      setValidationError('Category cannot be empty.');
-      return;
-    }
-    if (!editColor.trim()) {
-      setValidationError('Color cannot be empty.');
-      return;
-    }
 
     if (activeDetailItem) {
-      const updatedItem: ClosetItem = {
+      const updatedItem: SneakerItem = {
         ...activeDetailItem,
         name: editName.trim(),
         brand: editBrand.trim(),
-        category: editCategory.trim(),
         color: editColor.trim(),
-        description: editDescription.trim()
+        styleCode: editStyleCode.trim(),
+        description: editDescription.trim(),
+        image: editImage,
+        imageTop: editImageTop || undefined
       };
-      onUpdateItem(updatedItem);
+      onUpdateSneaker(updatedItem);
       setActiveDetailItem(updatedItem);
       setValidationError('');
       setIsEditing(false);
-      
-      // Trigger temporary success state
+
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     }
@@ -176,9 +182,27 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
     setValidationError('');
   };
 
-  const toggleCategoryPill = (category: string) => {
-    setSelectedCategory(prev => prev === category ? 'All' : category);
+  const handlePhotoChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setImage: (dataUrl: string) => void
+  ) => {
+    const file = e.target.files?.[0];
+    // Allow re-selecting the same file after a failed attempt
+    e.target.value = '';
+    if (!file) return;
+    try {
+      setImage(await resizeImageToDataUrl(file));
+      setValidationError('');
+    } catch (err) {
+      console.error(err);
+      setValidationError('Could not read that image. Try a PNG, JPG or WEBP file.');
+    }
   };
+
+  // While editing, the photo box previews pending (unsaved) images
+  const currentSideImage = isEditing && activeDetailItem ? editImage : activeDetailItem?.image ?? '';
+  const currentTopImage = isEditing && activeDetailItem ? editImageTop : activeDetailItem?.imageTop ?? '';
+  const detailImage = detailView === 'top' && currentTopImage ? currentTopImage : currentSideImage;
 
   return (
     <section className="closet-section" style={{ display: 'flex', flexDirection: 'column', gap: '24px', flexGrow: 1 }}>
@@ -197,7 +221,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
           gap: '32px',
           alignItems: 'center'
         }}>
-          {/* Search Input */}
+          {/* Search input */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <Search size={15} style={{
               position: 'absolute',
@@ -206,7 +230,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
             }} />
             <input
               type="text"
-              placeholder="Search"
+              placeholder="Search name or style code"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
@@ -218,74 +242,39 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
             />
           </div>
 
-          {/* Brand Selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <select
-              value={selectedBrand}
-              onChange={(e) => setSelectedBrand(e.target.value)}
-              style={{ height: '40px', width: '100%', cursor: 'pointer', fontSize: '0.85rem' }}
-            >
-              <option value="All">All Brands</option>
-              {brands.filter(b => b !== 'All').map(brand => (
-                <option key={brand} value={brand}>{brand}</option>
-              ))}
-            </select>
-          </div>
+          {/* Brand selector */}
+          <select
+            value={selectedBrand}
+            onChange={(e) => setSelectedBrand(e.target.value)}
+            style={{ height: '40px', width: '100%', cursor: 'pointer', fontSize: '0.85rem' }}
+          >
+            <option value="All">All Brands</option>
+            {brands.map(brand => (
+              <option key={brand} value={brand}>{brand}</option>
+            ))}
+          </select>
 
-          {/* Color Selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {/* Colorway selector — appears once colorways have been entered */}
+          {colors.length > 0 && (
             <select
               value={selectedColor}
               onChange={(e) => setSelectedColor(e.target.value)}
               style={{ height: '40px', width: '100%', cursor: 'pointer', fontSize: '0.85rem' }}
             >
-              <option value="All">All Colors</option>
-              {colors.filter(c => c !== 'All').map(color => (
+              <option value="All">All Colorways</option>
+              {colors.map(color => (
                 <option key={color} value={color}>{color}</option>
               ))}
             </select>
-          </div>
+          )}
         </div>
 
-        {/* Category tabs: quiet text, active marked by an underline */}
-        <div style={{
-          display: 'flex',
-          gap: '24px',
-          rowGap: '10px',
-          flexWrap: 'wrap',
-          alignItems: 'baseline'
-        }}>
-          {categories.map(category => {
-            const isActive = selectedCategory === category;
-            return (
-              <button
-                key={category}
-                onClick={() => toggleCategoryPill(category)}
-                className="tap-target"
-                style={{
-                  padding: '4px 0',
-                  border: 'none',
-                  borderBottom: '1px solid',
-                  borderBottomColor: isActive ? 'var(--text-primary)' : 'transparent',
-                  backgroundColor: 'transparent',
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                  fontSize: '0.68rem',
-                  fontWeight: 500,
-                  letterSpacing: '0.12em',
-                  transition: 'var(--transition-fast)',
-                  cursor: 'pointer'
-                }}
-              >
-                {category}
-              </button>
-            );
-          })}
-          {isAnyFilterActive && (
+        {isAnyFilterActive && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button
               onClick={clearAllFilters}
               className="tap-target"
               style={{
-                marginLeft: 'auto',
                 padding: '4px 0',
                 border: 'none',
                 backgroundColor: 'transparent',
@@ -300,12 +289,12 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
             >
               Clear
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Closet Grid */}
-      {items.length === 0 ? (
+      {/* Sneaker grid */}
+      {sneakers.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '96px 32px',
@@ -314,18 +303,18 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
           alignItems: 'center',
           gap: '14px'
         }}>
-          <Shirt size={40} strokeWidth={1} style={{ color: 'var(--text-muted)' }} />
-          <h3 style={{ fontSize: '1.15rem', fontWeight: 500 }}>Your wardrobe is waiting</h3>
+          <Footprints size={40} strokeWidth={1} style={{ color: 'var(--text-muted)' }} />
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 500 }}>The rotation is empty</h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '320px', margin: '0 auto' }}>
-            Get started by adding clothes from your computer or dragging new pictures into the uploader.
+            Add your first pair with the Add Sneaker button above — a side-view photo is all it takes.
           </p>
         </div>
-      ) : filteredItems.length === 0 ? (
+      ) : filteredSneakers.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '80px 32px'
         }}>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '10px', fontSize: '0.9rem', marginLeft: 'auto', marginRight: 'auto' }}>No items found matching your filters.</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '10px', fontSize: '0.9rem', marginLeft: 'auto', marginRight: 'auto' }}>No sneakers found matching your filters.</p>
           <button
             onClick={clearAllFilters}
             className="tap-target"
@@ -350,13 +339,13 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
           gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
           gap: '48px 28px'
         }}>
-          {filteredItems.map(item => {
-            const isPacked = packedItemIds.includes(item.id);
-            const isSelected = selectionMode && selectedItemIds.includes(item.id);
+          {filteredSneakers.map(sneaker => {
+            const isPacked = packedItemIds.includes(sneaker.id);
+            const isSelected = selectionMode && selectedItemIds.includes(sneaker.id);
             return (
               <article
-                key={item.id}
-                className="interactive-card"
+                key={sneaker.id}
+                className="interactive-card sneaker-cell"
                 style={{
                   position: 'relative',
                   display: 'flex',
@@ -365,31 +354,38 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   outline: isSelected ? '1px solid var(--text-primary)' : 'none',
                   outlineOffset: '6px'
                 }}
-                onClick={() => selectionMode ? onToggleSelectItem?.(item) : handleOpenDetails(item)}
+                onClick={() => selectionMode ? onToggleSelectItem?.(sneaker) : handleOpenDetails(sneaker)}
               >
-                {/* Image well */}
-                <div style={{
+                {/* Image well: lateral view at rest, top view on hover */}
+                <div className="sneaker-well" style={{
                   position: 'relative',
                   aspectRatio: '1',
-                  backgroundColor: 'var(--well)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden'
-                }} className="product-image-container">
+                }}>
                   <img
-                    src={item.image}
-                    alt={item.name}
+                    src={sneaker.image}
+                    alt={sneaker.name}
                     loading="lazy"
+                    className={`sneaker-view-side${sneaker.imageTop ? ' has-top' : ''}`}
                     style={{
                       width: '90%',
                       height: '90%',
-                      objectFit: 'contain',
+                      objectFit: 'contain'
                     }}
-                    className="product-image"
                   />
+                  {sneaker.imageTop && (
+                    <img
+                      src={sneaker.imageTop}
+                      alt={`${sneaker.name} — top view`}
+                      loading="lazy"
+                      className="sneaker-view-top"
+                      style={{ objectFit: 'contain' }}
+                    />
+                  )}
 
-                  {/* Actions overlay panel */}
                   {selectionMode ? (
                     /* Outfit selection indicator — card click toggles, so no stopPropagation */
                     <div
@@ -408,7 +404,6 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                         backgroundColor: isSelected ? 'var(--accent-primary)' : 'var(--bg-surface)',
                         color: 'var(--bg-surface)',
                         transition: 'var(--transition-fast)',
-                        boxShadow: 'var(--shadow-sm)',
                         zIndex: 2
                       }}
                     >
@@ -424,11 +419,10 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                         gap: '8px',
                         zIndex: 2
                       }}
-                      onClick={(e) => e.stopPropagation()} // Prevent card click
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {/* Add / Packed button */}
                       <button
-                        onClick={() => onAddToPackingList(item)}
+                        onClick={() => onAddToPackingList(sneaker)}
                         className="tap-target"
                         title={isPacked ? "Remove from packing list" : "Add to packing list"}
                         style={{
@@ -452,9 +446,9 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   )}
                 </div>
 
-                {/* Info block */}
+                {/* Info block: brand and style code in the garment-tag voice */}
                 <div style={{ padding: '14px 0 0', display: 'flex', flexDirection: 'column', gap: '5px', flexGrow: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                     <span style={{
                       fontSize: '0.65rem',
                       fontWeight: 500,
@@ -463,16 +457,16 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                       letterSpacing: '0.08em',
                       fontFamily: 'var(--font-mono)'
                     }}>
-                      {item.brand}
+                      {sneaker.brand}
                     </span>
                     <span style={{
                       fontSize: '0.65rem',
                       color: 'var(--text-muted)',
-                      textTransform: 'uppercase',
                       letterSpacing: '0.05em',
-                      fontFamily: 'var(--font-mono)'
+                      fontFamily: 'var(--font-mono)',
+                      whiteSpace: 'nowrap'
                     }}>
-                      {item.category}
+                      {sneaker.styleCode}
                     </span>
                   </div>
 
@@ -486,25 +480,27 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap'
                   }}>
-                    {item.name}
+                    {sneaker.name}
                   </h3>
 
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    marginTop: '4px'
-                  }}>
-                    <span style={{
-                      fontSize: '0.65rem',
-                      color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-mono)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
+                  {sneaker.color && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginTop: '4px'
                     }}>
-                      {item.color}
-                    </span>
-                  </div>
+                      <span style={{
+                        fontSize: '0.65rem',
+                        color: 'var(--text-secondary)',
+                        fontFamily: 'var(--font-mono)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                      }}>
+                        {sneaker.color}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </article>
             );
@@ -512,7 +508,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
         </div>
       )}
 
-      {/* Closet Item Details Native Dialog Overlay */}
+      {/* Sneaker details dialog */}
       <dialog
         ref={dialogRef}
         onClose={handleDialogCloseEvent}
@@ -534,7 +530,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
             width: '100%',
             maxHeight: '90vh'
           }}>
-            {/* Header / Dismiss / Edit toggle */}
+            {/* Header / dismiss / edit toggle */}
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -544,7 +540,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
               gap: '12px',
               flexShrink: 0
             }}>
-              <h3 style={{ fontSize: '1.2rem', fontFamily: 'var(--font-heading)' }}>Garment Details</h3>
+              <h3 style={{ fontSize: '1.2rem', fontFamily: 'var(--font-heading)' }}>Sneaker Details</h3>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 {saveSuccess && (
                   <span style={{ fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 500 }}>
@@ -626,34 +622,123 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
               </div>
             </div>
 
-            {/* Photo & Specs Grid */}
+            {/* Photo & specs grid */}
             <div className="dialog-grid" style={{
               backgroundColor: 'var(--bg-surface)',
               overflowY: 'auto',
               flexGrow: 1
             }}>
-              {/* Product Photo Box */}
-              <div style={{
-                backgroundColor: 'var(--well)',
-                padding: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                aspectRatio: '1',
-                maxHeight: '300px'
-              }} className="product-image-container">
-                <img
-                  src={activeDetailItem.image}
-                  alt={activeDetailItem.name}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain'
-                  }}
-                />
+              {/* Product photo box with view toggle */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="sneaker-well" style={{
+                  padding: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  aspectRatio: '1',
+                  maxHeight: '300px'
+                }}>
+                  <img
+                    src={detailImage}
+                    alt={activeDetailItem.name}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      objectFit: 'contain'
+                    }}
+                  />
+                </div>
+
+                {/* View toggle: quiet mono tabs, underline marks the active view */}
+                {currentTopImage && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', padding: '12px 0 4px' }}>
+                    {(['side', 'top'] as const).map(view => {
+                      const isActive = detailView === view;
+                      return (
+                        <button
+                          key={view}
+                          onClick={() => setDetailView(view)}
+                          className="tap-target"
+                          style={{
+                            padding: '2px 0',
+                            border: 'none',
+                            borderBottom: '1px solid',
+                            borderBottomColor: isActive ? 'var(--text-primary)' : 'transparent',
+                            backgroundColor: 'transparent',
+                            color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                            fontSize: '0.62rem',
+                            fontWeight: 500,
+                            letterSpacing: '0.12em',
+                            fontFamily: 'var(--font-mono)',
+                            cursor: 'pointer',
+                            transition: 'var(--transition-fast)'
+                          }}
+                        >
+                          {view === 'side' ? 'Side' : 'Top'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Photo actions, edit mode only: replace or remove views */}
+                {isEditing && (
+                  <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '8px 18px', padding: '10px 12px 14px' }}>
+                    <input
+                      type="file"
+                      ref={sideFileRef}
+                      onChange={(e) => handlePhotoChange(e, setEditImage)}
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                    />
+                    <input
+                      type="file"
+                      ref={topFileRef}
+                      onChange={(e) => handlePhotoChange(e, setEditImageTop)}
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                    />
+                    {([
+                      { label: 'Replace side photo', action: () => sideFileRef.current?.click() },
+                      currentTopImage
+                        ? { label: 'Replace top photo', action: () => topFileRef.current?.click() }
+                        : { label: 'Add top photo', action: () => topFileRef.current?.click() },
+                      ...(currentTopImage
+                        ? [{
+                            label: 'Remove top photo',
+                            action: () => {
+                              setEditImageTop('');
+                              setDetailView('side');
+                            }
+                          }]
+                        : [])
+                    ]).map(({ label, action }) => (
+                      <button
+                        key={label}
+                        onClick={action}
+                        className="tap-target"
+                        style={{
+                          padding: '2px 0',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          color: 'var(--text-secondary)',
+                          fontSize: '0.62rem',
+                          fontWeight: 500,
+                          letterSpacing: '0.12em',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          textUnderlineOffset: '3px',
+                          transition: 'var(--transition-fast)'
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Text Description / Editing Form Box */}
+              {/* Description / editing form */}
               <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {validationError && (
                   <div style={{
@@ -690,26 +775,28 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                       </h2>
                     </div>
 
-                    <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      {activeDetailItem.description}
-                    </p>
+                    {activeDetailItem.description && (
+                      <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                        {activeDetailItem.description}
+                      </p>
+                    )}
 
-                    {/* Attributes badges */}
+                    {/* Attributes */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
                       <div>
-                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', display: 'block', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '3px' }}>Category</span>
-                        <strong style={{ fontSize: '0.9rem', fontWeight: 400 }}>{activeDetailItem.category}</strong>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', display: 'block', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '3px' }}>Style Code</span>
+                        <strong style={{ fontSize: '0.9rem', fontWeight: 400, fontFamily: 'var(--font-mono)' }}>{activeDetailItem.styleCode || '—'}</strong>
                       </div>
                       <div>
-                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', display: 'block', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '3px' }}>Color</span>
-                        <strong style={{ fontSize: '0.9rem', fontWeight: 400 }}>{activeDetailItem.color}</strong>
+                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', display: 'block', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '3px' }}>Colorway</span>
+                        <strong style={{ fontSize: '0.9rem', fontWeight: 400 }}>{activeDetailItem.color || '—'}</strong>
                       </div>
                     </div>
                   </>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Garment Name</label>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Sneaker Name</label>
                       <input
                         type="text"
                         value={editName}
@@ -729,7 +816,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                         />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Color</label>
+                        <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Colorway</label>
                         <input
                           type="text"
                           value={editColor}
@@ -740,12 +827,12 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Category</label>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Style Code</label>
                       <input
                         type="text"
-                        value={editCategory}
-                        onChange={(e) => setEditCategory(e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', fontSize: '0.9rem' }}
+                        value={editStyleCode}
+                        onChange={(e) => setEditStyleCode(e.target.value)}
+                        style={{ width: '100%', padding: '6px 10px', fontSize: '0.9rem', fontFamily: 'var(--font-mono)' }}
                       />
                     </div>
 
@@ -778,13 +865,13 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   }}>
                     <p style={{ fontSize: '0.85rem', color: 'var(--error)', fontWeight: 500, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                       <AlertCircle size={14} />
-                      Delete this garment permanently?
+                      Delete this sneaker permanently?
                     </p>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button
                         onClick={() => {
-                          if (onDeleteItem) {
-                            onDeleteItem(activeDetailItem.id);
+                          if (onDeleteSneaker) {
+                            onDeleteSneaker(activeDetailItem.id);
                           }
                           handleCloseDetails();
                         }}
@@ -857,8 +944,8 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                         </>
                       )}
                     </button>
-                    
-                    {!isEditing && onDeleteItem && (
+
+                    {!isEditing && onDeleteSneaker && (
                       <button
                         onClick={() => setShowDeleteConfirm(true)}
                         className="tap-target"
@@ -887,7 +974,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                           e.currentTarget.style.borderColor = 'var(--border-color)';
                         }}
                       >
-                        Delete Garment
+                        Delete Sneaker
                       </button>
                     )}
                   </div>
@@ -897,7 +984,41 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
           </div>
         )}
       </dialog>
+
+      {/* Sneaker wells own their hover behavior: the global product-image rules
+          pin transition to transform only, which would break the view cross-fade */}
+      <style>{`
+        .sneaker-well {
+          background-color: var(--well);
+        }
+        .sneaker-well img {
+          mix-blend-mode: multiply;
+          opacity: 0.95;
+          transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .sneaker-well .sneaker-view-top {
+          position: absolute;
+          inset: 5%;
+          width: 90%;
+          height: 90%;
+          opacity: 0;
+        }
+        .sneaker-cell:hover .sneaker-well img {
+          transform: scale(1.04);
+        }
+        .sneaker-cell:hover .sneaker-well .sneaker-view-top {
+          opacity: 0.95;
+        }
+        .sneaker-cell:hover .sneaker-well .sneaker-view-side.has-top {
+          opacity: 0;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .sneaker-cell:hover .sneaker-well img {
+            transform: none;
+          }
+        }
+      `}</style>
     </section>
   );
 };
-export default ClosetGrid;
+export default SneakerGrid;

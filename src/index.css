@@ -1,37 +1,43 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  /* OKLCH Light Color Palette - Shaker Wardrobe */
-  --bg-primary: oklch(0.98 0.003 70); /* Light Linen #faf9f5 */
-  --bg-surface: oklch(1.0 0.0 0); /* Pure White Paper */
-  --bg-surface-hover: oklch(0.96 0.005 150); /* Subtle Sage Tint */
-  
-  --text-primary: oklch(0.20 0.01 250); /* Slate Ink #1e2022 */
-  --text-secondary: oklch(0.42 0.01 250); /* Muted Slate Ink */
-  --text-muted: oklch(0.62 0.01 250); /* Delicate gray text */
-  
-  --accent-primary: oklch(0.48 0.04 155); /* Muted Sage Green #4a6b5d */
-  --accent-primary-hover: oklch(0.40 0.03 155); /* Darker Sage */
-  --accent-muted: oklch(0.94 0.01 155); /* Soft Sage background tint */
-  
-  --border-color: oklch(0.92 0.005 70); /* Warm light border #e4e2db */
-  --border-color-hover: oklch(0.82 0.01 150);
-  
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);
-  
-  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
-  --font-heading: 'Outfit', system-ui, -apple-system, sans-serif;
-  
-  --radius-sm: 4px; /* Crisp geometric corners for buttons/inputs */
-  --radius-md: 8px; /* Classic radius for cards */
-  --radius-lg: 12px; /* Dialog overlay corners */
-  --radius-full: 9999px; /* Capsule pills and circular shapes */
-  
+  /* Monochrome Swiss Palette - The Continuous Field */
+  --bg-primary: #ffffff; /* One white plane; no canvas/panel contrast */
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #fafafa;
+  --well: #f6f6f6; /* Soft grey wells - the only grey surface, reserved for imagery */
+
+  --text-primary: #111111; /* Near-black ink */
+  --text-secondary: #5c5c5c; /* Mid grey */
+  --text-muted: #969696; /* Light grey */
+
+  --accent-primary: #111111; /* Black is the accent */
+  --accent-primary-hover: #000000;
+  --accent-muted: #f6f6f6;
+
+  --border-color: #e6e6e6; /* Hairline rule */
+  --border-color-hover: #111111; /* Rules sharpen to black on interaction */
+
+  --error: #b3261e; /* Functional red - destructive actions only */
+  --error-bg: rgba(179, 38, 30, 0.05);
+  --error-border: rgba(179, 38, 30, 0.25);
+
+  --shadow-sm: none; /* Flat: structure comes from rules and whitespace */
+  --shadow-md: none;
+  --shadow-lg: 0 32px 80px rgba(0, 0, 0, 0.14); /* Modal layers only */
+
+  --font-sans: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-heading: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
+
+  --radius-sm: 0px; /* Rectilinear, always */
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-full: 0px;
+
   --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   --transition-fast: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-  
+
   color-scheme: light;
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -64,7 +70,6 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-color);
-  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -82,7 +87,8 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
@@ -91,24 +97,53 @@ p {
   max-width: 70ch;
 }
 
+/* Fine-print voice: form labels in small tracked mono caps */
 label {
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
-input, select, textarea, button {
+/* Fields are underlines on the field - never boxes */
+input, select, textarea {
   font-family: var(--font-sans);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
+  padding: 10px 2px;
+  outline: none;
+  transition: var(--transition-fast);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-bottom-color: var(--text-primary);
+  box-shadow: none;
+}
+
+/* Controls speak in quiet tracked caps */
+button {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  background-color: transparent;
+  border: none;
+  color: var(--text-primary);
+  border-radius: 0;
   padding: 8px 12px;
   outline: none;
   transition: var(--transition-fast);
 }
 
-input:focus, select:focus, textarea:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+button:focus-visible {
+  outline: 1px solid var(--text-primary);
+  outline-offset: 3px;
 }
 
 dialog {
@@ -120,15 +155,14 @@ dialog {
 }
 
 dialog::backdrop {
-  background-color: rgba(30, 32, 34, 0.45);
-  backdrop-filter: blur(8px);
+  background-color: rgba(17, 17, 17, 0.35);
 }
 
 /* Animation utilities */
 @starting-style {
   dialog[open] {
     opacity: 0;
-    transform: scale(0.95) translateY(10px);
+    transform: translateY(8px);
   }
   dialog[open]::backdrop {
     opacity: 0;
@@ -137,13 +171,13 @@ dialog::backdrop {
 
 dialog[open] {
   opacity: 1;
-  transform: scale(1) translateY(0);
-  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateY(0);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 dialog[open]::backdrop {
   opacity: 1;
-  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Custom classes for micro-interactions */
@@ -155,36 +189,29 @@ dialog[open]::backdrop {
 }
 
 .tap-target:active {
-  transform: scale(0.97);
+  transform: scale(0.99);
 }
 
+/* Product cells sit directly on the field - no card chrome */
 .interactive-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: var(--transition-smooth);
+  background-color: transparent;
+  border: none;
+  transition: var(--transition-fast);
 }
 
-.interactive-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--border-color-hover);
-  box-shadow: var(--shadow-md);
-}
-
-/* Product image blending system for premium light mode aesthetics */
+/* The image well: soft grey plinth for garments, the only grey in the interface */
 .product-image-container {
-  background-color: var(--bg-surface) !important; /* Pure white card background */
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background-color: var(--well) !important;
 }
 
 .product-image-container img {
-  mix-blend-mode: multiply; /* Blends white photo backdrop cleanly into the card surface */
+  mix-blend-mode: multiply; /* Blends white photo backdrops into the well */
   opacity: 0.95;
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .interactive-card:hover .product-image-container img {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 
 /* Reduced Motion overrides */
@@ -196,9 +223,6 @@ dialog[open]::backdrop {
     transition-delay: 0s !important;
     transition-duration: 0s !important;
     scroll-behavior: auto !important;
-  }
-  .interactive-card:hover {
-    transform: none;
   }
   .interactive-card:hover .product-image-container img {
     transform: none;
