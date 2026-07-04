@@ -2,6 +2,7 @@
 // AI stylist logic: slot mapping, response validation, thumbnail encoding,
 // and the Gemini structured-output call. Pure logic — no React.
 import type { ClosetItem } from '../components/ClosetGrid';
+import { resizeImageToDataUrl } from '../utils/image';
 
 export type SlotName = 'top' | 'bottom' | 'shoes' | 'layer';
 
@@ -88,4 +89,42 @@ export const validateRecommendation = (
   }
 
   return null;
+};
+
+export type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
+// Session-only thumbnail cache; never persisted (localStorage already holds
+// full-size uploads and doesn't need ~1MB more).
+const thumbnailCache = new Map<string, string>();
+
+const getThumbnailBase64 = async (item: ClosetItem): Promise<string> => {
+  const cached = thumbnailCache.get(item.id);
+  if (cached) return cached;
+  // item.image is either a public path (/closet/x.jpg) or a data URL —
+  // fetch handles both uniformly.
+  const blob = await (await fetch(item.image)).blob();
+  const dataUrl = await resizeImageToDataUrl(blob, 256);
+  const base64 = dataUrl.split(',')[1];
+  thumbnailCache.set(item.id, base64);
+  return base64;
+};
+
+// One image part + one metadata line per wearable item. Sparse metadata
+// (blank sneaker color/description) defers to the photo explicitly so the
+// model doesn't treat the blank as meaningful.
+export const buildInventoryParts = async (items: ClosetItem[]): Promise<GeminiPart[]> => {
+  const parts: GeminiPart[] = [];
+  for (const item of items) {
+    const slot = slotForItem(item);
+    if (!slot) continue;
+    parts.push({ inlineData: { mimeType: 'image/jpeg', data: await getThumbnailBase64(item) } });
+    parts.push({
+      text: `id=${item.id} | slot=${slot} | category=${item.category}` +
+        ` | color=${item.color || 'see photo'} | brand=${item.brand || 'unknown'}` +
+        ` | ${item.description || 'no description — judge from the photo above'}`
+    });
+  }
+  return parts;
 };
