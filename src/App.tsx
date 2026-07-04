@@ -290,6 +290,17 @@ function App() {
     setIsBuildingOutfit(false);
   };
 
+  // AI stylist saves a complete outfit directly — no selection-mode round trip
+  const handleSaveAIOutfit = (name: string, itemIds: string[]) => {
+    const newOutfit: Outfit = {
+      id: `outfit_${Date.now()}`,
+      name,
+      itemIds,
+      createdAt: Date.now()
+    };
+    setOutfits(prev => [newOutfit, ...prev]);
+  };
+
   const handleDeleteOutfit = (outfitId: string) => {
     setOutfits(prev => prev.filter(outfit => outfit.id !== outfitId));
     if (editingOutfitId === outfitId) {
@@ -452,6 +463,7 @@ function App() {
             onToggleSelectItem={handleToggleOutfitItem}
             onDeleteOutfit={handleDeleteOutfit}
             onAddOutfitToPackingList={handleAddOutfitToPackingList}
+            onSaveAIOutfit={handleSaveAIOutfit}
           />
 
           {view === 'closet' ? (
