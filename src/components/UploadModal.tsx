@@ -297,8 +297,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(30, 32, 34, 0.45)',
-      backdropFilter: 'blur(8px)',
+      backgroundColor: 'rgba(17, 17, 17, 0.4)',
+      backdropFilter: 'blur(4px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -307,8 +307,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
     }}>
       <div style={{
         backgroundColor: 'var(--bg-surface)',
-        border: '1px solid var(--border-color)',
-        borderRadius: 'var(--radius-lg)',
+        border: 'none',
         width: '100%',
         maxWidth: '550px',
         maxHeight: '90vh',
@@ -326,8 +325,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
           borderBottom: '1px solid var(--border-color)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={18} style={{ color: 'var(--accent-primary)' }} />
-            <h3 style={{ fontSize: '1.2rem', fontFamily: 'var(--font-heading)' }}>Add New Garment</h3>
+            <Sparkles size={16} style={{ color: 'var(--text-primary)' }} />
+            <h3 style={{ fontSize: '1.1rem', fontFamily: 'var(--font-heading)' }}>Add Garment</h3>
           </div>
           <button
             onClick={onClose}
@@ -411,12 +410,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              color: '#ff6b6b',
-              backgroundColor: 'rgba(255, 107, 107, 0.08)',
+              color: 'var(--error)',
+              backgroundColor: 'var(--error-bg)',
               padding: '10px 14px',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.85rem',
-              border: '1px solid rgba(255, 107, 107, 0.2)'
+              border: '1px solid var(--error-border)'
             }}>
               <AlertCircle size={16} />
               <span>{error}</span>
@@ -427,21 +426,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
             <div
               onClick={() => fileInputRef.current?.click()}
               style={{
-                border: '2px dashed var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                padding: '40px 20px',
+                border: '1px solid transparent',
+                padding: '48px 24px',
                 textAlign: 'center',
                 cursor: 'pointer',
                 transition: 'var(--transition-fast)',
-                backgroundColor: 'var(--bg-primary)'
+                backgroundColor: 'var(--well)'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover)';
+                e.currentTarget.style.borderColor = 'var(--text-primary)';
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-color)';
-                e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
+                e.currentTarget.style.borderColor = 'transparent';
               }}
             >
               <input
@@ -500,9 +496,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
                       backgroundColor: 'var(--accent-primary)',
                       color: 'var(--bg-surface)',
                       border: 'none',
-                      padding: '10px 20px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontWeight: 600,
+                      padding: '13px 24px',
+                      fontWeight: 500,
+                      fontSize: '0.68rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -547,9 +543,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '20px' }}>
                 {/* Visual Preview */}
                 <div style={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--well)',
+                  border: 'none',
                   aspectRatio: '1',
                   display: 'flex',
                   alignItems: 'center',
@@ -621,12 +616,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
                     onChange={(e) => setDescription(e.target.value)}
                     rows={2}
                     style={{
-                      padding: '6px 10px',
                       fontSize: '0.85rem',
-                      backgroundColor: 'var(--bg-primary)',
-                      border: '1px solid var(--border-color)',
-                      color: 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)',
                       resize: 'vertical'
                     }}
                   />
@@ -641,9 +631,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
                     backgroundColor: 'var(--accent-primary)',
                     color: 'var(--bg-surface)',
                     border: 'none',
-                    padding: '10px 16px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontWeight: 600,
+                    padding: '13px 16px',
+                    fontWeight: 500,
+                    fontSize: '0.68rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
