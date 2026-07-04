@@ -4,11 +4,13 @@ import { Sparkles, Lock, LockOpen, Check, X, RefreshCw, AlertCircle } from 'luci
 import type { ClosetItem } from './ClosetGrid';
 import {
   generateOutfit, missingSlots,
-  type StylistRecommendation, type RejectedCombo, type LockedIds, type SlotName
+  type StylistRecommendation, type RejectedCombo, type LockedIds, type SlotName,
+  type SavedOutfitExample
 } from '../services/stylist';
 
 interface AIStylistProps {
   items: ClosetItem[];
+  savedOutfits: SavedOutfitExample[];
   onSaveAIOutfit: (name: string, itemIds: string[]) => void;
 }
 
@@ -17,12 +19,13 @@ const NO_LOCKS: LockState = { top: false, bottom: false, shoes: false, layers: f
 
 const SLOT_LABELS: Record<SlotName, string> = { top: 'Top', bottom: 'Bottom', shoes: 'Shoes', layer: 'Layers' };
 
-export const AIStylist: React.FC<AIStylistProps> = ({ items, onSaveAIOutfit }) => {
+export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSaveAIOutfit }) => {
   const [prompt, setPrompt] = useState('');
   const [draft, setDraft] = useState<StylistRecommendation | null>(null);
   const [draftName, setDraftName] = useState('');
   const [locks, setLocks] = useState<LockState>(NO_LOCKS);
   const [rejected, setRejected] = useState<RejectedCombo[]>([]);
+  const [feedback, setFeedback] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +47,7 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, onSaveAIOutfit }) =
     setIsLoading(true);
     setError('');
     try {
-      const rec = await generateOutfit({ apiKey, prompt: prompt.trim(), items, locked, rejected: history });
+      const rec = await generateOutfit({ apiKey, prompt: prompt.trim(), items, locked, rejected: history, savedOutfits });
       setDraft(rec);
       setDraftName(rec.outfitName);
       setHasGeneratedOnce(true);
@@ -64,10 +67,12 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, onSaveAIOutfit }) =
   const handleRegenerate = () => {
     if (!draft) return;
     const combo: RejectedCombo = {
-      topId: draft.topId, bottomId: draft.bottomId, shoeId: draft.shoeId, layerIds: draft.layerIds
+      topId: draft.topId, bottomId: draft.bottomId, shoeId: draft.shoeId, layerIds: draft.layerIds,
+      reason: feedback.trim() || undefined
     };
     const history = [...rejected, combo].slice(-8);
     setRejected(history);
+    setFeedback('');
     void runGeneration(lockedIdsFromState(draft), history);
   };
 
@@ -83,6 +88,7 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, onSaveAIOutfit }) =
     setDraftName('');
     setLocks(NO_LOCKS);
     setRejected([]);
+    setFeedback('');
     setError('');
   };
 
@@ -217,6 +223,16 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, onSaveAIOutfit }) =
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic', maxWidth: '640px' }}>
             {draft.stylistNote}
           </p>
+
+          <input
+            type="text"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) handleRegenerate(); }}
+            placeholder="What's off? Optional — steers the next regenerate (e.g. too formal, hate that pairing)"
+            disabled={isLoading}
+            style={{ maxWidth: '480px', height: '38px', fontSize: '0.85rem' }}
+          />
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <input
