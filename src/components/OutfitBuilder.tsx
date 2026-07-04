@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Check, Luggage, Trash2, AlertCircle, Pencil } from 'lucide-react';
+import { Plus, X, Check, Luggage, Trash2, AlertCircle, Pencil, Sparkles } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 import AIStylist from './AIStylist';
 
@@ -8,6 +8,9 @@ export interface Outfit {
   name: string;
   itemIds: string[];
   createdAt: number;
+  // When false, this outfit is excluded from the AI stylist's taste examples.
+  // Optional so outfits saved before this field existed default to seeding.
+  seedStylist?: boolean;
 }
 
 interface OutfitBuilderProps {
@@ -24,6 +27,7 @@ interface OutfitBuilderProps {
   onDeleteOutfit: (outfitId: string) => void;
   onAddOutfitToPackingList: (outfit: Outfit) => void;
   onSaveAIOutfit: (name: string, itemIds: string[]) => void;
+  onToggleSeedStylist: (outfitId: string) => void;
 }
 
 export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
@@ -39,7 +43,8 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
   onToggleSelectItem,
   onDeleteOutfit,
   onAddOutfitToPackingList,
-  onSaveAIOutfit
+  onSaveAIOutfit,
+  onToggleSeedStylist
 }) => {
   const [outfitName, setOutfitName] = useState('');
   const [nameError, setNameError] = useState('');
@@ -280,7 +285,13 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
       )}
 
       {/* AI stylist: prompt-to-outfit, above the saved shelf */}
-      {!isBuilding && <AIStylist items={items} onSaveAIOutfit={onSaveAIOutfit} />}
+      {!isBuilding && (
+        <AIStylist
+          items={items}
+          savedOutfits={outfits.filter(outfit => outfit.seedStylist !== false)}
+          onSaveAIOutfit={onSaveAIOutfit}
+        />
+      )}
 
       {/* Saved outfits shelf */}
       {outfits.length === 0 && !isBuilding ? (
@@ -331,6 +342,27 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => onToggleSeedStylist(outfit.id)}
+                      className="tap-target"
+                      title={outfit.seedStylist !== false
+                        ? 'Seeds the AI stylist as a taste example — click to exclude'
+                        : 'Excluded from the AI stylist — click to include'}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        color: outfit.seedStylist !== false ? 'var(--text-muted)' : 'var(--border-color)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.color = 'var(--accent-primary)')}
+                      onMouseOut={(e) => (e.currentTarget.style.color =
+                        outfit.seedStylist !== false ? 'var(--text-muted)' : 'var(--border-color)')}
+                    >
+                      <Sparkles size={15} />
+                    </button>
                     <button
                       onClick={() => onStartEditing(outfit)}
                       disabled={isBuilding}

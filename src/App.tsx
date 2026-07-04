@@ -91,6 +91,9 @@ function App() {
 
         // Adopt updated manifest image paths for manifest pairs. In-app photo
         // replacements are data URLs and always win over the manifest.
+        // Manifest metadata (e.g. the AI enrichment pass) fills fields the
+        // user hasn't touched: blank color/description, and a name still equal
+        // to the style-code placeholder. In-app edits always win.
         localSneakers = localSneakers.map(item => {
           const base = baseManifestById.get(item.id);
           if (item.id.startsWith('user_') || !base) {
@@ -98,6 +101,9 @@ function App() {
           }
           return {
             ...item,
+            name: item.name === item.styleCode && base.name ? base.name : item.name,
+            color: item.color || base.color,
+            description: item.description || base.description,
             image: item.image.startsWith('data:') ? item.image : base.image,
             imageTop: item.imageTop?.startsWith('data:') ? item.imageTop : base.imageTop
           };
@@ -301,6 +307,16 @@ function App() {
     setOutfits(prev => [newOutfit, ...prev]);
   };
 
+  // Flip whether an outfit is offered to the AI stylist as a taste example.
+  // undefined (pre-toggle outfits) counts as seeding, so the first click excludes.
+  const handleToggleSeedStylist = (outfitId: string) => {
+    setOutfits(prev => prev.map(outfit =>
+      outfit.id === outfitId
+        ? { ...outfit, seedStylist: outfit.seedStylist === false }
+        : outfit
+    ));
+  };
+
   const handleDeleteOutfit = (outfitId: string) => {
     setOutfits(prev => prev.filter(outfit => outfit.id !== outfitId));
     if (editingOutfitId === outfitId) {
@@ -464,6 +480,7 @@ function App() {
             onDeleteOutfit={handleDeleteOutfit}
             onAddOutfitToPackingList={handleAddOutfitToPackingList}
             onSaveAIOutfit={handleSaveAIOutfit}
+            onToggleSeedStylist={handleToggleSeedStylist}
           />
 
           {view === 'closet' ? (
