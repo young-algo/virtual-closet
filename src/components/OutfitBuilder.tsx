@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Check, Luggage, Trash2, AlertCircle, Pencil } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
+import AIStylist from './AIStylist';
 
 export interface Outfit {
   id: string;
@@ -22,6 +23,7 @@ interface OutfitBuilderProps {
   onToggleSelectItem: (item: ClosetItem) => void;
   onDeleteOutfit: (outfitId: string) => void;
   onAddOutfitToPackingList: (outfit: Outfit) => void;
+  onSaveAIOutfit: (name: string, itemIds: string[]) => void;
 }
 
 export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
@@ -36,7 +38,8 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
   onSaveOutfit,
   onToggleSelectItem,
   onDeleteOutfit,
-  onAddOutfitToPackingList
+  onAddOutfitToPackingList,
+  onSaveAIOutfit
 }) => {
   const [outfitName, setOutfitName] = useState('');
   const [nameError, setNameError] = useState('');
@@ -275,6 +278,9 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
           </div>
         </div>
       )}
+
+      {/* AI stylist: prompt-to-outfit, above the saved shelf */}
+      {!isBuilding && <AIStylist items={items} onSaveAIOutfit={onSaveAIOutfit} />}
 
       {/* Saved outfits shelf */}
       {outfits.length === 0 && !isBuilding ? (
