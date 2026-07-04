@@ -198,8 +198,10 @@ const TASTE_EXAMPLE_CAP = 6;
 
 export const describeTaste = (saved: SavedOutfitExample[], items: ClosetItem[]): string => {
   const byId = new Map(items.map(item => [item.id, item]));
+  // Saved outfits arrive newest-first (App prepends on save), so the most
+  // recent taste examples are at the front.
   const lines = saved
-    .slice(-TASTE_EXAMPLE_CAP)
+    .slice(0, TASTE_EXAMPLE_CAP)
     .map(outfit => {
       const names = outfit.itemIds
         .map(id => byId.get(id))
