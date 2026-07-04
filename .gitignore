@@ -39,3 +39,6 @@ public/raw/
 .env
 .env.*
 *.local
+
+# Git worktrees
+.worktrees/
