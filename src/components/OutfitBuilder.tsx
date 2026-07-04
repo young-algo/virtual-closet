@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Layers, Plus, X, Check, Luggage, Trash2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, X, Check, Luggage, Trash2, AlertCircle, Pencil } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 
 export interface Outfit {
@@ -14,7 +14,9 @@ interface OutfitBuilderProps {
   items: ClosetItem[];
   isBuilding: boolean;
   selectedItems: ClosetItem[];
+  editingOutfit: Outfit | null;
   onStartBuilding: () => void;
+  onStartEditing: (outfit: Outfit) => void;
   onCancelBuilding: () => void;
   onSaveOutfit: (name: string) => void;
   onToggleSelectItem: (item: ClosetItem) => void;
@@ -27,7 +29,9 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
   items,
   isBuilding,
   selectedItems,
+  editingOutfit,
   onStartBuilding,
+  onStartEditing,
   onCancelBuilding,
   onSaveOutfit,
   onToggleSelectItem,
@@ -38,6 +42,14 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
   const [nameError, setNameError] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [packedFeedbackId, setPackedFeedbackId] = useState<string | null>(null);
+
+  // Pre-fill the name field when the panel opens in edit mode
+  useEffect(() => {
+    if (editingOutfit) {
+      setOutfitName(editingOutfit.name);
+      setNameError('');
+    }
+  }, [editingOutfit?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSave = selectedItems.length >= 2;
 
@@ -73,17 +85,22 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
     <section style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Section header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <Layers size={20} style={{ color: 'var(--accent-primary)' }} />
-          <h2 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-heading)' }}>Outfits</h2>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'baseline' }}>
+          <h2 style={{
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            fontFamily: 'var(--font-heading)'
+          }}>
+            Outfits
+          </h2>
           {outfits.length > 0 && (
             <span style={{
-              fontSize: '0.75rem',
+              fontSize: '0.68rem',
+              fontFamily: 'var(--font-mono)',
               color: 'var(--text-muted)',
-              backgroundColor: 'var(--bg-primary)',
-              padding: '2px 10px',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--border-color)'
+              letterSpacing: '0.08em'
             }}>
               {outfits.length}
             </span>
@@ -95,20 +112,19 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
             onClick={onStartBuilding}
             className="tap-target"
             style={{
-              border: '1px solid var(--accent-primary)',
+              border: '1px solid var(--text-primary)',
               backgroundColor: 'transparent',
-              color: 'var(--accent-primary)',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-primary)',
+              fontSize: '0.68rem',
+              fontWeight: 500,
+              padding: '10px 20px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '8px'
             }}
           >
-            <Plus size={16} />
+            <Plus size={13} strokeWidth={2} />
             New Outfit
           </button>
         )}
@@ -117,21 +133,19 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
       {/* Build mode panel */}
       {isBuilding && (
         <div style={{
-          backgroundColor: 'var(--accent-muted)',
-          border: '1px solid var(--accent-primary)',
-          borderRadius: 'var(--radius-md)',
-          padding: '20px',
+          backgroundColor: 'var(--well)',
+          padding: '24px',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
             <div>
-              <h3 style={{ fontSize: '1rem', fontFamily: 'var(--font-heading)', color: 'var(--accent-primary)' }}>
-                Building an outfit
+              <h3 style={{ fontSize: '1rem', fontFamily: 'var(--font-heading)', fontWeight: 500 }}>
+                {editingOutfit ? `Editing "${editingOutfit.name}"` : 'Building an outfit'}
               </h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Click garments in your closet below to add or remove them. Select at least 2 items.
+                Click items below to add or remove them — switch between Closet and Sneakers to mix both. Select at least 2 items.
               </p>
             </div>
             <button
@@ -187,7 +201,7 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                       right: '-6px',
                       width: '18px',
                       height: '18px',
-                      borderRadius: '50%',
+                      borderRadius: '0',
                       border: 'none',
                       backgroundColor: 'var(--text-primary)',
                       color: 'var(--bg-surface)',
@@ -210,12 +224,12 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              color: '#ff6b6b',
-              backgroundColor: 'rgba(255, 107, 107, 0.1)',
+              color: 'var(--error)',
+              backgroundColor: 'var(--error-bg)',
               padding: '10px 14px',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.85rem',
-              border: '1px solid rgba(255, 107, 107, 0.25)'
+              border: '1px solid var(--error-border)'
             }}>
               <AlertCircle size={16} />
               <span>{nameError}</span>
@@ -246,18 +260,17 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                 border: 'none',
                 backgroundColor: canSave ? 'var(--accent-primary)' : 'var(--border-color)',
                 color: canSave ? 'var(--bg-surface)' : 'var(--text-muted)',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                padding: '10px 18px',
-                borderRadius: 'var(--radius-sm)',
+                fontSize: '0.68rem',
+                fontWeight: 500,
+                padding: '13px 22px',
                 cursor: canSave ? 'pointer' : 'not-allowed',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '8px'
               }}
             >
               <Check size={16} />
-              Save Outfit ({selectedItems.length})
+              {editingOutfit ? 'Update Outfit' : 'Save Outfit'} ({selectedItems.length})
             </button>
           </div>
         </div>
@@ -265,17 +278,9 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
 
       {/* Saved outfits shelf */}
       {outfits.length === 0 && !isBuilding ? (
-        <div style={{
-          padding: '20px',
-          backgroundColor: 'var(--bg-surface)',
-          borderRadius: 'var(--radius-md)',
-          border: '1px dashed var(--border-color)',
-          textAlign: 'center'
-        }}>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0 auto' }}>
-            No outfits yet. Click "New Outfit" and pick two or more garments to create your first look.
-          </p>
-        </div>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '4px 0 8px' }}>
+          No outfits yet. Click "New Outfit" and pick two or more garments to create your first look.
+        </p>
       ) : outfits.length > 0 && (
         <div style={{
           display: 'grid',
@@ -292,12 +297,10 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                 style={{
                   backgroundColor: 'var(--bg-surface)',
                   border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '16px',
+                  padding: '20px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
-                  boxShadow: 'var(--shadow-sm)'
+                  gap: '14px'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
@@ -311,29 +314,56 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                     }}>
                       {outfit.name}
                     </h3>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    <span style={{
+                      fontSize: '0.65rem',
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
                       {outfitItems.length} {outfitItems.length === 1 ? 'item' : 'items'}
                     </span>
                   </div>
-                  <button
-                    onClick={() => setDeleteConfirmId(isConfirmingDelete ? null : outfit.id)}
-                    className="tap-target"
-                    title="Delete outfit"
-                    style={{
-                      border: 'none',
-                      background: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexShrink: 0
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.color = '#ff6b6b')}
-                    onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => onStartEditing(outfit)}
+                      disabled={isBuilding}
+                      className="tap-target"
+                      title={isBuilding ? 'Finish the current outfit first' : 'Edit outfit'}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: isBuilding ? 'not-allowed' : 'pointer',
+                        opacity: isBuilding ? 0.4 : 1,
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      onMouseOver={(e) => { if (!isBuilding) e.currentTarget.style.color = 'var(--accent-primary)'; }}
+                      onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirmId(isConfirmingDelete ? null : outfit.id)}
+                      className="tap-target"
+                      title="Delete outfit"
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.color = 'var(--error)')}
+                      onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Garment thumbnails */}
@@ -377,7 +407,7 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                         padding: '8px',
                         borderRadius: 'var(--radius-sm)',
                         border: 'none',
-                        backgroundColor: '#ff6b6b',
+                        backgroundColor: 'var(--error)',
                         color: 'white',
                         fontSize: '0.8rem',
                         fontWeight: 600,
@@ -410,13 +440,12 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                     className="tap-target"
                     style={{
                       width: '100%',
-                      padding: '9px',
-                      borderRadius: 'var(--radius-sm)',
+                      padding: '12px',
                       border: 'none',
-                      backgroundColor: justPacked ? 'var(--accent-muted)' : 'var(--accent-primary)',
-                      color: justPacked ? 'var(--accent-primary)' : 'var(--bg-surface)',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
+                      backgroundColor: justPacked ? 'var(--well)' : 'var(--accent-primary)',
+                      color: justPacked ? 'var(--text-primary)' : 'var(--bg-surface)',
+                      fontSize: '0.68rem',
+                      fontWeight: 500,
                       cursor: outfitItems.length === 0 ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
