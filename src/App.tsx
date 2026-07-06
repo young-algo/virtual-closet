@@ -3,6 +3,7 @@ import ClosetGrid from './components/ClosetGrid';
 import type { ClosetItem } from './components/ClosetGrid';
 import OutfitBuilder from './components/OutfitBuilder';
 import type { Outfit } from './components/OutfitBuilder';
+import OutfitBuildTray from './components/OutfitBuildTray';
 import UploadModal from './components/UploadModal';
 import SneakerGrid from './components/SneakerGrid';
 import type { SneakerItem } from './components/SneakerGrid';
@@ -504,19 +505,24 @@ function App() {
             </span>
           </div>
 
+          {isBuildingOutfit && (
+            <OutfitBuildTray
+              selectedItems={selectedOutfitItemIds
+                .map(id => allItems.find(item => item.id === id))
+                .filter((item): item is ClosetItem => item !== undefined)}
+              editingOutfit={outfits.find(outfit => outfit.id === editingOutfitId) ?? null}
+              onCancel={handleCancelBuildingOutfit}
+              onSave={handleSaveOutfit}
+              onToggleSelectItem={handleToggleOutfitItem}
+            />
+          )}
+
           <OutfitBuilder
             outfits={outfits}
             items={allItems}
             isBuilding={isBuildingOutfit}
-            selectedItems={selectedOutfitItemIds
-              .map(id => allItems.find(item => item.id === id))
-              .filter((item): item is ClosetItem => item !== undefined)}
-            editingOutfit={outfits.find(outfit => outfit.id === editingOutfitId) ?? null}
             onStartBuilding={handleStartBuildingOutfit}
             onStartEditing={handleStartEditingOutfit}
-            onCancelBuilding={handleCancelBuildingOutfit}
-            onSaveOutfit={handleSaveOutfit}
-            onToggleSelectItem={handleToggleOutfitItem}
             onDeleteOutfit={handleDeleteOutfit}
             onAddOutfitToPackingList={handleAddOutfitToPackingList}
             onSaveAIOutfit={handleSaveAIOutfit}
