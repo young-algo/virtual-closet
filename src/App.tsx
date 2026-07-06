@@ -277,9 +277,11 @@ function App() {
 
   const handleSaveOutfit = (name: string) => {
     if (editingOutfitId) {
+      // source cleared on edit: Kevin reworking an AI-saved outfit makes it
+      // genuine taste, so it graduates to full weight as a stylist example.
       setOutfits(prev => prev.map(outfit =>
         outfit.id === editingOutfitId
-          ? { ...outfit, name, itemIds: selectedOutfitItemIds }
+          ? { ...outfit, name, itemIds: selectedOutfitItemIds, source: undefined }
           : outfit
       ));
     } else {
@@ -297,12 +299,14 @@ function App() {
   };
 
   // AI stylist saves a complete outfit directly — no selection-mode round trip
-  const handleSaveAIOutfit = (name: string, itemIds: string[]) => {
+  const handleSaveAIOutfit = (name: string, itemIds: string[], note?: string) => {
     const newOutfit: Outfit = {
       id: `outfit_${Date.now()}`,
       name,
       itemIds,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      note,
+      source: 'ai'
     };
     setOutfits(prev => [newOutfit, ...prev]);
   };

@@ -214,6 +214,18 @@ dialog[open]::backdrop {
   transform: scale(1.04);
 }
 
+/* AI stylist progress rule: a hairline that fills with real percentage while
+   photos encode, then sweeps indeterminately while the model call is in
+   flight. Reduced-motion users still get liveness from the elapsed counter. */
+@keyframes stylist-sweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(460%); }
+}
+
+.stylist-sweep {
+  animation: stylist-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 /* Reduced Motion overrides */
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -227,6 +239,43 @@ dialog[open]::backdrop {
   .interactive-card:hover .product-image-container img {
     transform: none;
   }
+}
+
+/* Saved outfit rows: hairline rules on the field, sharpening on interaction.
+   The look view expands via the 0fr -> 1fr grid trick so the row animates to
+   its intrinsic height; the global reduced-motion override zeroes it out. */
+.outfit-row {
+  border-top: 1px solid var(--border-color);
+  transition: border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.outfit-row:hover {
+  border-top-color: var(--border-color-hover);
+}
+
+.accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.accordion-body.open {
+  grid-template-rows: 1fr;
+}
+
+/* visibility keeps collapsed content out of the tab order and screen readers */
+.accordion-body > div {
+  overflow: hidden;
+  visibility: hidden;
+  transition: visibility 0.3s;
+}
+
+.accordion-body.open > div {
+  visibility: visible;
+}
+
+.accordion-chevron {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .dialog-grid {

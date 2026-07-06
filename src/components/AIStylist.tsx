@@ -1,23 +1,54 @@
 // src/components/AIStylist.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Lock, LockOpen, Check, X, RefreshCw, AlertCircle } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 import {
   generateOutfit, missingSlots,
   type StylistRecommendation, type RejectedCombo, type LockedIds, type SlotName,
-  type SavedOutfitExample
+  type SavedOutfitExample, type StylistProgress
 } from '../services/stylist';
 
 interface AIStylistProps {
   items: ClosetItem[];
   savedOutfits: SavedOutfitExample[];
-  onSaveAIOutfit: (name: string, itemIds: string[]) => void;
+  onSaveAIOutfit: (name: string, itemIds: string[], note?: string) => void;
 }
 
 interface LockState { top: boolean; bottom: boolean; shoes: boolean; layers: boolean }
 const NO_LOCKS: LockState = { top: false, bottom: false, shoes: false, layers: false };
 
 const SLOT_LABELS: Record<SlotName, string> = { top: 'Top', bottom: 'Bottom', shoes: 'Shoes', layer: 'Layers' };
+
+// Cross-generation freshness memory: ids of recently recommended items,
+// persisted so the variety pressure survives new prompts and page reloads
+// (`rejected` can't do this — it resets with every draft). ~4 outfits' worth;
+// against ~90 wearables that discourages repeats without starving the model.
+const RECENT_ITEMS_KEY = 'stylist_recent_item_ids';
+const RECENT_ITEMS_CAP = 16;
+
+const readRecentItemIds = (): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_ITEMS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+const rememberRecommendedItems = (ids: string[]) => {
+  const merged = [...ids, ...readRecentItemIds().filter(id => !ids.includes(id))].slice(0, RECENT_ITEMS_CAP);
+  localStorage.setItem(RECENT_ITEMS_KEY, JSON.stringify(merged));
+};
+
+// The service reports facts (phase, counts); the copy lives here. Elapsed
+// seconds only accompany the model phases, where there's no real progress
+// to show and the ticking clock is the liveness signal.
+const progressLabel = (progress: StylistProgress | null, elapsed: number): string => {
+  if (progress?.phase === 'encoding') return `Preparing your closet — ${progress.done} of ${progress.total} photos`;
+  if (progress?.phase === 'styling') return `Styling your look — ${elapsed}s`;
+  if (progress?.phase === 'retrying') return `Double-checking the fit — ${elapsed}s`;
+  return 'Preparing your closet…'; // before the first encoding tick lands
+};
 
 export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSaveAIOutfit }) => {
   const [prompt, setPrompt] = useState('');
@@ -27,8 +58,19 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSav
   const [rejected, setRejected] = useState<RejectedCombo[]>([]);
   const [feedback, setFeedback] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState<StylistProgress | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  // Ticks once a second while a generation is in flight — the moving number
+  // is itself the "not frozen" signal during the indeterminate model phases.
+  useEffect(() => {
+    if (!isLoading) return;
+    setElapsed(0);
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [isLoading]);
 
   const apiKey = (localStorage.getItem('gemini_api_key') || '').trim();
   const missing = missingSlots(items);
@@ -46,15 +88,21 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSav
   const runGeneration = async (locked: LockedIds, history: RejectedCombo[]) => {
     setIsLoading(true);
     setError('');
+    setProgress(null);
     try {
-      const rec = await generateOutfit({ apiKey, prompt: prompt.trim(), items, locked, rejected: history, savedOutfits });
+      const rec = await generateOutfit({
+        apiKey, prompt: prompt.trim(), items, locked, rejected: history, savedOutfits,
+        recentItemIds: readRecentItemIds(),
+        onProgress: setProgress
+      });
+      rememberRecommendedItems([rec.topId, ...rec.layerIds, rec.bottomId, rec.shoeId]);
       setDraft(rec);
       setDraftName(rec.outfitName);
-      setHasGeneratedOnce(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
     } finally {
       setIsLoading(false);
+      setProgress(null);
     }
   };
 
@@ -78,7 +126,7 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSav
 
   const handleSave = () => {
     if (!draft || !draftName.trim()) return;
-    onSaveAIOutfit(draftName.trim(), [draft.topId, ...draft.layerIds, draft.bottomId, draft.shoeId]);
+    onSaveAIOutfit(draftName.trim(), [draft.topId, ...draft.layerIds, draft.bottomId, draft.shoeId], draft.stylistNote);
     handleDiscard();
     setPrompt('');
   };
@@ -132,9 +180,34 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSav
             padding: '9px 18px', cursor: canGenerate ? 'pointer' : 'not-allowed'
           }}
         >
-          {isLoading ? (hasGeneratedOnce ? 'Styling…' : 'Preparing your closet…') : 'Generate'}
+          {isLoading ? 'Styling…' : 'Generate'}
         </button>
       </div>
+
+      {/* Progress: phase copy over a hairline rule. The rule fills with real
+          percentage while photos encode, then sweeps while the model works. */}
+      {isLoading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }} aria-live="polite">
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+            {progressLabel(progress, elapsed)}
+          </p>
+          <div style={{ height: '1px', backgroundColor: 'var(--border-color)', overflow: 'hidden', position: 'relative' }}>
+            {progress?.phase === 'encoding' ? (
+              <div style={{
+                position: 'absolute', inset: 0,
+                backgroundColor: 'var(--text-primary)',
+                transform: `scaleX(${progress.done / progress.total})`,
+                transformOrigin: 'left', transition: 'transform 0.2s ease'
+              }} />
+            ) : (
+              <div className="stylist-sweep" style={{
+                position: 'absolute', top: 0, bottom: 0, left: 0, width: '30%',
+                backgroundColor: 'var(--text-primary)'
+              }} />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Disabled-state hints */}
       {!apiKey && (
