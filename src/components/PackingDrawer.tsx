@@ -61,7 +61,6 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
           right: 0,
           bottom: 0,
           backgroundColor: 'var(--bg-surface)',
-          borderLeft: '1px solid var(--border-color)',
           boxShadow: 'var(--shadow-lg)',
           transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
           transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -100,6 +99,7 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
       <style>{`
         .packing-drawer {
           width: min(420px, 100vw);
+          border-left: 1px solid var(--border-color);
         }
         @media (max-width: 700px) {
           .packing-drawer {
