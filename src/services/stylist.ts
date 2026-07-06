@@ -10,7 +10,7 @@ export type SlotName = 'top' | 'bottom' | 'shoes' | 'layer';
 export const SLOT_CATEGORIES: Record<SlotName, string[]> = {
   top: ['T-Shirts', 'Polos', 'Long Sleeves', 'Jerseys', 'Shirts'],
   bottom: ['Pants', 'Shorts'],
-  layer: ['Sweatshirts', 'Hoodies', 'Outerwear'],
+  layer: ['Sweatshirts', 'Hoodies', 'Outerwear', 'Jackets', 'Fleeces'],
   shoes: ['Sneakers']
 };
 
