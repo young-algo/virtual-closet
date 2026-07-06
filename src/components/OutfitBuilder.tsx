@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Check, Luggage, Trash2, AlertCircle, Pencil, Sparkles } from 'lucide-react';
+import { Plus, X, Check, Luggage, Trash2, AlertCircle, Pencil, Sparkles, ChevronDown } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
+import { slotForItem, type SlotName } from '../services/stylist';
 import AIStylist from './AIStylist';
 
 export interface Outfit {
@@ -11,7 +12,33 @@ export interface Outfit {
   // When false, this outfit is excluded from the AI stylist's taste examples.
   // Optional so outfits saved before this field existed default to seeding.
   seedStylist?: boolean;
+  // 'ai' when saved straight from the stylist and never touched since.
+  // Cleared the first time Kevin edits the outfit — an edit is his judgment,
+  // which turns the outfit into genuine taste. Unedited AI saves are
+  // down-weighted as taste examples to avoid a self-reinforcing loop.
+  source?: 'ai';
+  // Stylist reasoning captured when an AI-generated outfit is saved.
+  note?: string;
 }
+
+// Slot display order mirrors how an outfit is worn, top to bottom.
+const SLOT_ORDER: SlotName[] = ['top', 'layer', 'bottom', 'shoes'];
+const SLOT_DISPLAY: Record<SlotName, string> = { top: 'Top', layer: 'Layers', bottom: 'Bottom', shoes: 'Shoes' };
+
+interface SlotGroup { label: string; items: ClosetItem[] }
+
+const groupBySlot = (outfitItems: ClosetItem[]): SlotGroup[] => {
+  const groups: SlotGroup[] = SLOT_ORDER.map(slot => ({
+    label: SLOT_DISPLAY[slot],
+    items: outfitItems.filter(item => slotForItem(item) === slot)
+  }));
+  const other = outfitItems.filter(item => slotForItem(item) === null);
+  if (other.length > 0) groups.push({ label: 'Other', items: other });
+  return groups.filter(group => group.items.length > 0);
+};
+
+const formatDate = (timestamp: number): string =>
+  new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 interface OutfitBuilderProps {
   outfits: Outfit[];
@@ -26,7 +53,7 @@ interface OutfitBuilderProps {
   onToggleSelectItem: (item: ClosetItem) => void;
   onDeleteOutfit: (outfitId: string) => void;
   onAddOutfitToPackingList: (outfit: Outfit) => void;
-  onSaveAIOutfit: (name: string, itemIds: string[]) => void;
+  onSaveAIOutfit: (name: string, itemIds: string[], note?: string) => void;
   onToggleSeedStylist: (outfitId: string) => void;
 }
 
@@ -50,6 +77,8 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
   const [nameError, setNameError] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [packedFeedbackId, setPackedFeedbackId] = useState<string | null>(null);
+  // Accordion: at most one outfit row is expanded into its look view
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Pre-fill the name field when the panel opens in edit mode
   useEffect(() => {
@@ -293,44 +322,58 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
         />
       )}
 
-      {/* Saved outfits shelf */}
+      {/* Saved outfits shelf: hairline-rule rows on the continuous field,
+          each expandable into a full look view (accordion, one at a time) */}
       {outfits.length === 0 && !isBuilding ? (
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '4px 0 8px' }}>
           No outfits yet. Click "New Outfit" and pick two or more garments to create your first look.
         </p>
       ) : outfits.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: '16px'
-        }}>
+        <div style={{ borderBottom: '1px solid var(--border-color)' }}>
           {outfits.map(outfit => {
             const outfitItems = resolveOutfitItems(outfit);
+            const slotGroups = groupBySlot(outfitItems);
+            const orderedItems = slotGroups.flatMap(group => group.items);
+            const isExpanded = expandedId === outfit.id;
             const isConfirmingDelete = deleteConfirmId === outfit.id;
             const justPacked = packedFeedbackId === outfit.id;
+            const seeding = outfit.seedStylist !== false;
             return (
-              <article
-                key={outfit.id}
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  border: '1px solid var(--border-color)',
-                  padding: '20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                  <div style={{ overflow: 'hidden' }}>
-                    <h3 style={{
-                      fontSize: '1rem',
+              <article key={outfit.id} className="outfit-row">
+                <button
+                  onClick={() => setExpandedId(prev => (prev === outfit.id ? null : outfit.id))}
+                  aria-expanded={isExpanded}
+                  className="tap-target"
+                  style={{
+                    width: '100%',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    flexWrap: 'wrap',
+                    padding: '14px 0',
+                    textAlign: 'left',
+                    fontFamily: 'inherit',
+                    color: 'inherit',
+                    // Global button styles speak in tracked caps; the row header
+                    // carries the outfit name, which keeps its natural case
+                    textTransform: 'none',
+                    letterSpacing: 'normal'
+                  }}
+                >
+                  <span style={{ flex: '1 1 160px', minWidth: 0 }}>
+                    <span style={{
+                      display: 'block',
+                      fontSize: '0.95rem',
                       fontWeight: 600,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
                     }}>
                       {outfit.name}
-                    </h3>
+                    </span>
                     <span style={{
                       fontSize: '0.65rem',
                       color: 'var(--text-muted)',
@@ -339,173 +382,251 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                       letterSpacing: '0.05em'
                     }}>
                       {outfitItems.length} {outfitItems.length === 1 ? 'item' : 'items'}
+                      {' · '}{formatDate(outfit.createdAt)}
+                      {outfit.note ? ' · AI styled' : ''}
                     </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => onToggleSeedStylist(outfit.id)}
-                      className="tap-target"
-                      title={outfit.seedStylist !== false
-                        ? 'Seeds the AI stylist as a taste example — click to exclude'
-                        : 'Excluded from the AI stylist — click to include'}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: outfit.seedStylist !== false ? 'var(--text-muted)' : 'var(--border-color)',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
-                      onMouseOver={(e) => (e.currentTarget.style.color = 'var(--accent-primary)')}
-                      onMouseOut={(e) => (e.currentTarget.style.color =
-                        outfit.seedStylist !== false ? 'var(--text-muted)' : 'var(--border-color)')}
-                    >
-                      <Sparkles size={15} />
-                    </button>
-                    <button
-                      onClick={() => onStartEditing(outfit)}
-                      disabled={isBuilding}
-                      className="tap-target"
-                      title={isBuilding ? 'Finish the current outfit first' : 'Edit outfit'}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: isBuilding ? 'not-allowed' : 'pointer',
-                        opacity: isBuilding ? 0.4 : 1,
-                        padding: '4px',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
-                      onMouseOver={(e) => { if (!isBuilding) e.currentTarget.style.color = 'var(--accent-primary)'; }}
-                      onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmId(isConfirmingDelete ? null : outfit.id)}
-                      className="tap-target"
-                      title="Delete outfit"
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
-                      onMouseOver={(e) => (e.currentTarget.style.color = 'var(--error)')}
-                      onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Garment thumbnails */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {outfitItems.map(item => (
-                    <div
-                      key={item.id}
-                      title={item.name}
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: 'var(--bg-surface)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        loading="lazy"
-                        style={{ width: '85%', height: '85%', objectFit: 'contain', mixBlendMode: 'multiply' }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                {isConfirmingDelete ? (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={() => {
-                        onDeleteOutfit(outfit.id);
-                        setDeleteConfirmId(null);
-                      }}
-                      className="tap-target"
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: 'none',
-                        backgroundColor: 'var(--error)',
-                        color: 'white',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Yes, Delete
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirmId(null)}
-                      className="tap-target"
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid var(--border-color)',
-                        backgroundColor: 'transparent',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.8rem',
-                        fontWeight: 500,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => handlePackOutfit(outfit)}
-                    disabled={outfitItems.length === 0}
-                    className="tap-target"
+                  </span>
+                  {!isExpanded && (
+                    <span style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {orderedItems.map(item => (
+                        <span
+                          key={item.id}
+                          title={item.name}
+                          style={{
+                            width: '64px',
+                            height: '64px',
+                            backgroundColor: 'var(--well)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            loading="lazy"
+                            style={{ width: '85%', height: '85%', objectFit: 'contain', mixBlendMode: 'multiply' }}
+                          />
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  <ChevronDown
+                    size={16}
+                    className="accordion-chevron"
                     style={{
-                      width: '100%',
-                      padding: '12px',
-                      border: 'none',
-                      backgroundColor: justPacked ? 'var(--well)' : 'var(--accent-primary)',
-                      color: justPacked ? 'var(--text-primary)' : 'var(--bg-surface)',
-                      fontSize: '0.68rem',
-                      fontWeight: 500,
-                      cursor: outfitItems.length === 0 ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      transition: 'var(--transition-fast)',
-                      opacity: outfitItems.length === 0 ? 0.6 : 1
+                      color: 'var(--text-muted)',
+                      flexShrink: 0,
+                      transform: isExpanded ? 'rotate(180deg)' : 'none'
                     }}
-                  >
-                    {justPacked ? (
-                      <>
-                        <Check size={16} />
-                        Added to packing list!
-                      </>
-                    ) : (
-                      <>
-                        <Luggage size={16} />
-                        Add all to packing list
-                      </>
-                    )}
-                  </button>
-                )}
+                  />
+                </button>
+
+                {/* Look view */}
+                <div className={`accordion-body${isExpanded ? ' open' : ''}`}>
+                  <div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '2px 0 24px' }}>
+                      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                        {slotGroups.map(group => (
+                          <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              letterSpacing: '0.18em',
+                              textTransform: 'uppercase',
+                              color: 'var(--text-muted)'
+                            }}>
+                              {group.label}
+                            </span>
+                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                              {group.items.map(item => (
+                                <figure key={item.id} style={{ width: '140px', margin: 0 }}>
+                                  <div style={{
+                                    width: '140px',
+                                    height: '140px',
+                                    backgroundColor: 'var(--well)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                  }}>
+                                    <img
+                                      src={item.image}
+                                      alt={item.name}
+                                      loading="lazy"
+                                      style={{ width: '85%', height: '85%', objectFit: 'contain', mixBlendMode: 'multiply' }}
+                                    />
+                                  </div>
+                                  <figcaption style={{ marginTop: '6px' }}>
+                                    <span style={{
+                                      display: 'block',
+                                      fontSize: '0.78rem',
+                                      color: 'var(--text-primary)',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {item.name}
+                                    </span>
+                                    {item.brand && (
+                                      <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                        {item.brand}
+                                      </span>
+                                    )}
+                                  </figcaption>
+                                </figure>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {outfit.note && (
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic', maxWidth: '640px' }}>
+                          {outfit.note}
+                        </p>
+                      )}
+
+                      {isConfirmingDelete ? (
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Delete "{outfit.name}"?
+                          </span>
+                          <button
+                            onClick={() => {
+                              onDeleteOutfit(outfit.id);
+                              setDeleteConfirmId(null);
+                              setExpandedId(null);
+                            }}
+                            className="tap-target"
+                            style={{
+                              padding: '8px 16px',
+                              border: 'none',
+                              backgroundColor: 'var(--error)',
+                              color: 'white',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Yes, Delete
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="tap-target"
+                            style={{
+                              padding: '8px 16px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: 'transparent',
+                              color: 'var(--text-secondary)',
+                              fontSize: '0.8rem',
+                              fontWeight: 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <button
+                            onClick={() => handlePackOutfit(outfit)}
+                            disabled={outfitItems.length === 0}
+                            className="tap-target"
+                            style={{
+                              padding: '11px 20px',
+                              border: 'none',
+                              backgroundColor: justPacked ? 'var(--well)' : 'var(--accent-primary)',
+                              color: justPacked ? 'var(--text-primary)' : 'var(--bg-surface)',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              cursor: outfitItems.length === 0 ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              transition: 'var(--transition-fast)',
+                              opacity: outfitItems.length === 0 ? 0.6 : 1
+                            }}
+                          >
+                            {justPacked ? (
+                              <>
+                                <Check size={15} />
+                                Added to packing list!
+                              </>
+                            ) : (
+                              <>
+                                <Luggage size={15} />
+                                Add all to packing list
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => onStartEditing(outfit)}
+                            disabled={isBuilding}
+                            className="tap-target"
+                            title={isBuilding ? 'Finish the current outfit first' : 'Swap the garments in this outfit'}
+                            style={{
+                              border: '1px solid var(--border-color)',
+                              background: 'none',
+                              color: 'var(--text-primary)',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              padding: '10px 18px',
+                              cursor: isBuilding ? 'not-allowed' : 'pointer',
+                              opacity: isBuilding ? 0.4 : 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Pencil size={13} />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => onToggleSeedStylist(outfit.id)}
+                            className="tap-target"
+                            title={seeding
+                              ? 'This outfit teaches the AI stylist your taste — click to exclude'
+                              : 'Excluded from the AI stylist — click to include'}
+                            style={{
+                              border: 'none',
+                              background: 'none',
+                              color: seeding ? 'var(--text-secondary)' : 'var(--text-muted)',
+                              fontSize: '0.8rem',
+                              fontWeight: 500,
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Sparkles size={13} />
+                            Seeds stylist taste · {seeding ? 'on' : 'off'}
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(outfit.id)}
+                            className="tap-target"
+                            title="Delete outfit"
+                            style={{
+                              border: 'none',
+                              background: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              padding: '10px 8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              marginLeft: 'auto'
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.color = 'var(--error)')}
+                            onMouseOut={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </article>
             );
           })}
