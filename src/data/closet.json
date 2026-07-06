@@ -493,5 +493,131 @@
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_heavyweight_pocket_tee_black.jpg",
     "description": "A relaxed-fit, heavyweight cotton long-sleeve t-shirt with a single chest pocket and small embroidered tonal Nike logo. It features an oversized cut and a durable, vintage-washed look."
+  },
+  {
+    "id": "item_staging_item_nike_nike_club_quilted_coaches_jacket",
+    "name": "Nike Club Quilted Coaches Jacket",
+    "category": "Jackets",
+    "color": "Black",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_club_quilted_coaches_jacket.jpg",
+    "description": "A classic button-up coaches jacket featuring an all-over quilted pattern with subtle logo detailing."
+  },
+  {
+    "id": "item_staging_item_nike_nike_sportswear_club_woven_cargo_pants",
+    "name": "Nike Sportswear Club Woven Cargo Pants",
+    "category": "Pants",
+    "color": "Orange",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_sportswear_club_woven_cargo_pants.jpg",
+    "description": "Bright orange utility-style woven cargo pants featuring an integrated webbed belt with buckle, zippered cargo pockets, elastic cuffs, and a embroidered Nike logo."
+  },
+  {
+    "id": "item_staging_item_nike_nike_life_chore_jacket",
+    "name": "Nike Life Chore Jacket",
+    "category": "Jackets",
+    "color": "Yellow",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_life_chore_jacket.jpg",
+    "description": "A classic cotton canvas chore jacket with a button-down front, traditional collar, and utility patch pockets."
+  },
+  {
+    "id": "item_staging_item_jordan_jordan_brooklyn_fleece_hoodie",
+    "name": "Jordan Brooklyn Fleece Hoodie",
+    "category": "Hoodies",
+    "color": "Pink",
+    "brand": "Jordan",
+    "image": "/closet/item_staging_item_jordan_jordan_brooklyn_fleece_hoodie.jpg",
+    "description": "A soft fleece pullover hoodie in light pink, featuring a front kangaroo pocket and a small embroidered Jumpman logo on the left chest."
+  },
+  {
+    "id": "item_staging_item_nike_nike_acg_wolf_tree_full_zip_fleece_jacket",
+    "name": "Nike ACG 'Wolf Tree' Full-Zip Fleece Jacket",
+    "category": "Fleeces",
+    "color": "Grey",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_acg_wolf_tree_full_zip_fleece_jacket.jpg",
+    "description": "A high-pile sherpa fleece jacket with a full-zip front, mock neck collar, contrasting side panels, and subtle ACG logo on the chest."
+  },
+  {
+    "id": "item_staging_item_nike_nike_dri_fit_academy_short_sleeve_training_t_shirt",
+    "name": "Nike Dri-FIT Academy Short-Sleeve Training T-Shirt",
+    "category": "T-Shirts",
+    "color": "Grey",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_dri_fit_academy_short_sleeve_training_t_shirt.jpg",
+    "description": "Short-sleeve athletic training shirt featuring pink shoulder panels, black sleeve details, and a pink Swoosh logo on the chest."
+  },
+  {
+    "id": "item_staging_item_nike_nike_x_bode_striped_woven_pants",
+    "name": "Nike x Bode Striped Woven Pants",
+    "category": "Pants",
+    "color": "Blue",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_x_bode_striped_woven_pants.jpg",
+    "description": "Relaxed-fit striped track-style pants featuring vertical blue and cream stripes, an elastic waistband, and a small Nike swoosh logo on the left thigh."
+  },
+  {
+    "id": "item_staging_item_bode_nike_x_bode_striped_recreation_shorts",
+    "name": "Nike x Bode Striped Recreation Shorts",
+    "category": "Shorts",
+    "color": "Black",
+    "brand": "Bode",
+    "image": "/closet/item_staging_item_bode_nike_x_bode_striped_recreation_shorts.jpg",
+    "description": "Satin-finish black athletic shorts featuring subtle tone-on-tone vertical shadow stripes, an elastic waistband, and an embroidered cream Bode logo on the left leg."
+  },
+  {
+    "id": "item_staging_item_jordan_jordan_gore_tex_colorblock_hooded_jacket",
+    "name": "Jordan Gore-Tex Colorblock Hooded Jacket",
+    "category": "Jackets",
+    "color": "Black",
+    "brand": "Jordan",
+    "image": "/closet/item_staging_item_jordan_jordan_gore_tex_colorblock_hooded_jacket.jpg",
+    "description": "A weather-resistant hooded jacket featuring a bold retro colorblock design in black, teal, and purple, with Gore-Tex technology and Jordan branding."
+  },
+  {
+    "id": "item_staging_item_nocta_nike_nocta_track_pants",
+    "name": "Nike NOCTA Track Pants",
+    "category": "Pants",
+    "color": "Teal",
+    "brand": "NOCTA",
+    "image": "/closet/item_staging_item_nocta_nike_nocta_track_pants.jpg",
+    "description": "Sporty nylon track pants in a teal colorway, featuring elastic cuffs and waistband with subtle branding."
+  },
+  {
+    "id": "item_staging_item_generic_men_s_solid_beige_pullover_hoodie",
+    "name": "Men's Solid Beige Pullover Hoodie",
+    "category": "Hoodies",
+    "color": "Beige",
+    "brand": "Generic",
+    "image": "/closet/item_staging_item_generic_men_s_solid_beige_pullover_hoodie.jpg",
+    "description": "A classic oversized pullover hoodie in a solid beige color, featuring a kangaroo pocket and matching drawstrings."
+  },
+  {
+    "id": "item_staging_item_tesla_tesla_cybertruck_graphic_hoodie",
+    "name": "Tesla Cybertruck Graphic Hoodie",
+    "category": "Hoodies",
+    "color": "White",
+    "brand": "Tesla",
+    "image": "/closet/item_staging_item_tesla_tesla_cybertruck_graphic_hoodie.jpg?v=3",
+    "description": "A white pullover hoodie with a graphic print on the back showing a line of Cybertrucks."
+  },
+  {
+    "id": "item_staging_item_levi_s_men_s_slim_fit_blue_jeans",
+    "name": "Men's Slim Fit Blue Jeans",
+    "category": "Pants",
+    "color": "Blue",
+    "brand": "Levi's",
+    "image": "/closet/item_staging_item_levi_s_men_s_slim_fit_blue_jeans.jpg",
+    "description": "Classic five-pocket denim jeans in a medium wash with a slim straight fit."
+  },
+  {
+    "id": "item_staging_item_nike_nike_acg_smith_summit_men_s_cargo_pants",
+    "name": "Nike ACG Smith Summit Men's Cargo Pants",
+    "category": "Pants",
+    "color": "Brown",
+    "brand": "Nike",
+    "image": "/closet/item_staging_item_nike_nike_acg_smith_summit_men_s_cargo_pants.jpg",
+    "description": "Outdoor utility trail pants with an integrated webbed belt, embroidered ACG logo, and articulated knees for mobility."
   }
 ]
