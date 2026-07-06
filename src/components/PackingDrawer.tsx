@@ -52,7 +52,8 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
       />
       <aside
         role="dialog"
-        aria-modal="true"
+        aria-modal={isOpen}
+        aria-hidden={!isOpen}
         aria-label="Packing list"
         className="packing-drawer"
         style={{
@@ -63,7 +64,8 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
           backgroundColor: 'var(--bg-surface)',
           boxShadow: 'var(--shadow-lg)',
           transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+          visibility: isOpen ? 'visible' : 'hidden',
+          transition: `transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear ${isOpen ? '0s' : '0.35s'}`,
           zIndex: 101,
           display: 'flex',
           flexDirection: 'column',
@@ -74,6 +76,7 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
           onClick={onClose}
           className="tap-target"
           title="Close packing list"
+          aria-label="Close packing list"
           style={{
             position: 'absolute',
             top: '20px',

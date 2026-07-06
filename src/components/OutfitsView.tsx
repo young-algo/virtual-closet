@@ -153,6 +153,14 @@ export const OutfitsView: React.FC<OutfitsViewProps> = ({
                   className="interactive-card"
                   style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
                   onClick={() => setExpandedId(prev => (prev === outfit.id ? null : outfit.id))}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setExpandedId(prev => (prev === outfit.id ? null : outfit.id));
+                    }
+                  }}
                   aria-expanded={isExpanded}
                 >
                   <LookCollage items={orderedItems} />
