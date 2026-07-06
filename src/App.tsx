@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import ClosetGrid from './components/ClosetGrid';
 import type { ClosetItem } from './components/ClosetGrid';
-import PackingList from './components/PackingList';
 import OutfitBuilder from './components/OutfitBuilder';
 import type { Outfit } from './components/OutfitBuilder';
 import UploadModal from './components/UploadModal';
 import SneakerGrid from './components/SneakerGrid';
 import type { SneakerItem } from './components/SneakerGrid';
 import AddSneakerModal from './components/AddSneakerModal';
+import PackingDrawer from './components/PackingDrawer';
 import { Plus } from 'lucide-react';
 import closetData from './data/closet.json';
 import sneakerData from './data/sneakers.json';
@@ -155,6 +155,7 @@ function App() {
 
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAddSneakerOpen, setIsAddSneakerOpen] = useState(false);
+  const [isPackingOpen, setIsPackingOpen] = useState(false);
 
   // Which closet is on the field: garments or the sneaker archive
   const [view, setView] = useState<'closet' | 'sneakers'>('closet');
@@ -380,28 +381,63 @@ function App() {
           Wardrobe
         </h1>
 
-        {/* The CTA follows the active closet: garments run the AI pipeline,
-            sneakers take hi-fi photos and manual metadata directly */}
-        <button
-          onClick={() => view === 'closet' ? setIsUploadOpen(true) : setIsAddSneakerOpen(true)}
-          className="tap-target"
-          style={{
-            backgroundColor: 'var(--accent-primary)',
-            color: 'var(--bg-surface)',
-            border: 'none',
-            fontSize: '0.68rem',
-            fontWeight: 500,
-            padding: '12px 26px',
-            whiteSpace: 'nowrap',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <Plus size={13} strokeWidth={2} />
-          {view === 'closet' ? 'Add Garment' : 'Add Sneaker'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+          {/* Quiet packing trigger — the only persistent trace of the packing feature */}
+          <button
+            onClick={() => setIsPackingOpen(true)}
+            className="tap-target"
+            style={{
+              border: 'none',
+              background: 'none',
+              color: 'var(--text-primary)',
+              fontSize: '0.68rem',
+              fontWeight: 500,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: '8px',
+              padding: '12px 0',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Packing
+            {packedItems.length > 0 && (
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.65rem',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.1em'
+              }}>
+                — {packedItems.length}
+              </span>
+            )}
+          </button>
+
+          {/* The CTA follows the active closet: garments run the AI pipeline,
+              sneakers take hi-fi photos and manual metadata directly */}
+          <button
+            onClick={() => view === 'closet' ? setIsUploadOpen(true) : setIsAddSneakerOpen(true)}
+            className="tap-target"
+            style={{
+              backgroundColor: 'var(--accent-primary)',
+              color: 'var(--bg-surface)',
+              border: 'none',
+              fontSize: '0.68rem',
+              fontWeight: 500,
+              padding: '12px 26px',
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Plus size={13} strokeWidth={2} />
+            {view === 'closet' ? 'Add Garment' : 'Add Sneaker'}
+          </button>
+        </div>
       </header>
 
       {/* Main Workspace Layout */}
@@ -511,18 +547,6 @@ function App() {
             />
           )}
         </div>
-
-        {/* Right Side: Packing list sidebar */}
-        <div style={{
-          borderLeft: '1px solid var(--border-color)',
-          backgroundColor: 'var(--bg-surface)'
-        }} className="packing-sidebar">
-          <PackingList
-            packedItems={packedItems}
-            onRemoveItem={handleRemovePackingItem}
-            onClearList={handleClearList}
-          />
-        </div>
       </main>
 
       <UploadModal
@@ -537,20 +561,19 @@ function App() {
         onAddSneaker={handleAddSneaker}
       />
 
+      <PackingDrawer
+        isOpen={isPackingOpen}
+        onClose={() => setIsPackingOpen(false)}
+        packedItems={packedItems}
+        onRemoveItem={handleRemovePackingItem}
+        onClearList={handleClearList}
+      />
+
       {/* CSS layout adjustment style tag for breakpoint responsiveness */}
       <style>{`
         .app-main-layout {
           display: grid;
           grid-template-columns: 1fr;
-        }
-        @media (min-width: 1024px) {
-          .app-main-layout {
-            grid-template-columns: 1fr 400px;
-          }
-        }
-        .packing-sidebar {
-          display: flex;
-          flex-direction: column;
         }
         .app-header {
           padding: 22px 48px;
