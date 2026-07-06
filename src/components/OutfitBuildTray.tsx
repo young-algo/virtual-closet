@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, AlertCircle } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
-import type { Outfit } from './OutfitBuilder';
+import type { Outfit } from './OutfitsView';
 
 interface OutfitBuildTrayProps {
   selectedItems: ClosetItem[];

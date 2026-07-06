@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import ClosetGrid from './components/ClosetGrid';
 import type { ClosetItem } from './components/ClosetGrid';
-import OutfitBuilder from './components/OutfitBuilder';
-import type { Outfit } from './components/OutfitBuilder';
+import OutfitsView from './components/OutfitsView';
+import type { Outfit } from './components/OutfitsView';
 import OutfitBuildTray from './components/OutfitBuildTray';
 import UploadModal from './components/UploadModal';
 import SneakerGrid from './components/SneakerGrid';
@@ -158,8 +158,8 @@ function App() {
   const [isAddSneakerOpen, setIsAddSneakerOpen] = useState(false);
   const [isPackingOpen, setIsPackingOpen] = useState(false);
 
-  // Which closet is on the field: garments or the sneaker archive
-  const [view, setView] = useState<'closet' | 'sneakers'>('closet');
+  // Which surface is on the field: garments, the sneaker archive, or the lookbook
+  const [view, setView] = useState<'closet' | 'sneakers' | 'outfits'>('closet');
 
   // Outfits and the packing list draw from both closets
   const allItems: ClosetItem[] = [...items, ...sneakers];
@@ -256,19 +256,22 @@ function App() {
     setSelectedOutfitItemIds([]);
     setEditingOutfitId(null);
     setIsBuildingOutfit(true);
+    setView('closet');
   };
 
-  // Reuse the build panel to edit an existing outfit, pre-selecting its garments
+  // Reuse the build tray to edit an existing outfit, pre-selecting its garments
   const handleStartEditingOutfit = (outfit: Outfit) => {
     setSelectedOutfitItemIds(outfit.itemIds.filter(id => allItems.some(item => item.id === id)));
     setEditingOutfitId(outfit.id);
     setIsBuildingOutfit(true);
+    setView('closet');
   };
 
   const handleCancelBuildingOutfit = () => {
     setSelectedOutfitItemIds([]);
     setEditingOutfitId(null);
     setIsBuildingOutfit(false);
+    setView('outfits');
   };
 
   const handleToggleOutfitItem = (item: ClosetItem) => {
@@ -298,6 +301,7 @@ function App() {
     setSelectedOutfitItemIds([]);
     setEditingOutfitId(null);
     setIsBuildingOutfit(false);
+    setView('outfits');
   };
 
   // AI stylist saves a complete outfit directly — no selection-mode round trip
@@ -419,7 +423,11 @@ function App() {
           {/* The CTA follows the active closet: garments run the AI pipeline,
               sneakers take hi-fi photos and manual metadata directly */}
           <button
-            onClick={() => view === 'closet' ? setIsUploadOpen(true) : setIsAddSneakerOpen(true)}
+            onClick={() => {
+              if (view === 'closet') setIsUploadOpen(true);
+              else if (view === 'sneakers') setIsAddSneakerOpen(true);
+              else handleStartBuildingOutfit();
+            }}
             className="tap-target"
             style={{
               backgroundColor: 'var(--accent-primary)',
@@ -436,7 +444,7 @@ function App() {
             }}
           >
             <Plus size={13} strokeWidth={2} />
-            {view === 'closet' ? 'Add Garment' : 'Add Sneaker'}
+            {view === 'closet' ? 'Add Garment' : view === 'sneakers' ? 'Add Sneaker' : 'New Outfit'}
           </button>
         </div>
       </header>
@@ -461,14 +469,18 @@ function App() {
             <h2 style={{ display: 'flex', gap: '28px', alignItems: 'baseline', flexWrap: 'wrap' }}>
               {([
                 { key: 'closet', label: 'Closet' },
-                { key: 'sneakers', label: 'Sneakers' }
+                { key: 'sneakers', label: 'Sneakers' },
+                { key: 'outfits', label: 'Outfits' }
               ] as const).map(({ key, label }) => {
                 const isActive = view === key;
+                // Outfits is unreachable mid-build: the tray owns the flow until save/cancel
+                const isDisabled = isBuildingOutfit && key === 'outfits';
                 return (
                   <button
                     key={key}
-                    onClick={() => setView(key)}
+                    onClick={() => { if (!isDisabled) setView(key); }}
                     aria-pressed={isActive}
+                    aria-disabled={isDisabled}
                     className="tap-target"
                     style={{
                       fontSize: '3rem',
@@ -481,11 +493,12 @@ function App() {
                       border: 'none',
                       backgroundColor: 'transparent',
                       color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                      cursor: isActive ? 'default' : 'pointer',
+                      opacity: isDisabled ? 0.35 : 1,
+                      cursor: isActive || isDisabled ? 'default' : 'pointer',
                       transition: 'var(--transition-fast)'
                     }}
-                    onMouseOver={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                    onMouseOut={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                    onMouseOver={(e) => { if (!isActive && !isDisabled) e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                    onMouseOut={(e) => { if (!isActive && !isDisabled) e.currentTarget.style.color = 'var(--text-muted)'; }}
                   >
                     {label}
                   </button>
@@ -501,7 +514,9 @@ function App() {
             }}>
               {view === 'closet'
                 ? `${items.length} ${items.length === 1 ? 'garment' : 'garments'}`
-                : `${sneakers.length} ${sneakers.length === 1 ? 'pair' : 'pairs'}`}
+                : view === 'sneakers'
+                  ? `${sneakers.length} ${sneakers.length === 1 ? 'pair' : 'pairs'}`
+                  : `${outfits.length} ${outfits.length === 1 ? 'look' : 'looks'}`}
             </span>
           </div>
 
@@ -517,19 +532,17 @@ function App() {
             />
           )}
 
-          <OutfitBuilder
-            outfits={outfits}
-            items={allItems}
-            isBuilding={isBuildingOutfit}
-            onStartBuilding={handleStartBuildingOutfit}
-            onStartEditing={handleStartEditingOutfit}
-            onDeleteOutfit={handleDeleteOutfit}
-            onAddOutfitToPackingList={handleAddOutfitToPackingList}
-            onSaveAIOutfit={handleSaveAIOutfit}
-            onToggleSeedStylist={handleToggleSeedStylist}
-          />
-
-          {view === 'closet' ? (
+          {view === 'outfits' ? (
+            <OutfitsView
+              outfits={outfits}
+              items={allItems}
+              onStartEditing={handleStartEditingOutfit}
+              onDeleteOutfit={handleDeleteOutfit}
+              onAddOutfitToPackingList={handleAddOutfitToPackingList}
+              onSaveAIOutfit={handleSaveAIOutfit}
+              onToggleSeedStylist={handleToggleSeedStylist}
+            />
+          ) : view === 'closet' ? (
             <ClosetGrid
               items={items}
               onAddToPackingList={handleTogglePackingItem}

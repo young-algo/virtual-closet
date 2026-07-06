@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Check, Luggage, Trash2, Pencil, Sparkles, ChevronDown } from 'lucide-react';
+import { Check, Luggage, Trash2, Pencil, Sparkles } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 import { slotForItem, type SlotName } from '../services/stylist';
 import AIStylist from './AIStylist';
@@ -40,11 +40,51 @@ const groupBySlot = (outfitItems: ClosetItem[]): SlotGroup[] => {
 const formatDate = (timestamp: number): string =>
   new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-interface OutfitBuilderProps {
+// One look as a flat-lay collage in a single well. Items arrive slot-ordered
+// (top, layer, bottom, shoes), so a 2x2 row-major grid puts the top garment
+// upper-left and shoes lower-right when all four slots are present; smaller or
+// larger outfits pack the same grid gracefully. Only the first four items are
+// composed — the meta line below the well carries the true count.
+const LookCollage: React.FC<{ items: ClosetItem[] }> = ({ items }) => {
+  const shown = items.slice(0, 4);
+  return (
+    <div
+      className="product-image-container"
+      style={{
+        aspectRatio: '1',
+        backgroundColor: 'var(--well)',
+        display: 'grid',
+        gridTemplateColumns: shown.length <= 1 ? '1fr' : '1fr 1fr',
+        gridTemplateRows: shown.length <= 2 ? '1fr' : '1fr 1fr',
+        padding: '12%',
+        gap: '6%',
+        overflow: 'hidden'
+      }}
+    >
+      {shown.map(item => (
+        <div key={item.id} style={{ position: 'relative', minWidth: 0, minHeight: 0 }}>
+          <img
+            src={item.image}
+            alt={item.name}
+            loading="lazy"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              mixBlendMode: 'multiply'
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+interface OutfitsViewProps {
   outfits: Outfit[];
   items: ClosetItem[];
-  isBuilding: boolean;
-  onStartBuilding: () => void;
   onStartEditing: (outfit: Outfit) => void;
   onDeleteOutfit: (outfitId: string) => void;
   onAddOutfitToPackingList: (outfit: Outfit) => void;
@@ -52,11 +92,11 @@ interface OutfitBuilderProps {
   onToggleSeedStylist: (outfitId: string) => void;
 }
 
-export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
+// The styling room: AI stylist strip on top, then the lookbook — a grid of
+// collage wells, each expandable (one at a time) into the full look view.
+export const OutfitsView: React.FC<OutfitsViewProps> = ({
   outfits,
   items,
-  isBuilding,
-  onStartBuilding,
   onStartEditing,
   onDeleteOutfit,
   onAddOutfitToPackingList,
@@ -65,7 +105,7 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
 }) => {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [packedFeedbackId, setPackedFeedbackId] = useState<string | null>(null);
-  // Accordion: at most one outfit row is expanded into its look view
+  // At most one look is expanded into its full-width detail
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handlePackOutfit = (outfit: Outfit) => {
@@ -81,72 +121,23 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
       .filter((item): item is ClosetItem => item !== undefined);
 
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Section header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'baseline' }}>
-          <h2 style={{
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            fontFamily: 'var(--font-heading)'
-          }}>
-            Outfits
-          </h2>
-          {outfits.length > 0 && (
-            <span style={{
-              fontSize: '0.68rem',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-muted)',
-              letterSpacing: '0.08em'
-            }}>
-              {outfits.length}
-            </span>
-          )}
-        </div>
+    <section style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+      <AIStylist
+        items={items}
+        savedOutfits={outfits.filter(outfit => outfit.seedStylist !== false)}
+        onSaveAIOutfit={onSaveAIOutfit}
+      />
 
-        {!isBuilding && (
-          <button
-            onClick={onStartBuilding}
-            className="tap-target"
-            style={{
-              border: '1px solid var(--text-primary)',
-              backgroundColor: 'transparent',
-              color: 'var(--text-primary)',
-              fontSize: '0.68rem',
-              fontWeight: 500,
-              padding: '10px 20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            <Plus size={13} strokeWidth={2} />
-            New Outfit
-          </button>
-        )}
-      </div>
-
-
-      {/* AI stylist: prompt-to-outfit, above the saved shelf */}
-      {!isBuilding && (
-        <AIStylist
-          items={items}
-          savedOutfits={outfits.filter(outfit => outfit.seedStylist !== false)}
-          onSaveAIOutfit={onSaveAIOutfit}
-        />
-      )}
-
-      {/* Saved outfits shelf: hairline-rule rows on the continuous field,
-          each expandable into a full look view (accordion, one at a time) */}
-      {outfits.length === 0 && !isBuilding ? (
+      {outfits.length === 0 ? (
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '4px 0 8px' }}>
-          No outfits yet. Click "New Outfit" and pick two or more garments to create your first look.
+          No outfits yet. Use "New Outfit" above to compose a look from your closet, or ask the stylist.
         </p>
-      ) : outfits.length > 0 && (
-        <div style={{ borderBottom: '1px solid var(--border-color)' }}>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+          gap: '48px 28px'
+        }}>
           {outfits.map(outfit => {
             const outfitItems = resolveOutfitItems(outfit);
             const slotGroups = groupBySlot(outfitItems);
@@ -156,38 +147,24 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
             const justPacked = packedFeedbackId === outfit.id;
             const seeding = outfit.seedStylist !== false;
             return (
-              <article key={outfit.id} className="outfit-row">
-                <button
+              <React.Fragment key={outfit.id}>
+                {/* Lookbook cell */}
+                <article
+                  className="interactive-card"
+                  style={{ display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
                   onClick={() => setExpandedId(prev => (prev === outfit.id ? null : outfit.id))}
                   aria-expanded={isExpanded}
-                  className="tap-target"
-                  style={{
-                    width: '100%',
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    flexWrap: 'wrap',
-                    padding: '14px 0',
-                    textAlign: 'left',
-                    fontFamily: 'inherit',
-                    color: 'inherit',
-                    // Global button styles speak in tracked caps; the row header
-                    // carries the outfit name, which keeps its natural case
-                    textTransform: 'none',
-                    letterSpacing: 'normal'
-                  }}
                 >
-                  <span style={{ flex: '1 1 160px', minWidth: 0 }}>
+                  <LookCollage items={orderedItems} />
+                  <div style={{ padding: '14px 0 0', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <span style={{
-                      display: 'block',
-                      fontSize: '0.95rem',
-                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      color: 'var(--text-primary)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      textDecoration: isExpanded ? 'underline' : 'none',
+                      textUnderlineOffset: '4px'
                     }}>
                       {outfit.name}
                     </span>
@@ -196,53 +173,24 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                       color: 'var(--text-muted)',
                       fontFamily: 'var(--font-mono)',
                       textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
+                      letterSpacing: '0.08em'
                     }}>
                       {outfitItems.length} {outfitItems.length === 1 ? 'item' : 'items'}
                       {' · '}{formatDate(outfit.createdAt)}
-                      {outfit.note ? ' · AI styled' : ''}
+                      {outfit.source === 'ai' ? ' · AI' : ''}
                     </span>
-                  </span>
-                  {!isExpanded && (
-                    <span style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      {orderedItems.map(item => (
-                        <span
-                          key={item.id}
-                          title={item.name}
-                          style={{
-                            width: '64px',
-                            height: '64px',
-                            backgroundColor: 'var(--well)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            loading="lazy"
-                            style={{ width: '85%', height: '85%', objectFit: 'contain', mixBlendMode: 'multiply' }}
-                          />
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                  <ChevronDown
-                    size={16}
-                    className="accordion-chevron"
-                    style={{
-                      color: 'var(--text-muted)',
-                      flexShrink: 0,
-                      transform: isExpanded ? 'rotate(180deg)' : 'none'
-                    }}
-                  />
-                </button>
+                  </div>
+                </article>
 
-                {/* Look view */}
-                <div className={`accordion-body${isExpanded ? ' open' : ''}`}>
-                  <div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '2px 0 24px' }}>
+                {/* Expanded look view — spans the full lookbook row below the cell */}
+                {isExpanded && (
+                  <div style={{
+                    gridColumn: '1 / -1',
+                    borderTop: '1px solid var(--border-color)',
+                    borderBottom: '1px solid var(--border-color)',
+                    padding: '28px 0'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                         {slotGroups.map(group => (
                           <div key={group.label} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -378,9 +326,8 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                           </button>
                           <button
                             onClick={() => onStartEditing(outfit)}
-                            disabled={isBuilding}
                             className="tap-target"
-                            title={isBuilding ? 'Finish the current outfit first' : 'Swap the garments in this outfit'}
+                            title="Swap the garments in this outfit"
                             style={{
                               border: '1px solid var(--border-color)',
                               background: 'none',
@@ -388,8 +335,7 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                               fontSize: '0.8rem',
                               fontWeight: 600,
                               padding: '10px 18px',
-                              cursor: isBuilding ? 'not-allowed' : 'pointer',
-                              opacity: isBuilding ? 0.4 : 1,
+                              cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '6px'
@@ -443,8 +389,8 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
-              </article>
+                )}
+              </React.Fragment>
             );
           })}
         </div>
@@ -452,4 +398,5 @@ export const OutfitBuilder: React.FC<OutfitBuilderProps> = ({
     </section>
   );
 };
-export default OutfitBuilder;
+
+export default OutfitsView;
