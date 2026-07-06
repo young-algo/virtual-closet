@@ -340,7 +340,6 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
           gap: '48px 28px'
         }}>
           {filteredSneakers.map(sneaker => {
-            const isPacked = packedItemIds.includes(sneaker.id);
             const isSelected = selectionMode && selectedItemIds.includes(sneaker.id);
             return (
               <article
@@ -386,8 +385,8 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
                     />
                   )}
 
-                  {selectionMode ? (
-                    /* Outfit selection indicator — card click toggles, so no stopPropagation */
+                  {/* Outfit selection indicator — card click toggles, so no stopPropagation */}
+                  {selectionMode && (
                     <div
                       style={{
                         position: 'absolute',
@@ -408,40 +407,6 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
                       }}
                     >
                       {isSelected && <Check size={16} strokeWidth={3} />}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '12px',
-                        right: '12px',
-                        display: 'flex',
-                        gap: '8px',
-                        zIndex: 2
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => onAddToPackingList(sneaker)}
-                        className="tap-target"
-                        title={isPacked ? "Remove from packing list" : "Add to packing list"}
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '1px solid var(--text-primary)',
-                          backgroundColor: isPacked ? 'var(--text-primary)' : 'var(--bg-surface)',
-                          color: isPacked ? 'var(--bg-surface)' : 'var(--text-primary)',
-                          cursor: 'pointer',
-                          transition: 'var(--transition-fast)',
-                          padding: 0
-                        }}
-                      >
-                        {isPacked ? <Check size={16} strokeWidth={2.5} /> : <Plus size={16} />}
-                      </button>
                     </div>
                   )}
                 </div>
