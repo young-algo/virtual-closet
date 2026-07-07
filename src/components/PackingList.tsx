@@ -147,7 +147,7 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
             color: 'var(--text-muted)',
             padding: '24px'
           }}>
-            <p style={{ fontSize: '0.85rem' }}>Nothing packed yet. Add garments from your closet to start a list.</p>
+            <p style={{ fontSize: '0.85rem' }}>Nothing packed yet. Add pieces from an item's detail view, or pack a whole outfit from the lookbook.</p>
           </div>
         ) : (
           Object.entries(groupedItems).map(([category, items]) => (

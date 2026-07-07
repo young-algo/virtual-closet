@@ -241,43 +241,6 @@ dialog[open]::backdrop {
   }
 }
 
-/* Saved outfit rows: hairline rules on the field, sharpening on interaction.
-   The look view expands via the 0fr -> 1fr grid trick so the row animates to
-   its intrinsic height; the global reduced-motion override zeroes it out. */
-.outfit-row {
-  border-top: 1px solid var(--border-color);
-  transition: border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.outfit-row:hover {
-  border-top-color: var(--border-color-hover);
-}
-
-.accordion-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.accordion-body.open {
-  grid-template-rows: 1fr;
-}
-
-/* visibility keeps collapsed content out of the tab order and screen readers */
-.accordion-body > div {
-  overflow: hidden;
-  visibility: hidden;
-  transition: visibility 0.3s;
-}
-
-.accordion-body.open > div {
-  visibility: visible;
-}
-
-.accordion-chevron {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
 .dialog-grid {
   display: grid;
   /* minmax(0, …) lets tracks shrink below content min-size, preventing the

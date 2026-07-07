@@ -351,7 +351,6 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
           gap: '48px 28px'
         }}>
           {filteredItems.map(item => {
-            const isPacked = packedItemIds.includes(item.id);
             const isSelected = selectionMode && selectedItemIds.includes(item.id);
             return (
               <article
@@ -389,9 +388,8 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                     className="product-image"
                   />
 
-                  {/* Actions overlay panel */}
-                  {selectionMode ? (
-                    /* Outfit selection indicator — card click toggles, so no stopPropagation */
+                  {/* Outfit selection indicator — card click toggles, so no stopPropagation */}
+                  {selectionMode && (
                     <div
                       style={{
                         position: 'absolute',
@@ -413,41 +411,6 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                       }}
                     >
                       {isSelected && <Check size={16} strokeWidth={3} />}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '12px',
-                        right: '12px',
-                        display: 'flex',
-                        gap: '8px',
-                        zIndex: 2
-                      }}
-                      onClick={(e) => e.stopPropagation()} // Prevent card click
-                    >
-                      {/* Add / Packed button */}
-                      <button
-                        onClick={() => onAddToPackingList(item)}
-                        className="tap-target"
-                        title={isPacked ? "Remove from packing list" : "Add to packing list"}
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '1px solid var(--text-primary)',
-                          backgroundColor: isPacked ? 'var(--text-primary)' : 'var(--bg-surface)',
-                          color: isPacked ? 'var(--bg-surface)' : 'var(--text-primary)',
-                          cursor: 'pointer',
-                          transition: 'var(--transition-fast)',
-                          padding: 0
-                        }}
-                      >
-                        {isPacked ? <Check size={16} strokeWidth={2.5} /> : <Plus size={16} />}
-                      </button>
                     </div>
                   )}
                 </div>
