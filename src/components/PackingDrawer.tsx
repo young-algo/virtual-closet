@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 import PackingList from './PackingList';
@@ -21,17 +21,50 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
   onRemoveItem,
   onClearList
 }) => {
-  // Escape closes; body scroll locks while open
+  const panelRef = useRef<HTMLElement>(null);
+
+  // While open: Escape closes, body scroll locks, focus moves into the panel
+  // and Tab is contained within it; on close, focus returns to the opener.
+  // Focusables are queried per keystroke because the checklist grows and
+  // shrinks (clear-confirm swaps buttons, rows are removable) while open.
   useEffect(() => {
     if (!isOpen) return;
+    const panel = panelRef.current;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const focusables = (): HTMLElement[] =>
+      Array.from(panel?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
+      ) ?? []);
+    focusables()[0]?.focus();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const inside = panel?.contains(active) ?? false;
+      if (e.shiftKey && (active === first || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = '';
+      previouslyFocused?.focus();
     };
   }, [isOpen, onClose]);
 
@@ -51,6 +84,7 @@ export const PackingDrawer: React.FC<PackingDrawerProps> = ({
         }}
       />
       <aside
+        ref={panelRef}
         role="dialog"
         aria-modal={isOpen}
         aria-hidden={!isOpen}
