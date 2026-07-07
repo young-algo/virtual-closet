@@ -352,6 +352,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
         }}>
           {filteredItems.map(item => {
             const isSelected = selectionMode && selectedItemIds.includes(item.id);
+            const activateCard = () => selectionMode ? onToggleSelectItem?.(item) : handleOpenDetails(item);
             return (
               <article
                 key={item.id}
@@ -364,7 +365,15 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   outline: isSelected ? '1px solid var(--text-primary)' : 'none',
                   outlineOffset: '6px'
                 }}
-                onClick={() => selectionMode ? onToggleSelectItem?.(item) : handleOpenDetails(item)}
+                onClick={activateCard}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    activateCard();
+                  }
+                }}
               >
                 {/* Image well */}
                 <div style={{

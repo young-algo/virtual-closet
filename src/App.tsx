@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import ClosetGrid from './components/ClosetGrid';
 import type { ClosetItem } from './components/ClosetGrid';
 import OutfitsView from './components/OutfitsView';
@@ -157,6 +157,9 @@ function App() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAddSneakerOpen, setIsAddSneakerOpen] = useState(false);
   const [isPackingOpen, setIsPackingOpen] = useState(false);
+  // Stable identity so PackingDrawer's focus-trap effect doesn't rerun (and
+  // re-steal focus) on every unrelated App render while the drawer is open.
+  const handleClosePacking = useCallback(() => setIsPackingOpen(false), []);
 
   // Which surface is on the field: garments, the sneaker archive, or the lookbook
   const [view, setView] = useState<'closet' | 'sneakers' | 'outfits'>('closet');
@@ -582,7 +585,7 @@ function App() {
 
       <PackingDrawer
         isOpen={isPackingOpen}
-        onClose={() => setIsPackingOpen(false)}
+        onClose={handleClosePacking}
         packedItems={packedItems}
         onRemoveItem={handleRemovePackingItem}
         onClearList={handleClearList}

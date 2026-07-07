@@ -341,6 +341,7 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
         }}>
           {filteredSneakers.map(sneaker => {
             const isSelected = selectionMode && selectedItemIds.includes(sneaker.id);
+            const activateCard = () => selectionMode ? onToggleSelectItem?.(sneaker) : handleOpenDetails(sneaker);
             return (
               <article
                 key={sneaker.id}
@@ -353,7 +354,15 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
                   outline: isSelected ? '1px solid var(--text-primary)' : 'none',
                   outlineOffset: '6px'
                 }}
-                onClick={() => selectionMode ? onToggleSelectItem?.(sneaker) : handleOpenDetails(sneaker)}
+                onClick={activateCard}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    activateCard();
+                  }
+                }}
               >
                 {/* Image well: lateral view at rest, top view on hover */}
                 <div className="sneaker-well" style={{
