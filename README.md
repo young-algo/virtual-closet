@@ -12,6 +12,7 @@ A web application designed for organizing your wardrobe, planning outfits, and p
   - Optional generative flattening & wrinkle-smoothing using **Imagen 4** (`imagen-4.0-generate-001`) to generate professional, wrinkle-free flat-lays on solid white backgrounds.
 - **Interactive Details Dialog**: View or edit garment metadata (category, color, brand, description) and safely delete items from your closet with inline confirmation dialogs.
 - **Local Storage Caching**: Persistent browser caching that safely merges server-side updates with your current packing list progress.
+- **Portable Backups**: Download and restore the complete closet, including local photos, metadata edits, deletions, sneakers, outfits, and packing state.
 
 ## Tech Stack
 

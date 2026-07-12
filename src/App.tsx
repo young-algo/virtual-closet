@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ClosetGrid from './components/ClosetGrid';
 import type { ClosetItem } from './components/ClosetGrid';
 import OutfitsView from './components/OutfitsView';
@@ -9,7 +9,7 @@ import SneakerGrid from './components/SneakerGrid';
 import type { SneakerItem } from './components/SneakerGrid';
 import AddSneakerModal from './components/AddSneakerModal';
 import PackingDrawer from './components/PackingDrawer';
-import { Plus } from 'lucide-react';
+import { Download, Plus, Upload } from 'lucide-react';
 import closetData from './data/closet.json';
 import sneakerData from './data/sneakers.json';
 
@@ -30,6 +30,7 @@ const loadDeletedIds = (key: string = DELETED_IDS_KEY): Set<string> => {
 };
 
 function App() {
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   // Load clothing items state, merging localStorage with any new base manifest database items
   const [items, setItems] = useState<ClosetItem[]>(() => {
     const deletedIds = loadDeletedIds();
@@ -359,6 +360,48 @@ function App() {
 
   const packedItemIds = packedItems.map(item => item.id);
 
+  const handleDownloadBackup = () => {
+    const backup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      items,
+      sneakers,
+      outfits,
+      packedItemIds,
+      deletedItemIds: [...loadDeletedIds()],
+      deletedSneakerIds: [...loadDeletedIds(SNEAKER_DELETED_IDS_KEY)]
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `virtual-closet-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup?.version !== 1 || !Array.isArray(backup.items) || !Array.isArray(backup.sneakers) || !Array.isArray(backup.outfits)) {
+        throw new Error('Invalid backup');
+      }
+      const restoredItems = backup.items as ClosetItem[];
+      const restoredSneakers = backup.sneakers as SneakerItem[];
+      setItems(restoredItems);
+      setSneakers(restoredSneakers);
+      setOutfits(backup.outfits as Outfit[]);
+      setPackedItems([...restoredItems, ...restoredSneakers].filter(item => (backup.packedItemIds ?? []).includes(item.id)));
+      localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(backup.deletedItemIds ?? []));
+      localStorage.setItem(SNEAKER_DELETED_IDS_KEY, JSON.stringify(backup.deletedSneakerIds ?? []));
+    } catch (error) {
+      console.error(error);
+      window.alert('That file is not a valid Virtual Closet backup.');
+    }
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -390,6 +433,19 @@ function App() {
         </h1>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleRestoreBackup}
+            style={{ display: 'none' }}
+          />
+          <button onClick={handleDownloadBackup} className="tap-target" title="Download closet backup" aria-label="Download closet backup" style={{ border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '12px 0', display: 'flex' }}>
+            <Download size={15} />
+          </button>
+          <button onClick={() => restoreInputRef.current?.click()} className="tap-target" title="Restore closet backup" aria-label="Restore closet backup" style={{ border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '12px 0', display: 'flex' }}>
+            <Upload size={15} />
+          </button>
           {/* Quiet packing trigger — the only persistent trace of the packing feature */}
           <button
             onClick={() => setIsPackingOpen(true)}
