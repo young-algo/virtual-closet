@@ -14,6 +14,12 @@ A web application designed for organizing your wardrobe, planning outfits, and p
 - **Local Storage Caching**: Persistent browser caching that safely merges server-side updates with your current packing list progress.
 - **Portable Backups**: Download and restore the complete closet, including local photos, metadata edits, deletions, sneakers, outfits, and packing state.
 
+To promote a downloaded backup into the versioned defaults used by every fresh clone:
+
+```bash
+node scripts/import_backup.mjs /path/to/virtual-closet-backup.json
+```
+
 ## Tech Stack
 
 - **Frontend**: React, Vite, TypeScript

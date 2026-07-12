@@ -1,0 +1,140 @@
+[
+  {
+    "id": "outfit_1783458599342",
+    "name": "Constructed Contrast",
+    "itemIds": [
+      "item_staging_item_turner_construction_tee",
+      "item_staging_item_nike_nike_sportswear_club_woven_cargo_pants",
+      "sneaker_CU1726-100"
+    ],
+    "createdAt": 1783458599342,
+    "note": "This fit uses complementary color-blocking and an ironic nod to construction uniforms to make the utility cargo pants feel entirely intentional.",
+    "source": "ai"
+  },
+  {
+    "id": "outfit_1783376089323",
+    "name": "Quiet Union Focus",
+    "itemIds": [
+      "img_0239",
+      "img_0243",
+      "sneaker_BV1300-106"
+    ],
+    "createdAt": 1783376089323,
+    "note": "The Union 1s are the undisputed hero here, so we're keeping the clothing completely quiet. The beige tee subtly nods to the sneaker's vintage midsole, while the black chinos tie in perfectly with the shoe's front blocking to avoid any clashing tones.",
+    "source": "ai"
+  },
+  {
+    "id": "outfit_1783375872362",
+    "name": "Friendship Tourney",
+    "itemIds": [
+      "item_staging_item_nike_nike_sportswear_club_woven_cargo_pants",
+      "item_nike_friendship_tournament_tee",
+      "sneaker_DJ0950-119"
+    ],
+    "createdAt": 1783375872362
+  },
+  {
+    "id": "outfit_1783375654803",
+    "name": "Beige and Bode",
+    "itemIds": [
+      "item_staging_item_nike_nike_x_bode_striped_woven_pants",
+      "img_0236",
+      "user_sneaker_1783048231645"
+    ],
+    "createdAt": 1783375654803
+  },
+  {
+    "id": "outfit_1783369443880",
+    "name": "Anti-oligarchy swag",
+    "itemIds": [
+      "item_staging_item_tesla_tesla_cybertruck_graphic_hoodie",
+      "item_nike_acg_trail_pants",
+      "sneaker_FV5029-100"
+    ],
+    "createdAt": 1783369443880
+  },
+  {
+    "id": "outfit_1783369308381",
+    "name": "Swiss Transit Tech",
+    "itemIds": [
+      "item_staging_item_nike_dri_fit_adv_tee_blue",
+      "item_nike_grey_zip_hoodie",
+      "item_nike_acg_trail_pants",
+      "sneaker_IQ7708-095"
+    ],
+    "createdAt": 1783369308381,
+    "note": "The deliberate echo of light blue between the breathable running tee and the Palace Air Max Plus adds a calculated pop of color to a sleek, stealthy base. The ACG trail pants and zip hoodie ensure you stay adaptable as you move from climate-controlled transport to breezy alpine air.",
+    "source": "ai"
+  },
+  {
+    "id": "outfit_1783338761548",
+    "name": "Red Red Wine",
+    "itemIds": [
+      "img_0241",
+      "img_0242",
+      "sneaker_881432-612"
+    ],
+    "createdAt": 1783338761548
+  },
+  {
+    "id": "outfit_1783338509156",
+    "name": "The Goat",
+    "itemIds": [
+      "sneaker_FB1299-200",
+      "item_nike_acg_goat_tee",
+      "item_nike_acg_shorts_aqua"
+    ],
+    "createdAt": 1783338509156
+  },
+  {
+    "id": "outfit_1783338450807",
+    "name": "Blackpink",
+    "itemIds": [
+      "item_staging_item_nike_nike_dri_fit_academy_short_sleeve_training_t_shirt",
+      "item_nike_golf_pants_black",
+      "sneaker_FQ7860-600"
+    ],
+    "createdAt": 1783338450807
+  },
+  {
+    "id": "outfit_1783337916765",
+    "name": "Nike Moving Bro",
+    "itemIds": [
+      "item_staging_item_nike_nike_acg_smith_summit_men_s_cargo_pants",
+      "item_staging_item_nike_moving_co_sweatshirt",
+      "sneaker_DV2440-700"
+    ],
+    "createdAt": 1783337916765
+  },
+  {
+    "id": "outfit_1783292016343",
+    "name": "Dynamic State of Mind",
+    "itemIds": [
+      "item_staging_item_be_kind_tee",
+      "item_staging_item_bode_nike_x_bode_striped_recreation_shorts",
+      "sneaker_HM0810-401"
+    ],
+    "createdAt": 1783292016343
+  },
+  {
+    "id": "outfit_1783206796823",
+    "name": "Hackney to Como",
+    "itemIds": [
+      "item_staging_item_top_boy_jersey",
+      "user_1782958298343",
+      "sneaker_FB8938-001"
+    ],
+    "createdAt": 1783206796823
+  },
+  {
+    "id": "outfit_1783203969123",
+    "name": "Summer Jazz Festival",
+    "itemIds": [
+      "user_1782959086117",
+      "user_1782958672838",
+      "sneaker_FQ2942-100"
+    ],
+    "createdAt": 1783203969123,
+    "seedStylist": false
+  }
+]

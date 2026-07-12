@@ -12,6 +12,8 @@ import PackingDrawer from './components/PackingDrawer';
 import { Download, Plus, Upload } from 'lucide-react';
 import closetData from './data/closet.json';
 import sneakerData from './data/sneakers.json';
+import outfitData from './data/outfits.json';
+import appDefaults from './data/app-defaults.json';
 
 // Tombstone lists of deleted item IDs — distinguishes "user deleted this base item"
 // from "this base item is new and should be merged in" on the next launch.
@@ -20,9 +22,13 @@ const DELETED_IDS_KEY = 'closet_deleted_ids';
 const SNEAKER_ITEMS_KEY = 'sneaker_items';
 const SNEAKER_DELETED_IDS_KEY = 'sneaker_deleted_ids';
 
+const defaultDeletedIds = (key: string): string[] =>
+  key === SNEAKER_DELETED_IDS_KEY ? appDefaults.deletedSneakerIds : appDefaults.deletedItemIds;
+
 const loadDeletedIds = (key: string = DELETED_IDS_KEY): Set<string> => {
   try {
-    return new Set(JSON.parse(localStorage.getItem(key) ?? '[]'));
+    const saved = localStorage.getItem(key);
+    return new Set(saved ? JSON.parse(saved) : defaultDeletedIds(key));
   } catch (e) {
     console.error('Failed to parse deleted item ids from localStorage', e);
     return new Set();
@@ -139,7 +145,9 @@ function App() {
         console.error('Failed to parse packed items from localStorage', e);
       }
     }
-    return [];
+    const defaultPackedIds = appDefaults.packedItemIds as string[];
+    return [...(closetData as ClosetItem[]), ...(sneakerData as SneakerItem[])]
+      .filter(item => defaultPackedIds.includes(item.id));
   });
 
   // Load saved outfits with localStorage persistence
@@ -152,7 +160,7 @@ function App() {
         console.error('Failed to parse outfits from localStorage', e);
       }
     }
-    return [];
+    return outfitData as Outfit[];
   });
 
   const [isUploadOpen, setIsUploadOpen] = useState(false);

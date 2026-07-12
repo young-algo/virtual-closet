@@ -1,5 +1,71 @@
 [
   {
+    "id": "user_sneaker_1783863184667",
+    "name": "Dunk Low - Run the Jewels",
+    "category": "Sneakers",
+    "color": "Deep Royal Blue, Active Pink, Blue Chill",
+    "brand": "Nike",
+    "image": "/sneakers/user_user_sneaker_1783863184667_side.jpg",
+    "description": "The Nike SB Dunk Low Run The Jewels are constructed with blue suede uppers that sit on top of a translucent blue outsole. Nike used pink suede on the Swoosh, and gold branded accents on the heel and tongue. The limited edition sneakers feature RTJ branding on the insoles.",
+    "styleCode": "DO9404-400",
+    "imageTop": "/sneakers/user_user_sneaker_1783863184667_top.jpg"
+  },
+  {
+    "id": "sneaker_384664-060",
+    "name": "Air Jordan 6 Black Infrared",
+    "category": "Sneakers",
+    "color": "black, infrared, white",
+    "brand": "Nike",
+    "image": "/sneakers/384664-060_A.png",
+    "description": "This iconic high-top basketball sneaker features a premium black nubuck upper punctuated by vibrant infrared accents on the midsole, heel tab, and lace lock. Resting on a translucent outsole, it reads bold and nostalgic; suits casual streetwear and retro athletic looks.",
+    "styleCode": "384664-060",
+    "imageTop": "/sneakers/384664-060_D.png"
+  },
+  {
+    "id": "sneaker_907958-015",
+    "name": "Jordan 1 Retro High All-Star",
+    "category": "Sneakers",
+    "color": "black, white, metallic silver",
+    "brand": "Nike",
+    "image": "/sneakers/907958-015_A.png",
+    "description": "This iconic high-top silhouette features eye-catching iridescent leather panels on the toe box, heel, and ankle collar that shift color in the light, balanced by classic black and white leather overlays. It reads bold and futuristic; suits elevated streetwear and statement-making casual looks.",
+    "styleCode": "907958-015",
+    "imageTop": "/sneakers/907958-015_D.png"
+  },
+  {
+    "id": "sneaker_DN3707-010",
+    "name": "Air Jordan 3 Black Cement",
+    "category": "Sneakers",
+    "color": "black, cement grey, white, fire red",
+    "brand": "Nike",
+    "image": "/sneakers/DN3707-010_A.png",
+    "description": "This iconic mid-top silhouette features a premium black tumbled leather upper contrasted by signature elephant print overlays and vibrant red accents. Its heritage-rich aesthetic anchors sporty streetwear and elevated casual outfits.",
+    "styleCode": "DN3707-010",
+    "imageTop": "/sneakers/DN3707-010_D.png"
+  },
+  {
+    "id": "sneaker_FB8938-001",
+    "name": "Nike Attack Light Smoke Grey",
+    "category": "Sneakers",
+    "color": "grey, black, white, blue",
+    "brand": "Nike",
+    "image": "/sneakers/FB8938-001_A.png",
+    "description": "This retro mid-top court shoe features a blend of light grey leather and mesh, highlighted by sharp black accents and a checkerboard tongue tag. It reads sporty and retro-cool; suits casual streetwear and vintage-inspired athletic looks.",
+    "styleCode": "FB8938-001",
+    "imageTop": "/sneakers/FB8938-001_D.png"
+  },
+  {
+    "id": "user_sneaker_1783048231645",
+    "name": "Field General",
+    "category": "Sneakers",
+    "color": "Blue Suede",
+    "brand": "Nike",
+    "image": "/sneakers/user_user_sneaker_1783048231645_side.jpg",
+    "description": "",
+    "styleCode": "IF0666-400",
+    "imageTop": "/sneakers/user_user_sneaker_1783048231645_top.jpg"
+  },
+  {
     "id": "sneaker_308497-406",
     "name": "Air Jordan 4 Travis Scott",
     "category": "Sneakers",
@@ -44,17 +110,6 @@
     "imageTop": "/sneakers/378037-100_D.png"
   },
   {
-    "id": "sneaker_384664-060",
-    "name": "Air Jordan 6 Black Infrared",
-    "category": "Sneakers",
-    "color": "black, infrared, white",
-    "brand": "Nike",
-    "image": "/sneakers/384664-060_A.png",
-    "description": "This iconic high-top basketball sneaker features a premium black nubuck upper punctuated by vibrant infrared accents on the midsole, heel tab, and lace lock. Resting on a translucent outsole, it reads bold and nostalgic; suits casual streetwear and retro athletic looks.",
-    "styleCode": "384664-060",
-    "imageTop": "/sneakers/384664-060_D.png"
-  },
-  {
     "id": "sneaker_555088-610",
     "name": "Air Jordan 1 Bred Toe",
     "category": "Sneakers",
@@ -78,7 +133,7 @@
   },
   {
     "id": "sneaker_881758-110",
-    "name": "Nike SB Dunk High Grip",
+    "name": "Nike SB Dunk Wolf in Sheep's Clothing",
     "category": "Sneakers",
     "color": "white, black, red",
     "brand": "Nike",
@@ -86,17 +141,6 @@
     "description": "Featuring a high-top silhouette, this sneaker showcases an ultra-textured, hairy suede upper in off-white that mimics skate grip tape, offset by a black midsole and bright red outsole. It reads sporty and highly textured; suits casual streetwear and skate-inspired looks.",
     "styleCode": "881758-110",
     "imageTop": "/sneakers/881758-110_D.png"
-  },
-  {
-    "id": "sneaker_907958-015",
-    "name": "Jordan 1 Retro High All-Star",
-    "category": "Sneakers",
-    "color": "black, white, metallic silver",
-    "brand": "Nike",
-    "image": "/sneakers/907958-015_A.png",
-    "description": "This iconic high-top silhouette features eye-catching iridescent leather panels on the toe box, heel, and ankle collar that shift color in the light, balanced by classic black and white leather overlays. It reads bold and futuristic; suits elevated streetwear and statement-making casual looks.",
-    "styleCode": "907958-015",
-    "imageTop": "/sneakers/907958-015_D.png"
   },
   {
     "id": "sneaker_AQ0818-100",
@@ -177,12 +221,12 @@
   },
   {
     "id": "sneaker_DB3541-100",
-    "name": "Air Force 1 07 Indigo",
+    "name": "Air Force 1 07 Evo Moment #37",
     "category": "Sneakers",
     "color": "white, obsidian, light brown, blue",
     "brand": "Nike",
     "image": "/sneakers/DB3541-100_A.png",
-    "description": "This classic low-top silhouette features a canvas-like white upper accented by indigo-blue heel tabs and outsoles, with gold and light-blue embroidery highlighting the Swoosh. Its plant-inspired aesthetic reads clean and organic; suits relaxed, sustainable-minded casual outfits.",
+    "description": "This classic low-top silhouette features a canvas-like white upper accented by indigo-blue heel tabs and outsoles, with gold and light-blue embroidery highlighting the Swoosh. Its Streetfighter-inspired aesthetic reads clean and organic; suits relaxed, subtly cool casual outfits.",
     "styleCode": "DB3541-100",
     "imageTop": "/sneakers/DB3541-100_D.png"
   },
@@ -199,7 +243,7 @@
   },
   {
     "id": "sneaker_DJ0950-119",
-    "name": "Nike Dunk Low Off-White Lot 34",
+    "name": "Nike Dunk Low Off-White Lot 19",
     "category": "Sneakers",
     "color": "sail, neutral grey, orange, teal",
     "brand": "Nike",
@@ -207,17 +251,6 @@
     "description": "This sneaker features a sail leather base with soft grey suede overlays, highlighted by Virgil Abloh's signature double-lacing system in vibrant orange and a textured teal tongue. It reads highly conceptual and artistic; suits progressive streetwear outfits and graphic-heavy casual looks.",
     "styleCode": "DJ0950-119",
     "imageTop": "/sneakers/DJ0950-119_D.webp"
-  },
-  {
-    "id": "sneaker_DN3707-010",
-    "name": "Air Jordan 3 Black Cement",
-    "category": "Sneakers",
-    "color": "black, cement grey, white, fire red",
-    "brand": "Nike",
-    "image": "/sneakers/DN3707-010_A.png",
-    "description": "This iconic mid-top silhouette features a premium black tumbled leather upper contrasted by signature elephant print overlays and vibrant red accents. Its heritage-rich aesthetic anchors sporty streetwear and elevated casual outfits.",
-    "styleCode": "DN3707-010",
-    "imageTop": "/sneakers/DN3707-010_D.png"
   },
   {
     "id": "sneaker_DO5880-100",
@@ -264,17 +297,6 @@
     "imageTop": "/sneakers/FB1299-200_D.png"
   },
   {
-    "id": "sneaker_FB8938-001",
-    "name": "Nike Attack Light Smoke Grey",
-    "category": "Sneakers",
-    "color": "grey, black, white, blue",
-    "brand": "Nike",
-    "image": "/sneakers/FB8938-001_A.png",
-    "description": "This retro mid-top court shoe features a blend of light grey leather and mesh, highlighted by sharp black accents and a checkerboard tongue tag. It reads sporty and retro-cool; suits casual streetwear and vintage-inspired athletic looks.",
-    "styleCode": "FB8938-001",
-    "imageTop": "/sneakers/FB8938-001_D.png"
-  },
-  {
     "id": "sneaker_FN8454-800",
     "name": "Nike Zoom Fly 6 Bright Mandarin",
     "category": "Sneakers",
@@ -309,7 +331,7 @@
   },
   {
     "id": "sneaker_FQ7860-101",
-    "name": "Air Max Dn University Blue",
+    "name": "Air Max Dn8 University Blue",
     "category": "Sneakers",
     "color": "white, blue, red, black",
     "brand": "Nike",
@@ -386,7 +408,7 @@
   },
   {
     "id": "sneaker_HQ4308-400",
-    "name": "Nike MindBody Obsidian",
+    "name": "Nike Mind002 Obsidian",
     "category": "Sneakers",
     "color": "obsidian, total orange, black",
     "brand": "Nike",
