@@ -13,6 +13,7 @@ A web application designed for organizing your wardrobe, planning outfits, and p
 - **Interactive Details Dialog**: View or edit garment metadata (category, color, brand, description) and safely delete items from your closet with inline confirmation dialogs.
 - **Local Storage Caching**: Persistent browser caching that safely merges server-side updates with your current packing list progress.
 - **Portable Backups**: Download and restore the complete closet, including local photos, metadata edits, deletions, sneakers, outfits, and packing state.
+- **Quality-First Daily Outfit Email**: An isolated scheduled sidecar builds full-inventory visual atlases, evaluates three weather-aware style directions through independent planner, critic, and curator passes, and emails only bundles that pass deterministic quality gates.
 
 To promote a downloaded backup into the versioned defaults used by every fresh clone:
 
@@ -42,3 +43,9 @@ node scripts/import_backup.mjs /path/to/virtual-closet-backup.json
 
 3. **Configure API Key**:
    Provide your Gemini API Key in the settings drawer in the web interface to enable automated AI tagging and generative flat-lay wrinkle-smoothing.
+
+## Daily outfit email
+
+Open the envelope icon in the app header to configure the private daily sidecar. The browser cache, snapshot sync, daily feedback, and last bundle use only `daily_outfits_*` keys and a separate IndexedDB database; they never write to the on-demand stylist's state.
+
+The scheduled backend is in [`apps-script/daily-outfits-v2`](apps-script/daily-outfits-v2). Follow its deployment guide to configure the private Apps Script web app, Gemini models, scheduler, and test-delivery flow.

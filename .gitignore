@@ -44,6 +44,7 @@ public/raw/
 .env
 .env.*
 *.local
+.clasp.json
 
 # Git worktrees
 .worktrees/

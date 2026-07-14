@@ -9,7 +9,8 @@ import SneakerGrid from './components/SneakerGrid';
 import type { SneakerItem } from './components/SneakerGrid';
 import AddSneakerModal from './components/AddSneakerModal';
 import PackingDrawer from './components/PackingDrawer';
-import { Download, Plus, Upload } from 'lucide-react';
+import DailyOutfitSettings from './features/daily-outfits/DailyOutfitSettings';
+import { Download, Mail, Plus, Upload } from 'lucide-react';
 import closetData from './data/closet.json';
 import sneakerData from './data/sneakers.json';
 import outfitData from './data/outfits.json';
@@ -166,6 +167,7 @@ function App() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAddSneakerOpen, setIsAddSneakerOpen] = useState(false);
   const [isPackingOpen, setIsPackingOpen] = useState(false);
+  const [isDailyOutfitsOpen, setIsDailyOutfitsOpen] = useState(false);
   // Stable identity so PackingDrawer's focus-trap effect doesn't rerun (and
   // re-steal focus) on every unrelated App render while the drawer is open.
   const handleClosePacking = useCallback(() => setIsPackingOpen(false), []);
@@ -454,6 +456,15 @@ function App() {
           <button onClick={() => restoreInputRef.current?.click()} className="tap-target" title="Restore closet backup" aria-label="Restore closet backup" style={{ border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '12px 0', display: 'flex' }}>
             <Upload size={15} />
           </button>
+          <button
+            onClick={() => setIsDailyOutfitsOpen(true)}
+            className="tap-target"
+            title="Daily outfit email"
+            aria-label="Daily outfit email settings"
+            style={{ border: 'none', background: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '12px 0', display: 'flex' }}
+          >
+            <Mail size={15} />
+          </button>
           {/* Quiet packing trigger — the only persistent trace of the packing feature */}
           <button
             onClick={() => setIsPackingOpen(true)}
@@ -653,6 +664,13 @@ function App() {
         packedItems={packedItems}
         onRemoveItem={handleRemovePackingItem}
         onClearList={handleClearList}
+      />
+
+      <DailyOutfitSettings
+        open={isDailyOutfitsOpen}
+        onClose={() => setIsDailyOutfitsOpen(false)}
+        items={allItems}
+        outfits={outfits}
       />
 
       {/* CSS layout adjustment style tag for breakpoint responsiveness */}
