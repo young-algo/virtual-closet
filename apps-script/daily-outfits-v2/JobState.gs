@@ -64,6 +64,50 @@ function validCurrentBundleV2_(pending, bundle, expectedLocalDate) {
     (expectedLocalDate === undefined || pending.localDate === expectedLocalDate);
 }
 
+function validOwnDailyObjectV2_(value, key) {
+  return ownDailyJobKeyV2_(value, key) && value[key] &&
+    typeof value[key] === 'object' && !Array.isArray(value[key]);
+}
+
+function validOwnDailyObjectArrayV2_(value, key, expectedLength) {
+  if (!ownDailyJobKeyV2_(value, key) || !Array.isArray(value[key]) ||
+      (expectedLength !== undefined && value[key].length !== expectedLength)) return false;
+  for (var index = 0; index < value[key].length; index += 1) {
+    if (!ownDailyJobKeyV2_(value[key], index) || !value[key][index] ||
+        typeof value[key][index] !== 'object' || Array.isArray(value[key][index])) return false;
+  }
+  return true;
+}
+
+function validScheduledStageResumeV2_(state, pending) {
+  if (!state || typeof state !== 'object' || Array.isArray(state) ||
+      !ownDailyJobKeyV2_(state, 'stage') || DAILY_JOB_STAGES_V2_.indexOf(state.stage) < 0 ||
+      !ownDailyJobKeyV2_(state, 'attemptCounts') || !state.attemptCounts ||
+      typeof state.attemptCounts !== 'object' || Array.isArray(state.attemptCounts)) return false;
+  if (state.stage === 'idle' || state.stage === 'sent' || state.stage === 'failed') return true;
+  if (!validCurrentPendingV2_(pending, state.localDate, state.wardrobeFingerprint) ||
+      !validOwnDailyObjectV2_(pending, 'weather') || !validOwnDailyObjectV2_(pending, 'history')) return false;
+  if (state.stage === 'weather-ready') return true;
+  if (!validOwnDailyObjectArrayV2_(pending, 'planners', DAILY_V2.ARCHETYPES.length)) return false;
+  if (state.stage === 'planners-ready') return true;
+  if (!validOwnDailyObjectV2_(pending, 'critic') ||
+      !validOwnDailyObjectArrayV2_(pending.critic, 'scores') || !pending.critic.scores.length) return false;
+  if (state.stage === 'critic-ready') return true;
+  if (state.stage === 'selection-ready') {
+    if (!validOwnDailyObjectV2_(pending, 'selection')) return false;
+    try {
+      assertDeterministicSelectionReadyV2_(pending);
+      assertPersistedSelectionContextV2_(pending);
+      return true;
+    } catch (_ignored) {
+      return false;
+    }
+  }
+  return state.stage === 'bundle-ready' && ownDailyJobKeyV2_(pending, 'bundle') &&
+    validCurrentBundleV2_(pending, pending.bundle) && validOwnDailyObjectV2_(pending.bundle, 'weather') &&
+    validOwnDailyObjectArrayV2_(pending.bundle, 'recommendations', DAILY_V2.ARCHETYPES.length);
+}
+
 function validPersistedSelectionCandidateV2_(candidate) {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
   var requiredStrings = ['candidateId', 'archetype', 'topId', 'bottomId', 'shoeId'];

@@ -6,21 +6,48 @@ function safeDailyDiagnosticLoadV2_(loader, fallback) {
   }
 }
 
-function safeDailyJobProjectionV2_(state) {
-  if (!state || typeof state !== 'object' || Array.isArray(state)) return null;
-  var projected = {};
-  if (Object.prototype.hasOwnProperty.call(state, 'localDate') &&
-      typeof state.localDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(state.localDate)) {
-    projected.localDate = state.localDate;
-  }
-  if (Object.prototype.hasOwnProperty.call(state, 'qualityPolicyVersion') &&
-      Number.isInteger(state.qualityPolicyVersion) && state.qualityPolicyVersion >= 0) {
-    projected.qualityPolicyVersion = state.qualityPolicyVersion;
-  }
-  if (Object.prototype.hasOwnProperty.call(state, 'stage') &&
-      typeof state.stage === 'string' && DAILY_JOB_STAGES_V2_.indexOf(state.stage) >= 0) {
-    projected.stage = state.stage;
-  }
+function validDailyDiagnosticIsoDateV2_(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  var parts = value.split('-').map(Number);
+  var year = parts[0];
+  var month = parts[1];
+  var day = parts[2];
+  if (month < 1 || month > 12 || day < 1) return false;
+  var leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  var days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= days[month - 1];
+}
+
+function safeDailyDiagnosticContextV2_(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
+      !Object.prototype.hasOwnProperty.call(snapshot, 'wardrobeFingerprint') ||
+      typeof snapshot.wardrobeFingerprint !== 'string' || !snapshot.wardrobeFingerprint) return null;
+  return safeDailyDiagnosticLoadV2_(function() {
+    var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+    if (!config || typeof config !== 'object' || Array.isArray(config) ||
+        typeof config.timezone !== 'string' || !config.timezone) return null;
+    var localDate = localDateV2_(new Date(), config.timezone);
+    if (!validDailyDiagnosticIsoDateV2_(localDate)) return null;
+    return { localDate: localDate, wardrobeFingerprint: snapshot.wardrobeFingerprint };
+  }, null);
+}
+
+function safeDailyJobProjectionV2_(state, context) {
+  if (!state || typeof state !== 'object' || Array.isArray(state) || !context ||
+      !Object.prototype.hasOwnProperty.call(state, 'qualityPolicyVersion') ||
+      state.qualityPolicyVersion !== DAILY_V2.QUALITY_POLICY_VERSION ||
+      !Object.prototype.hasOwnProperty.call(state, 'localDate') ||
+      !validDailyDiagnosticIsoDateV2_(state.localDate) || state.localDate !== context.localDate ||
+      !Object.prototype.hasOwnProperty.call(state, 'stage') ||
+      typeof state.stage !== 'string' || DAILY_JOB_STAGES_V2_.indexOf(state.stage) < 0 ||
+      !Object.prototype.hasOwnProperty.call(state, 'wardrobeFingerprint') ||
+      typeof state.wardrobeFingerprint !== 'string' || !state.wardrobeFingerprint ||
+      state.wardrobeFingerprint !== context.wardrobeFingerprint) return null;
+  var projected = {
+    localDate: state.localDate,
+    qualityPolicyVersion: state.qualityPolicyVersion,
+    stage: state.stage
+  };
   ['startedAt', 'updatedAt'].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(state, key) && typeof state[key] === 'number' &&
         Number.isFinite(state[key]) && state[key] >= 0) projected[key] = state[key];
@@ -29,24 +56,26 @@ function safeDailyJobProjectionV2_(state) {
 }
 
 function safeDailySnapshotValidationProjectionV2_(validation) {
-  if (!validation || typeof validation !== 'object' || Array.isArray(validation)) return null;
-  var projected = {};
-  if (Object.prototype.hasOwnProperty.call(validation, 'ok') && typeof validation.ok === 'boolean') {
-    projected.ok = validation.ok;
-  }
-  if (Object.prototype.hasOwnProperty.call(validation, 'generatedAt') &&
-      typeof validation.generatedAt === 'number' && Number.isFinite(validation.generatedAt) &&
-      validation.generatedAt >= 0) projected.generatedAt = validation.generatedAt;
-  ['itemCount', 'atlasPageCount'].forEach(function(key) {
-    if (Object.prototype.hasOwnProperty.call(validation, key) &&
-        Number.isInteger(validation[key]) && validation[key] >= 0) projected[key] = validation[key];
-  });
-  return projected;
+  if (!validation || typeof validation !== 'object' || Array.isArray(validation) ||
+      !Object.prototype.hasOwnProperty.call(validation, 'ok') || typeof validation.ok !== 'boolean' ||
+      !Object.prototype.hasOwnProperty.call(validation, 'generatedAt') ||
+      typeof validation.generatedAt !== 'number' || !Number.isFinite(validation.generatedAt) ||
+      validation.generatedAt < 0 ||
+      !Object.prototype.hasOwnProperty.call(validation, 'itemCount') ||
+      !Number.isInteger(validation.itemCount) || validation.itemCount < 0 ||
+      !Object.prototype.hasOwnProperty.call(validation, 'atlasPageCount') ||
+      !Number.isInteger(validation.atlasPageCount) || validation.atlasPageCount < 0) return null;
+  return {
+    ok: validation.ok,
+    generatedAt: validation.generatedAt,
+    itemCount: validation.itemCount,
+    atlasPageCount: validation.atlasPageCount
+  };
 }
 
-function safeDailyAttemptCountsV2_(state) {
+function safeDailyAttemptCountsV2_(state, validJob) {
   var projected = {};
-  if (!state || typeof state !== 'object' || Array.isArray(state) ||
+  if (!validJob || !state || typeof state !== 'object' || Array.isArray(state) ||
       !Object.prototype.hasOwnProperty.call(state, 'attemptCounts') ||
       !state.attemptCounts || typeof state.attemptCounts !== 'object' || Array.isArray(state.attemptCounts)) {
     return projected;
@@ -62,8 +91,9 @@ function safeDailyAttemptCountsV2_(state) {
   return projected;
 }
 
-function safeDailySelectionProjectionV2_(pending) {
-  if (!validCurrentPendingV2_(pending) || !Object.prototype.hasOwnProperty.call(pending, 'selection')) return null;
+function safeDailySelectionProjectionV2_(pending, context) {
+  if (!context || !validCurrentPendingV2_(pending, context.localDate, context.wardrobeFingerprint) ||
+      !Object.prototype.hasOwnProperty.call(pending, 'selection')) return null;
   var selection = pending.selection;
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return null;
   var required = ['path', 'eligibleCountByArchetype', 'feasibleSetCount', 'replannedArchetypes'];
@@ -71,9 +101,11 @@ function safeDailySelectionProjectionV2_(pending) {
   if (['top2', 'top3', 'replan-1', 'replan-2'].indexOf(selection.path) < 0 ||
       !selection.eligibleCountByArchetype || typeof selection.eligibleCountByArchetype !== 'object' ||
       Array.isArray(selection.eligibleCountByArchetype) ||
-      typeof selection.feasibleSetCount !== 'number' || !Number.isFinite(selection.feasibleSetCount) ||
-      selection.feasibleSetCount < 0 || !Array.isArray(selection.replannedArchetypes) ||
-      selection.replannedArchetypes.length > 2) return null;
+      !Number.isInteger(selection.feasibleSetCount) || selection.feasibleSetCount <= 0 ||
+      !Array.isArray(selection.replannedArchetypes)) return null;
+
+  var replanCountByPath = { top2: 0, top3: 0, 'replan-1': 1, 'replan-2': 2 };
+  if (selection.replannedArchetypes.length !== replanCountByPath[selection.path]) return null;
 
   var countKeys = Object.keys(selection.eligibleCountByArchetype);
   if (countKeys.length !== DAILY_V2.ARCHETYPES.length || countKeys.some(function(key) {
@@ -84,7 +116,7 @@ function safeDailySelectionProjectionV2_(pending) {
     var archetype = DAILY_V2.ARCHETYPES[index];
     if (!Object.prototype.hasOwnProperty.call(selection.eligibleCountByArchetype, archetype) ||
         !Number.isInteger(selection.eligibleCountByArchetype[archetype]) ||
-        selection.eligibleCountByArchetype[archetype] < 0) return null;
+        selection.eligibleCountByArchetype[archetype] < 2) return null;
     eligibleCountByArchetype[archetype] = selection.eligibleCountByArchetype[archetype];
   }
 
@@ -109,6 +141,8 @@ function getDailyOutfitDiagnosticsV2() {
   var validation = safeDailyDiagnosticLoadV2_(function() { return validateStoredSnapshotV2(); }, null);
   var state = safeDailyDiagnosticLoadV2_(function() { return loadJobStateV2_(); }, null);
   var pending = safeDailyDiagnosticLoadV2_(function() { return loadPendingV2_(); }, null);
+  var context = safeDailyDiagnosticContextV2_(snapshot);
+  var job = safeDailyJobProjectionV2_(state, context);
   var properties = safeDailyDiagnosticLoadV2_(function() { return getDailyPropertiesV2_(); }, null);
   var modelKeys = ['DAILY_PLANNER_MODEL', 'DAILY_CRITIC_MODEL', 'DAILY_CURATOR_MODEL', 'DAILY_REPAIR_MODEL'];
   var modelsConfigured = modelKeys.reduce(function(result, key) {
@@ -118,7 +152,7 @@ function getDailyOutfitDiagnosticsV2() {
   var lastSentDate = properties
     ? safeDailyDiagnosticLoadV2_(function() { return properties.getProperty('LAST_SENT_DATE_V2'); }, null)
     : null;
-  if (typeof lastSentDate !== 'string' || !lastSentDate) lastSentDate = null;
+  if (!validDailyDiagnosticIsoDateV2_(lastSentDate)) lastSentDate = null;
   var snapshotAgeHours = null;
   if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) &&
       Object.prototype.hasOwnProperty.call(snapshot, 'generatedAt') &&
@@ -128,9 +162,9 @@ function getDailyOutfitDiagnosticsV2() {
   }
   return {
     snapshot: safeDailySnapshotValidationProjectionV2_(validation),
-    job: safeDailyJobProjectionV2_(state),
-    selection: safeDailySelectionProjectionV2_(pending),
-    attemptCounts: safeDailyAttemptCountsV2_(state),
+    job: job,
+    selection: safeDailySelectionProjectionV2_(pending, context),
+    attemptCounts: safeDailyAttemptCountsV2_(state, job !== null),
     lastSentDate: lastSentDate,
     modelsConfigured: modelsConfigured,
     snapshotAgeHours: snapshotAgeHours

@@ -124,15 +124,12 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
       typeof state.localDate === 'string' && state.localDate.length > 0 &&
       Object.prototype.hasOwnProperty.call(state, 'wardrobeFingerprint') &&
       state.wardrobeFingerprint === snapshot.wardrobeFingerprint &&
-      validCurrentPendingV2_(pending, state.localDate, state.wardrobeFingerprint);
-    if (currentResume && state.stage === 'bundle-ready') {
-      currentResume = Object.prototype.hasOwnProperty.call(pending, 'bundle') &&
-        validCurrentBundleV2_(pending, pending.bundle);
-    }
+      validScheduledStageResumeV2_(state, pending);
     if (!currentResume) {
       state = newJobStateV2_(state.localDate, snapshot.wardrobeFingerprint);
       pending = null;
       saveJobStateV2_(state);
+      return { state: state, pending: pending };
     }
   }
   var enoughTime = function() { return Date.now() - startedAt < 5 * 60 * 1000 - DAILY_V2.MIN_EXECUTION_REMAINING_MS; };
@@ -205,7 +202,7 @@ function runDailyOutfitScheduler() {
     if (currentMinutes < generationStart) return { ok: true, skipped: 'before-generation-window' };
 
     mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
-    state = loadJobStateV2_();
+    try { state = loadJobStateV2_(); } catch (_ignored) { state = null; }
     if (!state || state.qualityPolicyVersion !== DAILY_V2.QUALITY_POLICY_VERSION || state.localDate !== localDate || state.wardrobeFingerprint !== snapshot.wardrobeFingerprint) {
       state = newJobStateV2_(localDate, snapshot.wardrobeFingerprint);
       saveJobStateV2_(state);
