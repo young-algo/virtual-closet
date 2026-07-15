@@ -1,7 +1,7 @@
 # Daily Outfits V2 — Complete-First Partial Delivery — Design
 
 **Date:** 2026-07-15
-**Status:** Concept approved; awaiting written-spec review
+**Status:** Approved
 **Supersedes:** Only the cardinality, re-plan-exhaustion, and extreme-heat planner rules in `2026-07-14-daily-outfits-v2-quality-design.md`. All other policy-v3 quality, safety, novelty, transport, persistence, and Encore rules remain in force.
 
 ## Summary
