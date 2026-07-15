@@ -12,6 +12,17 @@ var DAILY_V2 = Object.freeze({
   GENERATION_CUTOFF_HOUR: 8,
   MIN_EXECUTION_REMAINING_MS: 45 * 1000,
   ARCHETYPES: ['easy', 'polished-casual', 'expressive'],
+  COMPOSITE_WEIGHTS: Object.freeze({
+    colorIntent: 0.20,
+    palette: 0.15,
+    weather: 0.12,
+    archetypeFit: 0.10,
+    visualInterest: 0.10,
+    wearability: 0.10,
+    freshness: 0.10,
+    silhouette: 0.08,
+    formality: 0.05
+  }),
   REQUIRED_SLOTS: ['top', 'bottom', 'shoes']
 });
 
