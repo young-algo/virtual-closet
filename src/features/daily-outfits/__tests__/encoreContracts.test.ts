@@ -389,6 +389,162 @@ describe('Encore selection', () => {
   });
 });
 
+describe('Encore email rendering', () => {
+  const render = evaluateAppsScript<(
+    bundle: Record<string, unknown>,
+    snapshotValue: object,
+    testMode: boolean,
+    pending: object,
+    expectedLocalDate: string,
+  ) => { html: string; plain: string; inlineImages: Record<string, unknown> }>(
+    ['ItemIndex.gs', 'Email.gs'],
+    'renderDailyEmailV2_',
+    {
+      Utilities: {
+        newBlob: (_bytes: unknown, mime: string, name: string) => ({ mime, name }),
+        base64Decode: () => [],
+        formatDate: () => 'Tuesday, July 14',
+      },
+      getDailyConfigV2_: () => ({ appUrl: '' }),
+      validFullBundleReadyV2_: () => true,
+      console,
+    },
+  );
+
+  const emailSnapshot = {
+    items: [
+      { id: 'top', slot: 'top', name: 'ACG <Tee>', thumbnailDataUrl: 'data:image/jpeg;base64,QQ==' },
+      { id: 'bottom', slot: 'bottom', name: 'Double Knee', thumbnailDataUrl: 'data:image/jpeg;base64,QQ==' },
+      { id: 'shoe', slot: 'shoes', name: 'Mocha & Cream', thumbnailDataUrl: 'data:image/jpeg;base64,QQ==' },
+    ],
+  };
+  const weatherForEmail = {
+    locationLabel: 'Brooklyn, NY',
+    timezone: 'America/New_York',
+    morningFeelsLikeF: 70,
+    highTemperatureF: 82,
+    maxRainProbability: 0,
+    plainEnglishSummary: 'Light pieces.',
+    windy: false,
+  };
+
+  const renderBundle = (
+    bundlePatch: Record<string, unknown>,
+    snapshotValue: object = emailSnapshot,
+  ) => {
+    const bundle = {
+      localDate: '2026-07-14',
+      weather: weatherForEmail,
+      recommendations: [],
+      ...bundlePatch,
+    };
+    return render(bundle, snapshotValue, true, { bundle }, '2026-07-14');
+  };
+
+  it('renders a distinct escaped Encore in HTML and plain text with deterministic inline images', () => {
+    const rendered = renderBundle({
+      encore: {
+        outfitId: 'saved-1',
+        candidateId: 'encore:saved-1',
+        name: 'Saved <One> & "Two"',
+        itemIds: ['top', 'bottom', 'shoe'],
+      },
+    });
+
+    expect(rendered.html).toContain('ENCORE — FROM YOUR SAVED OUTFITS');
+    expect(rendered.html).toContain('Saved &lt;One&gt; &amp; &quot;Two&quot;');
+    expect(rendered.html).toContain('ACG &lt;Tee&gt;');
+    expect(rendered.html).toContain('Mocha &amp; Cream');
+    expect(rendered.plain).toContain('Saved <One> & "Two"');
+    expect(rendered.plain).toContain("One of yours, back in rotation for today's weather.");
+    expect(Object.keys(rendered.inlineImages)).toEqual(['encoreitem0', 'encoreitem1', 'encoreitem2']);
+    expect(rendered.html).toContain('cid:encoreitem0');
+    expect(rendered.html).toContain('cid:encoreitem2');
+  });
+
+  it('omits missing items and invalid thumbnail data without crashing or inventing inline images', () => {
+    const snapshotWithMalformedItem = {
+      items: [
+        emailSnapshot.items[0],
+        { id: 'bad-image', slot: 'layer', name: 'Visible layer', thumbnailDataUrl: 'not-a-data-url' },
+        emailSnapshot.items[2],
+      ],
+    };
+
+    const rendered = renderBundle({
+      encore: {
+        outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One',
+        itemIds: ['top', 'missing', 'bad-image', 'shoe'],
+      },
+    }, snapshotWithMalformedItem);
+
+    expect(rendered.html).toContain('Visible layer');
+    expect(rendered.html).not.toContain('missing');
+    expect(Object.keys(rendered.inlineImages)).toEqual(['encoreitem0', 'encoreitem1']);
+    expect(rendered.html).not.toContain('cid:encoreitem2');
+  });
+
+  it('does not append an Encore heading, image, or blank section when Encore is absent', () => {
+    const rendered = renderBundle({});
+
+    expect(rendered.html).not.toContain('ENCORE — FROM YOUR SAVED OUTFITS');
+    expect(rendered.html).not.toContain('encoreitem');
+    expect(rendered.plain).not.toContain('ENCORE — FROM YOUR SAVED OUTFITS');
+    expect(rendered.inlineImages).toEqual({});
+  });
+
+  it('renders a named Encore safely when its item-id payload is malformed', () => {
+    const rendered = renderBundle({
+      encore: {
+        outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: null,
+      },
+    });
+
+    expect(rendered.html).toContain('Saved One');
+    expect(rendered.plain).toContain("One of yours, back in rotation for today's weather.");
+    expect(rendered.inlineImages).toEqual({});
+  });
+
+  it('preserves the ordinary three generated email sections and their image identities', () => {
+    const recommendations = (['easy', 'polished-casual', 'expressive'] as const).map((archetype, index) => ({
+      candidateId: `look-${index}`,
+      archetype,
+      name: `Look ${index + 1}`,
+      itemIds: ['top', 'bottom', 'shoe'],
+      colorHook: 'Navy against cream.',
+      whyItWorks: 'The proportions and colors work together.',
+      weatherNote: 'Comfortable for the forecast.',
+    }));
+
+    const rendered = renderBundle({ recommendations });
+
+    expect(rendered.html.match(/<section style="padding:32px 0/g)).toHaveLength(3);
+    expect(rendered.html).toContain('01 EASY');
+    expect(rendered.html).toContain('02 POLISHED CASUAL');
+    expect(rendered.html).toContain('03 EXPRESSIVE');
+    expect(Object.keys(rendered.inlineImages)).toEqual([
+      'look0item0', 'look0item1', 'look0item2',
+      'look1item0', 'look1item1', 'look1item2',
+      'look2item0', 'look2item1', 'look2item2',
+    ]);
+  });
+
+  it('places Encore after all three generated email sections', () => {
+    const recommendations = (['easy', 'polished-casual', 'expressive'] as const).map((archetype, index) => ({
+      candidateId: `look-${index}`, archetype, name: `Look ${index + 1}`,
+      itemIds: [], colorHook: '', whyItWorks: 'Works.', weatherNote: 'Ready.',
+    }));
+    const rendered = renderBundle({
+      recommendations,
+      encore: {
+        outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: [],
+      },
+    });
+
+    expect(rendered.html.indexOf('03 EXPRESSIVE')).toBeLessThan(rendered.html.indexOf('ENCORE — FROM YOUR SAVED OUTFITS'));
+  });
+});
+
 describe('Encore bundle assembly and persistence', () => {
   const daily = { QUALITY_POLICY_VERSION: 3, ARCHETYPES: ['easy', 'polished-casual', 'expressive'] };
   const curated = { recommendations: [{ candidateId: 'one' }, { candidateId: 'two' }, { candidateId: 'three' }] };

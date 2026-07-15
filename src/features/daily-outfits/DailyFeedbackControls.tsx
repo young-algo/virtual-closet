@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { DailyFeedbackV2, DailyFinalRecommendationV2 } from './types';
 
+type DailyFeedbackTarget = Pick<DailyFinalRecommendationV2, 'candidateId' | 'name'>;
+
 interface Props {
   localDate: string;
-  recommendation: DailyFinalRecommendationV2;
+  recommendation: DailyFeedbackTarget;
   feedback?: DailyFeedbackV2;
   onChange: (feedback: DailyFeedbackV2) => void;
 }

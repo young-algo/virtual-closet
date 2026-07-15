@@ -12,6 +12,39 @@ function archetypeEmailLabelV2_(value) {
   return value === 'polished-casual' ? 'POLISHED CASUAL' : value.toUpperCase();
 }
 
+function renderEncoreEmailV2_(bundle, snapshot, plain, inlineImages) {
+  if (!bundle.encore) return '';
+  var items = itemMapV2_(snapshot);
+  var itemIds = Array.isArray(bundle.encore.itemIds) ? bundle.encore.itemIds : [];
+  var pieces = itemIds.map(function(id) { return items[id]; }).filter(function(item) {
+    return item && typeof item === 'object' && typeof item.name === 'string' && item.name && typeof item.slot === 'string' && item.slot;
+  });
+  var imageIndex = 0;
+  var images = pieces.map(function(item) {
+    var key = 'encoreitem' + imageIndex;
+    var blob;
+    try {
+      blob = dataUrlBlobV2_(item.thumbnailDataUrl, key + '.jpg');
+    } catch (_ignored) {
+      return '';
+    }
+    inlineImages[key] = blob;
+    imageIndex += 1;
+    return '<td style="width:25%;padding:6px;background:#f4f3ef"><img src="cid:' + key + '" alt="' + escapeHtmlV2_(item.name) + '" style="display:block;width:100%;height:auto"></td>';
+  }).join('');
+  while ((images.match(/<td/g) || []).length < 4) images += '<td style="width:25%;padding:6px;background:#f4f3ef"></td>';
+  plain.push('ENCORE — FROM YOUR SAVED OUTFITS', bundle.encore.name, "One of yours, back in rotation for today's weather.");
+  pieces.forEach(function(item) { plain.push(item.slot.toUpperCase() + ' — ' + item.name); });
+  plain.push('');
+  return '<section style="margin-top:24px;padding:28px;border:1px solid #9b8f73;background:#ece7da">' +
+    '<div style="font:600 10px monospace;letter-spacing:2px;color:#665d49">ENCORE — FROM YOUR SAVED OUTFITS</div>' +
+    '<h2 style="margin:8px 0 18px;font:400 28px Arial,sans-serif;color:#111">' + escapeHtmlV2_(bundle.encore.name) + '</h2>' +
+    '<table role="presentation" cellpadding="0" cellspacing="4" style="width:100%;table-layout:fixed"><tr>' + images + '</tr></table>' +
+    '<p style="margin:20px 0 8px;font:400 15px/1.6 Arial,sans-serif;color:#222">One of yours, back in rotation for today\'s weather.</p>' +
+    '<p style="margin:0;font:400 12px/1.7 monospace;color:#777">' + pieces.map(function(item) { return escapeHtmlV2_(item.slot.toUpperCase() + ' — ' + item.name); }).join('<br>') + '</p>' +
+    '</section>';
+}
+
 function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalDate) {
   if (!validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) || pending.bundle !== bundle) {
     throw new Error('No current quality-gated bundle is ready');
@@ -42,6 +75,7 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
       '<p style="margin:0;font:400 12px/1.7 monospace;color:#777">' + pieces.map(function(item) { return escapeHtmlV2_(item.slot.toUpperCase() + ' — ' + item.name); }).join('<br>') + '</p>' +
       '</section>';
   }).join('');
+  var encoreSection = renderEncoreEmailV2_(bundle, snapshot, plain, inlineImages);
   var date = new Date(bundle.localDate + 'T12:00:00');
   var dateLabel = Utilities.formatDate(date, bundle.weather.timezone, 'EEEE, MMMM d');
   var appLink = getDailyConfigV2_().appUrl ? '<p style="margin:30px 0 0"><a href="' + escapeHtmlV2_(getDailyConfigV2_().appUrl) + '" style="font:600 11px monospace;color:#111;letter-spacing:1px">OPEN LATEST BUNDLE →</a></p>' : '';
@@ -50,7 +84,7 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
     '<div style="padding:26px 0 32px"><div style="font:600 11px monospace;letter-spacing:4px">WARDROBE</div><p style="margin:10px 0 24px;color:#666;font-size:13px">' + escapeHtmlV2_(dateLabel + ' · ' + bundle.weather.locationLabel) + '</p>' +
     '<h1 style="margin:0 0 10px;font:400 36px/1.08 Arial,sans-serif">' + Math.round(bundle.weather.morningFeelsLikeF) + '° morning · ' + Math.round(bundle.weather.highTemperatureF) + '° high</h1>' +
     '<p style="margin:0;color:#666;font:400 14px/1.6 Arial,sans-serif">' + Math.round(bundle.weather.maxRainProbability) + '% rain · ' + escapeHtmlV2_(bundle.weather.windy ? 'windy' : 'light wind') + '<br>' + escapeHtmlV2_(bundle.weather.plainEnglishSummary) + '</p></div>' +
-    sections + appLink + '<p style="margin:42px 0 0;color:#aaa;font:400 10px monospace">Generated from the complete synchronized wardrobe. Daily history remains separate from the on-demand stylist.</p></div></body></html>';
+    sections + encoreSection + appLink + '<p style="margin:42px 0 0;color:#aaa;font:400 10px monospace">Generated from the complete synchronized wardrobe. Daily history remains separate from the on-demand stylist.</p></div></body></html>';
   return { html: html, plain: plain.join('\n'), inlineImages: inlineImages };
 }
 
