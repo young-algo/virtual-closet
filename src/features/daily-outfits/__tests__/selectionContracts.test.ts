@@ -164,6 +164,29 @@ const api = evaluateAppsScript<{
     snapshot: object,
     weather: object
   ) => Record<string, unknown>;
+  candidateSetErrorsV2_: (
+    set: Candidate[],
+    snapshot: object,
+    weather: object,
+    expectedArchetypes?: string[]
+  ) => string[];
+  selectExhaustedFinalSetV2_: (
+    pools: Record<string, Candidate[]>,
+    scores: object[],
+    snapshot: object,
+    weather: object
+  ) => {
+    selectedCandidates: Candidate[];
+    deliveryMode: 'complete' | 'partial';
+    feasibleSetCount: number;
+    needsReplan: null;
+  } | null;
+  deliveryCoverageForCandidatesV2_: (selected: Candidate[]) => {
+    deliveryMode: 'complete' | 'partial';
+    selectedCount: 1 | 2 | 3;
+    selectedArchetypes: string[];
+    omittedArchetypes: string[];
+  };
   chooseReplanArchetypeV2_: (
     eligible: Record<string, unknown[]>,
     scores: unknown[],
@@ -171,7 +194,7 @@ const api = evaluateAppsScript<{
   ) => string | null;
 }>(
   ['Config.gs', 'ItemIndex.gs', 'Critic.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
-  '({ weights: DAILY_V2.COMPOSITE_WEIGHTS, compositeScoreV2_, selectFinalistsV2_, selectFinalSetV2_, chooseReplanArchetypeV2_ })',
+  '({ weights: DAILY_V2.COMPOSITE_WEIGHTS, compositeScoreV2_, selectFinalistsV2_, selectFinalSetV2_, candidateSetErrorsV2_, selectExhaustedFinalSetV2_, deliveryCoverageForCandidatesV2_, chooseReplanArchetypeV2_ })',
   {
     console,
     callGeminiWithRepairV2_: forbidden,
@@ -205,6 +228,10 @@ const finalSet = (
   path: 'top2' | 'top3';
   feasibleSetCount: number;
   needsReplan: string | null;
+  deliveryMode: 'complete';
+  selectedCount: 3;
+  selectedArchetypes: string[];
+  omittedArchetypes: string[];
 };
 
 const onePerArchetype = (overrides: Partial<Record<'easy' | 'polished-casual' | 'expressive', Candidate>> = {}) => ({
@@ -500,6 +527,134 @@ describe('candidate eligibility and per-archetype ordering', () => {
 });
 
 describe('final set constraints, widening, and rank order', () => {
+  it('selects a complete trio when exactly one eligible candidate remains per archetype', () => {
+    const pools = onePerArchetype();
+    const candidates = Object.values(pools).flat();
+    const scores = scoresForPools(pools);
+    const finalistResult = finalists(candidates, scores);
+
+    expect(finalistResult.needsReplan).toBeNull();
+    const selectionResult = finalSet(finalistResult.finalistPools, scores);
+    expect(selectionResult.selectedCandidates).toEqual(candidates);
+    expect(selectionResult).toEqual(expect.objectContaining({
+      deliveryMode: 'complete',
+      selectedCount: 3,
+      selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+      omittedArchetypes: []
+    }));
+  });
+
+  it('validates configured-order pairs and singletons with cardinality-aware shoe reuse', () => {
+    const pools = onePerArchetype();
+    const pair = [pools.easy[0], pools.expressive[0]];
+    const singleton = [pools.expressive[0]];
+
+    expect(api.candidateSetErrorsV2_(pair, baseSnapshot, baseWeather, ['easy', 'expressive'])).toEqual([]);
+    expect(api.candidateSetErrorsV2_(singleton, baseSnapshot, baseWeather, ['expressive'])).toEqual([]);
+    expect(api.candidateSetErrorsV2_(pair.slice().reverse(), baseSnapshot, baseWeather, ['easy', 'expressive']))
+      .toContain('selected archetypes must follow configured order');
+    expect(api.deliveryCoverageForCandidatesV2_(pair)).toEqual({
+      deliveryMode: 'partial',
+      selectedCount: 2,
+      selectedArchetypes: ['easy', 'expressive'],
+      omittedArchetypes: ['polished-casual']
+    });
+    expect(api.deliveryCoverageForCandidatesV2_(singleton)).toEqual({
+      deliveryMode: 'partial',
+      selectedCount: 1,
+      selectedArchetypes: ['expressive'],
+      omittedArchetypes: ['easy', 'polished-casual']
+    });
+
+    const repeatedShoe = [
+      pools.easy[0],
+      { ...pools.expressive[0], shoeId: pools.easy[0].shoeId, itemIds: ['t3', 'b3', pools.easy[0].shoeId] }
+    ];
+    expect(api.candidateSetErrorsV2_(repeatedShoe, baseSnapshot, baseWeather, ['easy', 'expressive']))
+      .toContain('shoes must be unique');
+    const forcedReuseSnapshot = structuredClone(baseSnapshot);
+    forcedReuseSnapshot.items.forEach(value => {
+      if (value.slot === 'shoes' && value.id !== 's1') value.profile.available = false;
+    });
+    expect(api.candidateSetErrorsV2_(repeatedShoe, forcedReuseSnapshot, baseWeather, ['easy', 'expressive']))
+      .not.toContain('shoes must be unique');
+  });
+
+  it('preserves pairwise uniqueness, diversity, overlap, and layer constraints', () => {
+    const topRepeat = [
+      makeCandidate('easy-top', 'easy', 't1', 'b1', 's1'),
+      makeCandidate('expressive-top', 'expressive', 't1', 'b2', 's2')
+    ];
+    expect(api.candidateSetErrorsV2_(topRepeat, baseSnapshot, baseWeather, ['easy', 'expressive']))
+      .toContain('tops must be unique');
+
+    const bottomRepeat = [
+      makeCandidate('easy-bottom', 'easy', 't1', 'b1', 's1'),
+      makeCandidate('expressive-bottom', 'expressive', 't2', 'b1', 's2')
+    ];
+    expect(api.candidateSetErrorsV2_(bottomRepeat, baseSnapshot, baseWeather, ['easy', 'expressive']))
+      .toContain('bottoms must be unique');
+
+    const diversityPair = [
+      makeCandidate('easy-story', 'easy', 't1', 'b1', 's1'),
+      makeCandidate('expressive-story', 'expressive', 't2', 'b2', 's2')
+    ];
+    let sameStorySnapshot = structuredClone(baseSnapshot);
+    ['t1', 't2', 'b1', 'b2'].forEach(id => {
+      sameStorySnapshot = updateItem(sameStorySnapshot, id, {
+        profile: { primaryColorFamily: 'same', silhouette: 'same' }
+      });
+    });
+    expect(api.candidateSetErrorsV2_(diversityPair, sameStorySnapshot, baseWeather, ['easy', 'expressive']))
+      .toContain('diversity stories must be distinct');
+
+    const sharedPair = [
+      makeCandidate('easy-shared', 'easy', 't1', 'b1', 's1', 'l1'),
+      makeCandidate('expressive-shared', 'expressive', 't2', 'b2', 's1', 'l1')
+    ];
+    expect(api.candidateSetErrorsV2_(sharedPair, baseSnapshot, baseWeather, ['easy', 'expressive']))
+      .toContain('outfits share more than one item');
+
+    const layerPair = [
+      makeCandidate('easy-layer', 'easy', 't1', 'b1', 's1', 'l1'),
+      makeCandidate('expressive-layer', 'expressive', 't2', 'b2', 's2', 'l1')
+    ];
+    expect(api.candidateSetErrorsV2_(layerPair, baseSnapshot, { ...baseWeather, layerGuidance: 'none' }, ['easy', 'expressive']))
+      .toContain('layer repeat is not permitted');
+  });
+
+  it('ranks exhaustive sets by cardinality before score and supports singleton exhaustion', () => {
+    const easy = makeCandidate('easy-pair', 'easy', 't1', 'b1', 's1');
+    const expressive = makeCandidate('expressive-pair', 'expressive', 't2', 'b2', 's2');
+    const polished = makeCandidate('polished-single', 'polished-casual', 't1', 'b2', 's3');
+    const pools = { easy: [easy], 'polished-casual': [polished], expressive: [expressive] };
+    const scores = [flatScore(easy.candidateId, 8), flatScore(polished.candidateId, 10), flatScore(expressive.candidateId, 8)];
+
+    expect(api.selectExhaustedFinalSetV2_(pools, scores, baseSnapshot, baseWeather)).toEqual({
+      selectedCandidates: [easy, expressive],
+      deliveryMode: 'partial',
+      feasibleSetCount: 1,
+      needsReplan: null
+    });
+    expect(api.selectExhaustedFinalSetV2_(
+      { easy: [], 'polished-casual': [], expressive: [expressive] },
+      [flatScore(expressive.candidateId, 8)],
+      baseSnapshot,
+      baseWeather
+    )).toEqual({
+      selectedCandidates: [expressive],
+      deliveryMode: 'partial',
+      feasibleSetCount: 1,
+      needsReplan: null
+    });
+    expect(api.selectExhaustedFinalSetV2_(
+      { easy: [], 'polished-casual': [], expressive: [] },
+      [],
+      baseSnapshot,
+      baseWeather
+    )).toBeNull();
+  });
+
   it('selects exactly one matching candidate per configured archetype', () => {
     const pools = onePerArchetype({ expressive: makeCandidate('x1', 'easy', 't3', 'b3', 's3') });
     expect(finalSet(pools, scoresForPools(pools)).selectedCandidates).toBeNull();
@@ -600,27 +755,38 @@ describe('final set constraints, widening, and rank order', () => {
       .selectedCandidates?.map(candidate => candidate.candidateId)).toEqual(['e1', 'p1', 'x1']);
   });
 
-  it('widens from top two to top three when the top-two matrix has no unique-shoe set', () => {
+  it('exhausts all finalists after the bounded window needs a replan', () => {
     const pools = {
       easy: [
         makeCandidate('e1', 'easy', 't1', 'b1', 's1'),
         makeCandidate('e2', 'easy', 't2', 'b2', 's1'),
-        makeCandidate('e3', 'easy', 't3', 'b3', 's3')
+        makeCandidate('e3', 'easy', 't3', 'b3', 's1'),
+        makeCandidate('e4', 'easy', 't4', 'b4', 's1')
       ],
       'polished-casual': [
-        makeCandidate('p1', 'polished-casual', 't4', 'b4', 's1'),
-        makeCandidate('p2', 'polished-casual', 't5', 'b5', 's1'),
-        makeCandidate('p3', 'polished-casual', 't6', 'b6', 's2')
+        makeCandidate('p1', 'polished-casual', 't5', 'b5', 's1'),
+        makeCandidate('p2', 'polished-casual', 't6', 'b6', 's1'),
+        makeCandidate('p3', 'polished-casual', 't7', 'b7', 's1'),
+        makeCandidate('p4', 'polished-casual', 't8', 'b8', 's3')
       ],
       expressive: [
-        makeCandidate('x1', 'expressive', 't7', 'b7', 's2'),
-        makeCandidate('x2', 'expressive', 't8', 'b8', 's2'),
-        makeCandidate('x3', 'expressive', 't9', 'b9', 's4')
+        makeCandidate('x1', 'expressive', 't9', 'b9', 's2'),
+        makeCandidate('x2', 'expressive', 't10', 'b10', 's2'),
+        makeCandidate('x3', 'expressive', 't11', 'b11', 's2'),
+        makeCandidate('x4', 'expressive', 't12', 'b12', 's2')
       ]
     };
-    const result = finalSet(pools, scoresForPools(pools));
-    expect(result.path).toBe('top3');
-    expect(new Set(result.selectedCandidates?.map(value => value.shoeId)).size).toBe(3);
+    const scores = scoresForPools(pools);
+    const bounded = finalSet(pools, scores);
+    expect(bounded.selectedCandidates).toBeNull();
+    expect(bounded.needsReplan).not.toBeNull();
+
+    const exhausted = api.selectExhaustedFinalSetV2_(pools, scores, baseSnapshot, baseWeather);
+    expect(exhausted).toEqual(expect.objectContaining({
+      deliveryMode: 'complete',
+      needsReplan: null
+    }));
+    expect(exhausted?.selectedCandidates.map(value => value.candidateId)).toEqual(['e1', 'p4', 'x1']);
   });
 
   it('removes inventory-invalid finalists before taking the top two', () => {
@@ -895,6 +1061,12 @@ describe('bounded targeted replan orchestration', () => {
 
     expect(result.selection.path).toBe('replan-1');
     expect(result.selection.replannedArchetypes).toEqual(['easy']);
+    expect(result.selection).toEqual(expect.objectContaining({
+      deliveryMode: 'complete',
+      selectedCount: 3,
+      selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+      omittedArchetypes: []
+    }));
     expect(result.critic.scores).toHaveLength(20);
     expect(scoredBatches).toEqual([replanned.map(candidate => candidate.candidateId)]);
   });

@@ -293,7 +293,7 @@ function validPersistedSelectionSummaryV2_(selection) {
   if (!DAILY_V2.ARCHETYPES.every(function(archetype) {
     var count = selection.eligibleCountByArchetype[archetype];
     return ownDailyJobKeyV2_(selection.eligibleCountByArchetype, archetype) &&
-      typeof count === 'number' && Number.isFinite(count) && Number.isInteger(count) && count >= 2;
+      typeof count === 'number' && Number.isFinite(count) && Number.isInteger(count) && count >= 1;
   })) return false;
   var replanned = Object.create(null);
   for (var index = 0; index < selection.replannedArchetypes.length; index += 1) {

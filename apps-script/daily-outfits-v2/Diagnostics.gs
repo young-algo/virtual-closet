@@ -121,7 +121,7 @@ function safeDailySelectionProjectionV2_(pending, context, snapshot) {
     var archetype = DAILY_V2.ARCHETYPES[index];
     if (!Object.prototype.hasOwnProperty.call(selection.eligibleCountByArchetype, archetype) ||
         !Number.isInteger(selection.eligibleCountByArchetype[archetype]) ||
-        selection.eligibleCountByArchetype[archetype] < 2) return null;
+        selection.eligibleCountByArchetype[archetype] < 1) return null;
     eligibleCountByArchetype[archetype] = selection.eligibleCountByArchetype[archetype];
   }
 

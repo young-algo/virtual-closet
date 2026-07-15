@@ -130,6 +130,10 @@ const persistedSelectionFixture = () => {
     selectedCandidates,
     selection: {
       path: 'top2',
+      deliveryMode: 'complete' as const,
+      selectedCount: 3,
+      selectedArchetypes: dailyArchetypes.slice(),
+      omittedArchetypes: [] as string[],
       eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
       compositeById: Object.fromEntries(candidates.map(({ candidateId }) => [candidateId, allNineComposite])),
       feasibleSetCount: 8,
@@ -505,6 +509,10 @@ const recomputePersistedSelectionFixture = (
   pending.selectedCandidates = structuredClone(finalSet.selectedCandidates);
   pending.selection = {
     path: replannedArchetypes.length ? `replan-${replannedArchetypes.length}` : finalSet.path,
+    deliveryMode: 'complete',
+    selectedCount: 3,
+    selectedArchetypes: dailyArchetypes.slice(),
+    omittedArchetypes: [],
     eligibleCountByArchetype: {
       easy: finalists.eligibleCountByArchetype.easy,
       'polished-casual': finalists.eligibleCountByArchetype['polished-casual'],
@@ -2393,6 +2401,31 @@ describe('Apps Script contracts', () => {
     });
   });
 
+  it('resumes an exact-three selection with one eligible candidate per archetype', () => {
+    const pending = currentPendingFixture();
+    dailyArchetypes.forEach((_archetype, groupIndex) => {
+      for (let offset = 1; offset <= 4; offset += 1) {
+        const score = pending.critic.scores[groupIndex * 5 + offset];
+        score.disqualified = true;
+        score.criticalDefects = ['fixture leaves one eligible candidate'];
+      }
+    });
+    const snapshotValue = persistedSnapshotFixture(pending);
+    recomputePersistedSelectionFixture(pending, snapshotValue);
+
+    expect(pending.selection.eligibleCountByArchetype).toEqual({
+      easy: 1,
+      'polished-casual': 1,
+      expressive: 1,
+    });
+    expect(policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toBe(pending);
+  });
+
   it('persists the exact-manual-trio policy without reviving the legacy two-core ban', () => {
     const pending = currentPendingFixture();
     const snapshotValue = persistedSnapshotFixture(pending);
@@ -3071,10 +3104,18 @@ describe('Apps Script contracts', () => {
     };
     const pending = currentPendingFixture();
     pending.wardrobeFingerprint = privateId;
+    dailyArchetypes.forEach((_archetype, groupIndex) => {
+      for (let offset = 1; offset <= 4; offset += 1) {
+        const score = pending.critic.scores[groupIndex * 5 + offset];
+        score.disqualified = true;
+        score.criticalDefects = ['fixture leaves one eligible candidate'];
+      }
+    });
     const currentSnapshot = {
       ...persistedSnapshotFixture(pending),
       generatedAt: Date.now(),
     };
+    recomputePersistedSelectionFixture(pending, currentSnapshot);
     const snapshotValidation = {
       ok: true,
       errors: [`item ${privateId} appears on 0 atlas pages`],
@@ -3117,8 +3158,8 @@ describe('Apps Script contracts', () => {
     expect(result.job).not.toBe(state);
     expect(result.selection).toEqual({
       path: 'top2',
-      eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
-      feasibleSetCount: 8,
+      eligibleCountByArchetype: { easy: 1, 'polished-casual': 1, expressive: 1 },
+      feasibleSetCount: 1,
       replannedArchetypes: [],
     });
     expect(result.attemptCounts).toEqual({ 'critic-ready': 2, 'selection-ready-error': 1 });
@@ -3301,7 +3342,7 @@ describe('Apps Script contracts', () => {
       { path: 'top4', eligibleCountByArchetype: { easy: 2, 'polished-casual': 2, expressive: 2 }, feasibleSetCount: 1, replannedArchetypes: [] },
       { path: 'top2', eligibleCountByArchetype: { easy: 2, 'polished-casual': 2 }, feasibleSetCount: 1, replannedArchetypes: [] },
       { path: 'top2', eligibleCountByArchetype: { easy: 2, 'polished-casual': 2, expressive: 2, rawId: 2 }, feasibleSetCount: 1, replannedArchetypes: [] },
-      { path: 'top2', eligibleCountByArchetype: { easy: 2, 'polished-casual': 1, expressive: 2 }, feasibleSetCount: 1, replannedArchetypes: [] },
+      { path: 'top2', eligibleCountByArchetype: { easy: 2, 'polished-casual': 0, expressive: 2 }, feasibleSetCount: 1, replannedArchetypes: [] },
       { path: 'top2', eligibleCountByArchetype: { easy: 2.5, 'polished-casual': 2, expressive: 2 }, feasibleSetCount: 1, replannedArchetypes: [] },
       { path: 'top2', eligibleCountByArchetype: { easy: 2, 'polished-casual': 2, expressive: 2 }, feasibleSetCount: Number.NaN, replannedArchetypes: [] },
       { path: 'top2', eligibleCountByArchetype: { easy: 2, 'polished-casual': 2, expressive: 2 }, feasibleSetCount: 0, replannedArchetypes: [] },

@@ -295,7 +295,7 @@ function selectFinalistsV2_(candidates, scores, snapshot, weather, history) {
     return result;
   }, Object.create(null));
   var short = DAILY_V2.ARCHETYPES.some(function(archetype) {
-    return eligibleCountByArchetype[archetype] < 2;
+    return eligibleCountByArchetype[archetype] === 0;
   });
   return {
     needsReplan: short ? chooseReplanArchetypeV2_(eligibleByArchetype, scores, []) : null,
@@ -330,10 +330,44 @@ function credibleLayerCountV2_(snapshot) {
   return ids.size;
 }
 
-function candidateSetErrorsV2_(set, snapshot, weather) {
+function deliveryCoverageForCandidatesV2_(selectedCandidates) {
+  if (!Array.isArray(selectedCandidates) || selectedCandidates.length < 1 || selectedCandidates.length > 3) {
+    throw new Error('Selected recommendation count must be between one and three');
+  }
+  var selectedArchetypes = selectedCandidates.map(function(candidate) { return candidate.archetype; });
+  var configuredOrder = DAILY_V2.ARCHETYPES.filter(function(archetype) {
+    return selectedArchetypes.indexOf(archetype) >= 0;
+  });
+  if (JSON.stringify(selectedArchetypes) !== JSON.stringify(configuredOrder)) {
+    throw new Error('Selected archetypes must be a configured-order subsequence');
+  }
+  return {
+    deliveryMode: selectedCandidates.length === 3 ? 'complete' : 'partial',
+    selectedCount: selectedCandidates.length,
+    selectedArchetypes: selectedArchetypes,
+    omittedArchetypes: DAILY_V2.ARCHETYPES.filter(function(archetype) {
+      return selectedArchetypes.indexOf(archetype) < 0;
+    })
+  };
+}
+
+function candidateSetErrorsV2_(set, snapshot, weather, expectedArchetypes) {
   var errors = [];
-  if (!Array.isArray(set) || set.length !== DAILY_V2.ARCHETYPES.length) {
-    return ['one candidate per archetype is required'];
+  expectedArchetypes = Array.isArray(expectedArchetypes)
+    ? expectedArchetypes.slice()
+    : DAILY_V2.ARCHETYPES.slice();
+  var configuredSubsequence = DAILY_V2.ARCHETYPES.filter(function(archetype) {
+    return expectedArchetypes.indexOf(archetype) >= 0;
+  });
+  if (expectedArchetypes.length < 1 || expectedArchetypes.length > 3 ||
+      JSON.stringify(expectedArchetypes) !== JSON.stringify(configuredSubsequence)) {
+    return ['selected archetypes must follow configured order'];
+  }
+  var cardinalityError = expectedArchetypes.length === DAILY_V2.ARCHETYPES.length
+    ? 'one candidate per archetype is required'
+    : 'one candidate per selected archetype is required';
+  if (!Array.isArray(set) || set.length !== expectedArchetypes.length) {
+    return [cardinalityError];
   }
   var seenArchetypes = Object.create(null);
   var tops = [];
@@ -342,11 +376,14 @@ function candidateSetErrorsV2_(set, snapshot, weather) {
   var layers = [];
   var stories = [];
 
-  set.forEach(function(candidate) {
+  set.forEach(function(candidate, index) {
     if (!validSelectionCandidateV2_(candidate) ||
-        DAILY_V2.ARCHETYPES.indexOf(candidate.archetype) < 0 ||
-        ownSelectionKeyV2_(seenArchetypes, candidate.archetype)) {
-      errors.push('one candidate per archetype is required');
+        ownSelectionKeyV2_(seenArchetypes, candidate && candidate.archetype)) {
+      errors.push(cardinalityError);
+      return;
+    }
+    if (candidate.archetype !== expectedArchetypes[index]) {
+      errors.push('selected archetypes must follow configured order');
       return;
     }
     seenArchetypes[candidate.archetype] = true;
@@ -355,33 +392,26 @@ function candidateSetErrorsV2_(set, snapshot, weather) {
       errors.push('candidate contains missing, wrong-slot, or incomplete-profile inventory');
       return;
     }
-    var top = inventory.top;
-    var bottom = inventory.bottom;
-    var shoe = inventory.shoe;
-    var layer = inventory.layer;
-    tops.push(top.id);
-    bottoms.push(bottom.id);
-    shoes.push(shoe.id);
-    if (layer) layers.push(layer.id);
+    tops.push(inventory.top.id);
+    bottoms.push(inventory.bottom.id);
+    shoes.push(inventory.shoe.id);
+    if (inventory.layer) layers.push(inventory.layer.id);
     stories.push(JSON.stringify([
-      top.profile.primaryColorFamily,
-      bottom.profile.primaryColorFamily,
-      top.profile.silhouette,
-      bottom.profile.silhouette
+      inventory.top.profile.primaryColorFamily,
+      inventory.bottom.profile.primaryColorFamily,
+      inventory.top.profile.silhouette,
+      inventory.bottom.profile.silhouette
     ]));
   });
 
-  if (Object.keys(seenArchetypes).length !== DAILY_V2.ARCHETYPES.length) {
-    errors.push('one candidate per archetype is required');
+  if (Object.keys(seenArchetypes).length !== expectedArchetypes.length) {
+    errors.push(cardinalityError);
   }
-  if (new Set(tops).size !== DAILY_V2.ARCHETYPES.length) errors.push('tops must be unique');
-  if (new Set(bottoms).size !== DAILY_V2.ARCHETYPES.length) errors.push('bottoms must be unique');
-  if (usableWeatherSafeShoeCountV2_(snapshot, weather) >= DAILY_V2.ARCHETYPES.length &&
-      new Set(shoes).size !== DAILY_V2.ARCHETYPES.length) errors.push('shoes must be unique');
-  if (new Set(stories).size !== DAILY_V2.ARCHETYPES.length) {
-    errors.push('diversity stories must be distinct');
-  }
-
+  if (new Set(tops).size !== set.length) errors.push('tops must be unique');
+  if (new Set(bottoms).size !== set.length) errors.push('bottoms must be unique');
+  if (usableWeatherSafeShoeCountV2_(snapshot, weather) >= set.length &&
+      new Set(shoes).size !== set.length) errors.push('shoes must be unique');
+  if (new Set(stories).size !== set.length) errors.push('diversity stories must be distinct');
   for (var left = 0; left < set.length; left += 1) {
     for (var right = left + 1; right < set.length; right += 1) {
       if (!validSelectionCandidateV2_(set[left]) || !validSelectionCandidateV2_(set[right])) continue;
@@ -433,6 +463,37 @@ function enumerateCandidateSetsV2_(pools, size) {
   return sets;
 }
 
+function archetypeSubsetsV2_(count) {
+  var subsets = [];
+  function visit(start, selected) {
+    if (selected.length === count) {
+      subsets.push(selected.slice());
+      return;
+    }
+    for (var index = start; index < DAILY_V2.ARCHETYPES.length; index += 1) {
+      selected.push(DAILY_V2.ARCHETYPES[index]);
+      visit(index + 1, selected);
+      selected.pop();
+    }
+  }
+  visit(0, []);
+  return subsets;
+}
+
+function enumerateArchetypeSetsV2_(pools, archetypes, limit) {
+  var sets = [[]];
+  archetypes.forEach(function(archetype) {
+    var values = Array.isArray(pools[archetype]) ? pools[archetype] : [];
+    if (Number.isInteger(limit)) values = values.slice(0, limit);
+    var next = [];
+    sets.forEach(function(set) {
+      values.forEach(function(candidate) { next.push(set.concat([candidate])); });
+    });
+    sets = next;
+  });
+  return sets;
+}
+
 function rankCandidateSetsV2_(sets, scores) {
   var scoreMap = selectionScoreMapV2_(scores);
   return (Array.isArray(sets) ? sets : []).slice().sort(function(left, right) {
@@ -471,12 +532,13 @@ function selectFinalSetV2_(finalistPools, scores, snapshot, weather) {
     });
     if (feasible.length) {
       var ranked = rankCandidateSetsV2_(feasible, scores);
-      return {
-        selectedCandidates: ranked[0],
+      var selectedCandidates = ranked[0];
+      return Object.assign({
+        selectedCandidates: selectedCandidates,
         path: size === 2 ? 'top2' : 'top3',
         feasibleSetCount: feasible.length,
         needsReplan: null
-      };
+      }, deliveryCoverageForCandidatesV2_(selectedCandidates));
     }
   }
   return {
@@ -485,6 +547,29 @@ function selectFinalSetV2_(finalistPools, scores, snapshot, weather) {
     feasibleSetCount: 0,
     needsReplan: chooseReplanArchetypeV2_(pools, scores, [])
   };
+}
+
+function selectExhaustedFinalSetV2_(eligiblePools, scores, snapshot, weather) {
+  var scoreIndex = selectionScoreIndexV2_(scores);
+  var pools = normalizeFinalistPoolsV2_(eligiblePools || {}, scoreIndex, snapshot);
+  for (var cardinality = DAILY_V2.ARCHETYPES.length; cardinality >= 1; cardinality -= 1) {
+    var feasible = [];
+    archetypeSubsetsV2_(cardinality).forEach(function(archetypes) {
+      enumerateArchetypeSetsV2_(pools, archetypes).forEach(function(set) {
+        if (!candidateSetErrorsV2_(set, snapshot, weather, archetypes).length) feasible.push(set);
+      });
+    });
+    if (feasible.length) {
+      var ranked = rankCandidateSetsV2_(feasible, scores);
+      return {
+        selectedCandidates: ranked[0],
+        deliveryMode: deliveryCoverageForCandidatesV2_(ranked[0]).deliveryMode,
+        feasibleSetCount: feasible.length,
+        needsReplan: null
+      };
+    }
+  }
+  return null;
 }
 
 function selectionOrchestrationErrorsV2_(candidates, scores, context) {
@@ -603,17 +688,18 @@ function runSelectionV2_(snapshot, weather, history, plannerResponses, critic) {
       ? { needsReplan: finalists.needsReplan, feasibleSetCount: 0 }
       : selectFinalSetV2_(finalists.finalistPools, scores, snapshot, weather);
     if (!setResult.needsReplan && setResult.selectedCandidates) {
+      var deliveryCoverage = deliveryCoverageForCandidatesV2_(setResult.selectedCandidates);
       return {
         candidates: candidates,
         critic: { scores: scores },
         selectedCandidates: setResult.selectedCandidates,
-        selection: {
+        selection: Object.assign({
           eligibleCountByArchetype: finalists.eligibleCountByArchetype,
           compositeById: finalists.compositeById,
           path: round ? 'replan-' + round : setResult.path,
           feasibleSetCount: setResult.feasibleSetCount,
           replannedArchetypes: replannedArchetypes.slice()
-        }
+        }, deliveryCoverage)
       };
     }
     if (round === 2) throw new Error('Daily selection exhausted two targeted re-plan rounds');
