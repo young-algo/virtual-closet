@@ -8,12 +8,13 @@ const items = [
   { id: 'top-2', slot: 'top', profile: { available: true, excludedFromDaily: false, warmth: 2, breathability: 3 } },
   { id: 'bottom-2', slot: 'bottom', category: 'Pants', profile: { available: true, excludedFromDaily: false } },
   { id: 'shoe-2', slot: 'shoes', profile: { available: true, excludedFromDaily: false, rainSafety: 'good' } },
+  { id: 'acceptable', slot: 'shoes', profile: { available: true, excludedFromDaily: false, rainSafety: 'acceptable' } },
   { id: 'unsafe', slot: 'shoes', profile: { available: true, excludedFromDaily: false, rainSafety: 'poor' } },
   { id: 'layer', slot: 'layer', profile: { available: true, excludedFromDaily: false, warmth: 2, breathability: 3 } },
   { id: 'layer-2', slot: 'layer', profile: { available: true, excludedFromDaily: false, warmth: 2, breathability: 3 } },
 ];
 
-const saved = (id: string, createdAt: number, itemIds = ['top', 'bottom', 'shoe'], source?: 'ai') => ({
+const saved = (id: string, createdAt: number, itemIds = ['top', 'bottom', 'shoe'], source?: string) => ({
   id,
   name: id,
   itemIds,
@@ -45,6 +46,16 @@ const selectEncoreV2_ = evaluateAppsScript<(
   'selectEncoreV2_',
 );
 
+const weatherSafetyErrorsV2_ = evaluateAppsScript<(
+  recommendation: { itemIds: string[] },
+  itemMap: Record<string, object>,
+  weather: object,
+  snapshot: object,
+) => string[]>(
+  ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs'],
+  'weatherSafetyErrorsV2_',
+);
+
 const clone = <T>(value: T): T => structuredClone(value);
 
 const select = (
@@ -66,8 +77,8 @@ describe('Encore selection', () => {
     ['AI source', { ...snapshot, tasteExamples: [saved('ai', 1, ['top', 'bottom', 'shoe'], 'ai')] }, weather, [], null],
     ['missing item', { ...snapshot, tasteExamples: [saved('missing', 1, ['top', 'bottom', 'absent'])] }, weather, [], null],
     ['weather unsafe', { ...snapshot, tasteExamples: [saved('wet', 1, ['top', 'bottom', 'unsafe'])] }, { ...weather, rainExpected: true }, [], null],
-    ['recent core trio', { ...snapshot, tasteExamples: [saved('older', 1)] }, weather, [{ localDate: '2026-07-10', recommendations: [{ candidateId: 'past', itemIds: ['top', 'bottom', 'shoe'] }] }], null],
-    ['disliked encore', snapshot, weather, [{ localDate: '2026-06-01', feedback: [{ candidateId: 'encore:older', value: 'disliked' }, { candidateId: 'encore:newer', value: 'disliked' }] }], null],
+    ['recent core trio', { ...snapshot, tasteExamples: [saved('older', 1)] }, weather, [{ localDate: '2026-07-10', recommendations: [{ candidateId: 'past', itemIds: ['top', 'bottom', 'shoe'] }], feedback: [] }], null],
+    ['disliked encore', snapshot, weather, [{ localDate: '2026-06-01', recommendations: [], feedback: [{ candidateId: 'encore:older', value: 'disliked' }, { candidateId: 'encore:newer', value: 'disliked' }] }], null],
     ['seven-day cadence', snapshot, weather, [], '2026-07-08'],
   ])('returns null when %s fails', (_name, candidateSnapshot, candidateWeather, history, lastEncoreDate) => {
     expect(selectEncoreV2_(candidateSnapshot, candidateWeather, history, lastEncoreDate)).toBeNull();
@@ -79,8 +90,8 @@ describe('Encore selection', () => {
 
   it('chooses the longest-ago surface when every option was surfaced more than 30 days ago', () => {
     const history = [
-      { localDate: '2026-05-20', encore: { outfitId: 'older', candidateId: 'encore:older', itemIds: ['top', 'bottom', 'shoe'] } },
-      { localDate: '2026-05-30', encore: { outfitId: 'newer', candidateId: 'encore:newer', itemIds: ['top-2', 'bottom-2', 'shoe-2'] } },
+      { localDate: '2026-05-20', recommendations: [], encore: { outfitId: 'older', candidateId: 'encore:older', itemIds: ['top', 'bottom', 'shoe'] }, feedback: [] },
+      { localDate: '2026-05-30', recommendations: [], encore: { outfitId: 'newer', candidateId: 'encore:newer', itemIds: ['top-2', 'bottom-2', 'shoe-2'] }, feedback: [] },
     ];
     expect(selectEncoreV2_(snapshot, weather, history, null)).toEqual(expect.objectContaining({ outfitId: 'older' }));
   });
@@ -96,6 +107,28 @@ describe('Encore selection', () => {
       candidateId: 'encore:manual',
     });
     expect(result?.itemIds).not.toBe(candidateSnapshot.tasteExamples[0].itemIds);
+  });
+
+  it('accepts a literal manual source while rejecting non-contract source values', () => {
+    expect(select({ ...snapshot, tasteExamples: [saved('manual', 1, undefined, 'manual')] }))
+      .toEqual(expect.objectContaining({ outfitId: 'manual' }));
+    expect(select({ ...snapshot, tasteExamples: [saved('unknown', 1, undefined, 'imported')] })).toBeNull();
+  });
+
+  it.each([
+    ['dry weather', false],
+    ['rainy weather', true],
+  ])('permits acceptable rain-safety shoes through weather validation and Encore in %s', (_name, rainExpected) => {
+    const candidateSnapshot = {
+      ...snapshot,
+      tasteExamples: [saved('acceptable-shoe', 1, ['top', 'bottom', 'acceptable'])],
+    };
+    const candidateWeather = { ...weather, rainExpected };
+    const itemMap = Object.fromEntries(candidateSnapshot.items.map(item => [item.id, item]));
+
+    expect(weatherSafetyErrorsV2_({ itemIds: ['top', 'bottom', 'acceptable'] }, itemMap, candidateWeather, candidateSnapshot))
+      .toEqual([]);
+    expect(select(candidateSnapshot, candidateWeather)).toEqual(expect.objectContaining({ outfitId: 'acceptable-shoe' }));
   });
 
   it.each([
@@ -142,6 +175,7 @@ describe('Encore selection', () => {
     const history = [{
       localDate,
       recommendations: [{ candidateId: 'prior', itemIds: ['shoe', 'top', 'bottom', 'layer-2'] }],
+      feedback: [],
     }];
     const result = select(
       { ...snapshot, tasteExamples: [saved('manual', 1, ['top', 'bottom', 'shoe', 'layer'])] },
@@ -156,11 +190,13 @@ describe('Encore selection', () => {
     const generatedHistory = [{
       localDate: '2026-07-01',
       recommendations: [{ candidateId: 'prior', itemIds: ['shoe', 'layer-2', 'bottom', 'top'] }],
+      feedback: [],
     }];
     const encoreHistory = [{
       localDate: '2026-07-01',
       recommendations: [],
       encore: { outfitId: 'other-save', candidateId: 'encore:other-save', itemIds: ['bottom', 'top', 'shoe'] },
+      feedback: [],
     }];
     const candidateSnapshot = { ...snapshot, tasteExamples: [saved('manual', 1, ['top', 'bottom', 'shoe', 'layer'])] };
 
@@ -171,6 +207,7 @@ describe('Encore selection', () => {
   it('applies a disliked Encore permanently but ignores unresolved and non-dislike feedback', () => {
     const oldHistory = [{
       localDate: '2020-01-01',
+      recommendations: [],
       feedback: [
         { candidateId: 'encore:older', value: 'disliked' },
         { candidateId: 'encore:newer', value: 'liked' },
@@ -180,18 +217,42 @@ describe('Encore selection', () => {
     expect(select(snapshot, weather, oldHistory)).toEqual(expect.objectContaining({ outfitId: 'newer' }));
   });
 
-  it('ignores future and invalid history dates without throwing or poisoning valid candidates', () => {
-    const malformedHistory = [
-      null,
-      {},
-      { localDate: 'not-a-date', feedback: [{ candidateId: 'encore:older', value: 'disliked' }] },
-      { localDate: '2026-07-15', feedback: [{ candidateId: 'encore:older', value: 'disliked' }] },
-      { localDate: '2026-13-40', recommendations: [{ itemIds: ['top', 'bottom', 'shoe'] }] },
-      { localDate: '2026-07-01', recommendations: [null, {}, { itemIds: 'not-an-array' }], feedback: {} },
-    ] as unknown as object[];
+  it('ignores a malformed payload only when an unambiguous valid date classifies the entry as future', () => {
+    const future = [{
+      localDate: '2026-07-15',
+      recommendations: [null, { itemIds: 'not-an-array' }],
+      encore: { malformed: true },
+      feedback: { malformed: true },
+    }] as unknown as object[];
 
-    expect(() => select(snapshot, weather, malformedHistory)).not.toThrow();
-    expect(select(snapshot, weather, malformedHistory)).toEqual(expect.objectContaining({ outfitId: 'older' }));
+    expect(select(snapshot, weather, future)).toEqual(expect.objectContaining({ outfitId: 'older' }));
+  });
+
+  it.each([
+    ['a non-record entry', null],
+    ['an empty record', {}],
+    ['a malformed date', { localDate: 'not-a-date' }],
+    ['an impossible date', { localDate: '2026-13-40' }],
+  ])('fails closed without throwing for retained history with %s', (_name, entry) => {
+    const retained = [entry] as unknown as object[];
+    expect(() => select(snapshot, weather, retained)).not.toThrow();
+    expect(select(snapshot, weather, retained)).toBeNull();
+  });
+
+  it.each([
+    ['missing recommendations', { localDate: '2026-07-01', feedback: [] }],
+    ['non-array recommendations', { localDate: '2026-07-01', recommendations: {}, feedback: [] }],
+    ['malformed recommendation record', { localDate: '2026-07-01', recommendations: [null], feedback: [] }],
+    ['recommendation without candidate identity', { localDate: '2026-07-01', recommendations: [{ itemIds: ['top', 'bottom', 'shoe'] }], feedback: [] }],
+    ['recommendation without item ids', { localDate: '2026-07-01', recommendations: [{ candidateId: 'past' }], feedback: [] }],
+    ['missing feedback', { localDate: '2026-07-01', recommendations: [] }],
+    ['non-array feedback', { localDate: '2026-07-01', recommendations: [], feedback: {} }],
+    ['malformed feedback record', { localDate: '2026-07-01', recommendations: [], feedback: [null] }],
+    ['feedback without candidate identity', { localDate: '2026-07-01', recommendations: [], feedback: [{ value: 'disliked' }] }],
+    ['feedback with unknown value', { localDate: '2026-07-01', recommendations: [], feedback: [{ candidateId: 'encore:older', value: 'unknown' }] }],
+    ['malformed Encore payload', { localDate: '2026-07-01', recommendations: [], encore: { outfitId: 'older' }, feedback: [] }],
+  ])('fails closed for a retained entry with %s', (_name, entry) => {
+    expect(select(snapshot, weather, [entry] as object[])).toBeNull();
   });
 
   it.each([
@@ -291,20 +352,22 @@ describe('Encore selection', () => {
     };
     expect(select(candidates, weather, [{
       localDate: '2026-05-01',
+      recommendations: [],
       encore: { outfitId: 'a-never', candidateId: 'encore:a-never', itemIds: ['top-2', 'bottom-2', 'shoe-2'] },
+      feedback: [],
     }])).toEqual(expect.objectContaining({ outfitId: 'z-never' }));
 
     const allSurfaced = [
-      { localDate: '2026-05-01', encore: { outfitId: 'z-never', candidateId: 'encore:z-never', itemIds: ['top', 'bottom', 'shoe'] } },
-      { localDate: '2026-05-02', encore: { outfitId: 'a-never', candidateId: 'encore:a-never', itemIds: ['top-2', 'bottom-2', 'shoe-2'] } },
-      { localDate: '2026-05-03', encore: { outfitId: 'z-never', candidateId: 'encore:z-never', itemIds: ['top', 'bottom', 'shoe'] } },
+      { localDate: '2026-05-01', recommendations: [], encore: { outfitId: 'z-never', candidateId: 'encore:z-never', itemIds: ['top', 'bottom', 'shoe'] }, feedback: [] },
+      { localDate: '2026-05-02', recommendations: [], encore: { outfitId: 'a-never', candidateId: 'encore:a-never', itemIds: ['top-2', 'bottom-2', 'shoe-2'] }, feedback: [] },
+      { localDate: '2026-05-03', recommendations: [], encore: { outfitId: 'z-never', candidateId: 'encore:z-never', itemIds: ['top', 'bottom', 'shoe'] }, feedback: [] },
     ];
     expect(select(candidates, weather, allSurfaced)).toEqual(expect.objectContaining({ outfitId: 'a-never' }));
 
     const tied = { ...candidates, tasteExamples: [saved('z-id', 5), saved('a-id', 5, ['top-2', 'bottom-2', 'shoe-2'])] };
     const tiedHistory = [
-      { localDate: '2026-05-01', encore: { outfitId: 'z-id', candidateId: 'encore:z-id', itemIds: ['top', 'bottom', 'shoe'] } },
-      { localDate: '2026-05-01', encore: { outfitId: 'a-id', candidateId: 'encore:a-id', itemIds: ['top-2', 'bottom-2', 'shoe-2'] } },
+      { localDate: '2026-05-01', recommendations: [], encore: { outfitId: 'z-id', candidateId: 'encore:z-id', itemIds: ['top', 'bottom', 'shoe'] }, feedback: [] },
+      { localDate: '2026-05-01', recommendations: [], encore: { outfitId: 'a-id', candidateId: 'encore:a-id', itemIds: ['top-2', 'bottom-2', 'shoe-2'] }, feedback: [] },
     ];
     expect(select(tied, weather, tiedHistory)).toEqual(expect.objectContaining({ outfitId: 'a-id' }));
   });
@@ -314,7 +377,9 @@ describe('Encore selection', () => {
     const weatherValue = clone(weather);
     const historyValue = [{
       localDate: '2026-05-01',
+      recommendations: [],
       encore: { outfitId: 'newer', candidateId: 'encore:newer', itemIds: ['top-2', 'bottom-2', 'shoe-2'] },
+      feedback: [],
     }];
     const before = JSON.stringify({ snapshotValue, weatherValue, historyValue });
 
@@ -330,7 +395,7 @@ describe('Encore bundle assembly and persistence', () => {
   const bundleSnapshot = { ...snapshot, generatedAt: 100, wardrobeFingerprint: 'wardrobe-v3' };
 
   it('loads retained history once for compact Scheduler context but not for an explicit retained array', () => {
-    const retained = [{ localDate: '2020-01-01', feedback: [{ candidateId: 'encore:older', value: 'disliked' }] }];
+    const retained = [{ localDate: '2020-01-01', recommendations: [], feedback: [{ candidateId: 'encore:older', value: 'disliked' }] }];
     let loads = 0;
     const properties = { getProperty: (key: string) => key === 'LAST_ENCORE_DATE_V2' ? null : null };
     const buildBundle = evaluateAppsScript<(curatedValue: object, snapshotValue: object, weatherValue: object, historyValue: unknown) => Record<string, unknown>>(

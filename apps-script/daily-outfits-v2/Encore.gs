@@ -75,7 +75,7 @@ function validEncoreProfileV2_(item) {
   }
   if (item.slot === 'bottom' && (!ownEncoreKeyV2_(item, 'category') || typeof item.category !== 'string')) return false;
   if (item.slot === 'shoes' && (!ownEncoreKeyV2_(item.profile, 'rainSafety') ||
-      ['good', 'poor', 'unknown'].indexOf(item.profile.rainSafety) < 0)) return false;
+      ['good', 'acceptable', 'poor', 'unknown'].indexOf(item.profile.rainSafety) < 0)) return false;
   return true;
 }
 
@@ -97,7 +97,8 @@ function validEncoreSavedOutfitV2_(outfit, snapshot, itemMap, outfitIdCounts, we
       !Number.isFinite(outfit.createdAt) || outfit.createdAt < 0 ||
       !ownEncoreKeyV2_(outfitIdCounts, outfit.id) || outfitIdCounts[outfit.id] !== 1 ||
       !ownEncoreKeyV2_(outfit, 'itemIds') || !validEncoreArrayV2_(outfit.itemIds) ||
-      (ownEncoreKeyV2_(outfit, 'source') && outfit.source !== undefined && outfit.source !== 'ai')) return false;
+      (ownEncoreKeyV2_(outfit, 'source') && outfit.source !== undefined &&
+        outfit.source !== 'manual' && outfit.source !== 'ai')) return false;
   if (outfit.source === 'ai' || outfit.itemIds.length < 3 || outfit.itemIds.length > 4) return false;
 
   var seen = Object.create(null);
@@ -134,25 +135,54 @@ function encoreCoreKeyV2_(itemIds, snapshot) {
 }
 
 function encoreHistoryLooksV2_(entry) {
-  if (!validEncoreRecordV2_(entry)) return [];
   var normalized = {
-    recommendations: ownEncoreKeyV2_(entry, 'recommendations') && validEncoreArrayV2_(entry.recommendations)
-      ? entry.recommendations
-      : []
+    recommendations: entry.recommendations
   };
-  if (ownEncoreKeyV2_(entry, 'encore') && validEncoreRecordV2_(entry.encore)) normalized.encore = entry.encore;
+  if (ownEncoreKeyV2_(entry, 'encore') && entry.encore !== null) normalized.encore = entry.encore;
   return historyLooksV2_(normalized);
+}
+
+function validEncoreHistoryLookV2_(look, isEncore) {
+  if (!validEncoreRecordV2_(look) || !ownEncoreKeyV2_(look, 'candidateId') ||
+      typeof look.candidateId !== 'string' || !look.candidateId ||
+      !ownEncoreKeyV2_(look, 'itemIds') || !validEncoreArrayV2_(look.itemIds) ||
+      look.itemIds.length < 3 || look.itemIds.length > 4 ||
+      !look.itemIds.every(function(id) { return typeof id === 'string' && Boolean(id); })) return false;
+  if (!isEncore) return true;
+  return ownEncoreKeyV2_(look, 'outfitId') && typeof look.outfitId === 'string' && Boolean(look.outfitId) &&
+    look.candidateId === 'encore:' + look.outfitId;
+}
+
+function validEncoreFeedbackSignalV2_(signal) {
+  return validEncoreRecordV2_(signal) && ownEncoreKeyV2_(signal, 'candidateId') &&
+    typeof signal.candidateId === 'string' && Boolean(signal.candidateId) &&
+    ownEncoreKeyV2_(signal, 'value') && ['liked', 'disliked', 'wore'].indexOf(signal.value) >= 0;
+}
+
+function validRetainedEncoreHistoryEntryV2_(entry) {
+  if (!ownEncoreKeyV2_(entry, 'recommendations') || !validEncoreArrayV2_(entry.recommendations) ||
+      !entry.recommendations.every(function(look) { return validEncoreHistoryLookV2_(look, false); }) ||
+      !ownEncoreKeyV2_(entry, 'feedback') || !validEncoreArrayV2_(entry.feedback) ||
+      !entry.feedback.every(validEncoreFeedbackSignalV2_)) return false;
+  return !ownEncoreKeyV2_(entry, 'encore') || entry.encore === null ||
+    validEncoreHistoryLookV2_(entry.encore, true);
 }
 
 function encoreHistoricalEntriesV2_(history, localDate) {
   if (!validEncoreArrayV2_(history)) return null;
   var currentOrdinal = encoreCalendarOrdinalV2_(localDate);
   if (currentOrdinal === null) return null;
-  return history.filter(function(entry) {
-    if (!validEncoreRecordV2_(entry) || !ownEncoreKeyV2_(entry, 'localDate')) return false;
+  var retained = [];
+  for (var index = 0; index < history.length; index += 1) {
+    var entry = history[index];
+    if (!validEncoreRecordV2_(entry) || !ownEncoreKeyV2_(entry, 'localDate')) return null;
     var ordinal = encoreCalendarOrdinalV2_(entry.localDate);
-    return ordinal !== null && ordinal <= currentOrdinal;
-  });
+    if (ordinal === null) return null;
+    if (ordinal > currentOrdinal) continue;
+    if (!validRetainedEncoreHistoryEntryV2_(entry)) return null;
+    retained.push(entry);
+  }
+  return retained;
 }
 
 function encoreLastSurfacedDateV2_(outfitId, history) {
