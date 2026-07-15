@@ -21,18 +21,9 @@ var CRITIC_SCORE_SCHEMA_V2 = {
 var CRITIC_SCHEMA_V2 = {
   type: 'OBJECT',
   properties: {
-    scores: { type: 'ARRAY', items: CRITIC_SCORE_SCHEMA_V2 },
-    finalists: {
-      type: 'OBJECT',
-      properties: {
-        easy: { type: 'ARRAY', items: { type: 'STRING' } },
-        polishedCasual: { type: 'ARRAY', items: { type: 'STRING' } },
-        expressive: { type: 'ARRAY', items: { type: 'STRING' } }
-      },
-      required: ['easy', 'polishedCasual', 'expressive']
-    }
+    scores: { type: 'ARRAY', items: CRITIC_SCORE_SCHEMA_V2 }
   },
-  required: ['scores', 'finalists']
+  required: ['scores']
 };
 
 function criticScoreAnchorsV2_() {
@@ -72,88 +63,70 @@ function modelFacingCriticResponseV2_(response, snapshot) {
     });
     return view;
   });
-  var finalists = response.finalists && typeof response.finalists === 'object' && !Array.isArray(response.finalists) ? response.finalists : {};
-  var finalistView = function(values) {
-    return (Array.isArray(values) ? values : []).reduce(function(ids, value) {
-      var sanitized = repairPromptStringV2_(value, snapshot);
-      if (sanitized !== null) ids.push(sanitized);
-      return ids;
-    }, []);
-  };
-  return {
-    scores: scores,
-    finalists: {
-      easy: finalistView(finalists.easy),
-      polishedCasual: finalistView(finalists.polishedCasual),
-      expressive: finalistView(finalists.expressive)
-    }
-  };
-}
-
-function criticFinalistIdsV2_(response) {
-  response = response && typeof response === 'object' && !Array.isArray(response) ? response : {};
-  var finalists = response.finalists && typeof response.finalists === 'object' && !Array.isArray(response.finalists) ? response.finalists : {};
-  return ['easy', 'polishedCasual', 'expressive'].reduce(function(ids, group) {
-    return ids.concat((Array.isArray(finalists[group]) ? finalists[group] : []).filter(function(value) {
-      return typeof value === 'string';
-    }));
-  }, []);
-}
-
-function criticScoreMeetsFinalFloorV2_(score) {
-  return Boolean(score) && !score.disqualified && score.weather >= 8 &&
-    score.palette >= 7.5 && score.colorIntent >= 8 &&
-    (score.palette + score.silhouette + score.formality) / 3 >= 7.5;
+  return { scores: scores };
 }
 
 function validateCriticResponseV2_(response, candidates) {
   var errors = [];
-  if (!response || !Array.isArray(response.scores) || response.scores.length !== candidates.length) return ['critic must score every candidate exactly once'];
-  var byCandidate = {};
-  candidates.forEach(function(candidate) { byCandidate[candidate.candidateId] = candidate; });
-  var scoreById = {};
-  response.scores.forEach(function(score) {
-    if (!byCandidate[score.candidateId]) errors.push('critic scored unknown candidate ' + score.candidateId);
-    if (scoreById[score.candidateId]) errors.push('critic scored candidate twice: ' + score.candidateId);
-    scoreById[score.candidateId] = score;
-    ['weather', 'palette', 'colorIntent', 'silhouette', 'formality', 'visualInterest', 'wearability', 'freshness', 'archetypeFit'].forEach(function(metric) {
-      if (typeof score[metric] !== 'number' || score[metric] < 0 || score[metric] > 10) errors.push('critic score ' + score.candidateId + '.' + metric + ' must be between 0 and 10');
-    });
-    if (!Array.isArray(score.criticalDefects) || !Array.isArray(score.reservations)) errors.push('critic comments must be arrays for ' + score.candidateId);
-  });
-  candidates.forEach(function(candidate) { if (!scoreById[candidate.candidateId]) errors.push('critic omitted ' + candidate.candidateId); });
-  var groups = response.finalists || {};
-  [['easy', 'easy'], ['polishedCasual', 'polished-casual'], ['expressive', 'expressive']].forEach(function(pair) {
-    var finalists = groups[pair[0]];
-    if (!Array.isArray(finalists) || finalists.length !== 2 || new Set(finalists).size !== 2) {
-      errors.push(pair[0] + ' must have two unique finalists');
+  candidates = Array.isArray(candidates) ? candidates : [];
+  var byCandidate = Object.create(null);
+  candidates.forEach(function(candidate, index) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) ||
+        typeof candidate.candidateId !== 'string' || !candidate.candidateId) {
+      errors.push('critic candidate[' + index + '] must have a non-empty candidateId');
       return;
     }
-    finalists.forEach(function(id) {
-      if (!byCandidate[id] || byCandidate[id].archetype !== pair[1]) errors.push(id + ' is not a candidate for ' + pair[1]);
-      if (scoreById[id] && scoreById[id].disqualified) errors.push('disqualified candidate selected as finalist: ' + id);
-      if (scoreById[id] && !criticScoreMeetsFinalFloorV2_(scoreById[id])) errors.push('finalist ' + id + ' does not meet the final weather and visual-coherence score floors');
-    });
+    if (Object.prototype.hasOwnProperty.call(byCandidate, candidate.candidateId)) {
+      errors.push('critic candidates contain duplicate candidateId ' + candidate.candidateId);
+      return;
+    }
+    byCandidate[candidate.candidateId] = candidate;
   });
-  return errors;
+  if (!response || typeof response !== 'object' || Array.isArray(response) || !Array.isArray(response.scores)) {
+    return errors.concat(['critic must score every candidate exactly once']);
+  }
+  if (response.scores.length !== candidates.length) errors.push('critic must score every candidate exactly once');
+  var scoreById = Object.create(null);
+  response.scores.forEach(function(score) {
+    if (!score || typeof score !== 'object' || Array.isArray(score) ||
+        typeof score.candidateId !== 'string' || !score.candidateId) {
+      errors.push('critic scores must be object records with a non-empty candidateId');
+      return;
+    }
+    if (!Object.prototype.hasOwnProperty.call(byCandidate, score.candidateId)) {
+      errors.push('critic scored unknown candidate ' + score.candidateId);
+    }
+    if (Object.prototype.hasOwnProperty.call(scoreById, score.candidateId)) {
+      errors.push('critic scored candidate twice: ' + score.candidateId);
+    }
+    scoreById[score.candidateId] = score;
+    ['weather', 'palette', 'colorIntent', 'silhouette', 'formality', 'visualInterest', 'wearability', 'freshness', 'archetypeFit'].forEach(function(metric) {
+      if (typeof score[metric] !== 'number' || !Number.isFinite(score[metric]) || score[metric] < 0 || score[metric] > 10) {
+        errors.push('critic score ' + score.candidateId + '.' + metric + ' must be between 0 and 10');
+      }
+    });
+    if (typeof score.disqualified !== 'boolean') errors.push('critic score ' + score.candidateId + '.disqualified must be boolean');
+    if (!Array.isArray(score.criticalDefects) || !Array.isArray(score.reservations) ||
+        (Array.isArray(score.criticalDefects) && score.criticalDefects.some(function(value) { return typeof value !== 'string'; })) ||
+        (Array.isArray(score.reservations) && score.reservations.some(function(value) { return typeof value !== 'string'; }))) {
+      errors.push('critic comments must be string arrays for ' + score.candidateId);
+    }
+  });
+  Object.keys(byCandidate).forEach(function(candidateId) {
+    if (!Object.prototype.hasOwnProperty.call(scoreById, candidateId)) errors.push('critic omitted ' + candidateId);
+  });
+  return Array.from(new Set(errors));
 }
 
 function validateCriticResponseSafelyV2_(response, candidates) {
-  if (response && typeof response === 'object' && !Array.isArray(response) && Array.isArray(response.scores)) {
-    var scoresAreSafe = response.scores.every(function(score) {
-      return score && typeof score === 'object' && !Array.isArray(score) &&
-        (score.criticalDefects === undefined || score.criticalDefects === null || Array.isArray(score.criticalDefects)) &&
-        (score.reservations === undefined || score.reservations === null || Array.isArray(score.reservations));
-    });
-    if (!scoresAreSafe) return ['critic scores must be object records with array comments'];
-  }
   return validateCriticResponseV2_(response, candidates);
 }
 
 function repairCriticResponseV2_(snapshot, weather, history, candidates, invalidResponse, errors) {
   var prompt = [
-    'Repair this multimodal critic response without changing any candidate contents. Re-evaluate only where necessary and select two valid finalists per archetype.',
-    'Every finalist must be non-disqualified, have weather at least 8, palette at least 7.5, colorIntent at least 8, and an average of palette, silhouette, and formality of at least 7.5. Do not inflate scores to force a result; judge the actual images and weather faithfully.',
+    'Repair this multimodal critic score response without changing any candidate contents. Re-evaluate only where necessary.',
+    'Each item profile lists primaryColorFamily, secondaryColorFamily, and accentColors verified from its photographs. Treat them as ground truth for what colors exist; use the images to judge how the colors relate.',
+    'Your scores feed a deterministic selector that applies quality floors downstream. Score each candidate faithfully against the anchors — an honest low score is more useful than a generous one. You are not responsible for ensuring any candidate qualifies.',
     'ColorIntent measures a specific cross-item visual relationship, not mere absence of clashing. Black/grey/white bottoms and shoes around an unrelated top are not intentional by default. Require a visible accent echo, tonal bridge, analogous relationship, controlled contrast, or precise trim/material link.',
     criticScoreAnchorsV2_(),
     'VALIDATION ERRORS:\n' + repairPromptErrorsV2_(errors, snapshot).join('\n'),
@@ -170,14 +143,16 @@ function repairCriticResponseV2_(snapshot, weather, history, candidates, invalid
   return repaired;
 }
 
-function runCriticV2_(snapshot, weather, history, plannerResponses) {
-  var candidates = plannerResponses.flatMap(function(response) { return response.candidates; });
+function runCriticCandidatesV2_(snapshot, weather, history, candidates) {
   var prompt = [
     'Act as a demanding multimodal wardrobe critic. Judge the actual item images, not metadata alone.',
-    'Score all ' + candidates.length + ' candidates independently on every 0–10 rubric dimension. Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, exact recent repeat, a candidate that retains two core pieces from a saved outfit, or material duplication of a stronger candidate.',
-    'Palette measures harmony; colorIntent measures whether the outfit has a precise, visible cross-item color idea. Score colorIntent 0–4 for generic neutral safety or a top placed over unrelated black/grey/white bottoms and shoes; 5–7 for competent anchoring without a meaningful hook; 8–10 only for a clearly observable accent echo, tonal bridge, analogous relationship, complementary contrast, or trim/material link. For graphic, patterned, jersey, or multicolor tops, look for a bottom or shoe that subtly connects to a secondary/accent color. "The neutrals let the top stand out" is insufficient by itself.',
+    'Each item profile lists primaryColorFamily, secondaryColorFamily, and accentColors verified from its photographs. Treat them as ground truth for what colors exist; use the images to judge how the colors relate.',
+    'Score all ' + candidates.length + ' candidates independently on every 0–10 rubric dimension.',
+    'Your scores feed a deterministic selector that applies quality floors downstream. Score each candidate faithfully against the anchors — an honest low score is more useful than a generous one. You are not responsible for ensuring any candidate qualifies.',
+    'Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, exact recent repeat, a candidate that retains two core pieces from a saved outfit, or material duplication of a stronger candidate.',
+    'Palette measures harmony; colorIntent measures whether the outfit has a precise, visible cross-item color idea. Score colorIntent 0–4 for generic neutral safety or a top placed over unrelated black/grey/white bottoms and shoes; 5–7 for competent anchoring without a meaningful hook; 8–10 only for a clearly observable accent echo, tonal bridge, analogous relationship, complementary contrast, or trim/material link.',
     criticScoreAnchorsV2_(),
-    'Do not disqualify simple item reuse by itself. Prefer a strong familiar piece over weak novelty, but never a near-copy of a saved outfit. Select exactly two non-disqualified finalists per archetype. Every finalist must have weather at least 8, palette at least 7.5, colorIntent at least 8, and an average of palette, silhouette, and formality of at least 7.5. Do not rewrite any candidate contents. Do not expose chain-of-thought.',
+    'Do not rewrite candidate contents or expose chain-of-thought.',
     'ARCHETYPES:\n' + DAILY_V2.ARCHETYPES.map(function(value) { return value + ': ' + archetypeBriefV2_(value); }).join('\n'),
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
@@ -188,6 +163,10 @@ function runCriticV2_(snapshot, weather, history, plannerResponses) {
   var response = callGeminiV2_('critic', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.3);
   var errors = validateCriticResponseSafelyV2_(response, candidates);
   return errors.length ? repairCriticResponseV2_(snapshot, weather, history, candidates, response, errors) : response;
+}
+
+function runCriticV2_(snapshot, weather, history, plannerResponses) {
+  return runCriticCandidatesV2_(snapshot, weather, history, plannerResponses.flatMap(function(response) { return response.candidates; }));
 }
 
 function runCriticV2() {

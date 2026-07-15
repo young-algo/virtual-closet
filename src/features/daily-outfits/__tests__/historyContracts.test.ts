@@ -550,7 +550,7 @@ describe('history prompt contracts', () => {
     expect(planner.match(adjacentGuidance)).toHaveLength(1);
     expect(critic.match(adjacentGuidance)).toHaveLength(2);
     expect(curator.match(adjacentGuidance)).toHaveLength(1);
-    expect(repair.match(adjacentGuidance)).toHaveLength(1);
+    expect(repair.match(adjacentGuidance) || []).toHaveLength(0);
     expect(planner).toContain("Items listed in cooldownItemLabels headlined yesterday\\'s email; avoid them today unless history shows Kevin wore them.");
   });
 
@@ -591,12 +591,7 @@ describe('history prompt contracts', () => {
         disqualified: false,
         criticalDefects: [],
         reservations: []
-      })),
-      finalists: {
-        easy: ['easy-0', 'easy-1'],
-        polishedCasual: ['polished-casual-0', 'polished-casual-1'],
-        expressive: ['expressive-0', 'expressive-1']
-      }
+      }))
     };
     const labelRecommendations = archetypes.map(archetype => ({
       candidateId: `${archetype}-0`,
@@ -648,8 +643,8 @@ describe('history prompt contracts', () => {
     criticApi.repairCriticResponseV2_(snapshot, weather, history, candidates, {}, ['invalid']);
 
     const curatorApi = evaluateAppsScript<{
-      runCuratorV2_: (snapshotValue: HistorySnapshot, weather: object, history: object, planners: object[], critic: object) => object;
-    }>(['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs'], '({ runCuratorV2_ })', {
+      runCuratorV2_: (snapshotValue: HistorySnapshot, weather: object, history: object, selectedCandidates: object[], critic: object) => object;
+    }>(['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Selection.gs', 'Curator.gs'], '({ runCuratorV2_ })', {
       ...common,
       loadHistoryV2_: () => [],
       Utilities: utilities,
@@ -658,10 +653,11 @@ describe('history prompt contracts', () => {
         return { recommendations: labelRecommendations };
       }
     });
-    curatorApi.runCuratorV2_(snapshot, weather, history, [{ candidates }], critic);
+    const selectedCandidates = candidates.filter(candidate => candidate.candidateId.endsWith('-0'));
+    curatorApi.runCuratorV2_(snapshot, weather, history, selectedCandidates, critic);
 
     const repairApi = evaluateAppsScript<{
-      repairFinalBundleV2_: (curated: object, errors: string[], snapshotValue: HistorySnapshot, weather: object, history: object, planners: object[], critic: object) => object;
+      repairFinalBundleV2_: (curated: object, errors: string[], snapshotValue: HistorySnapshot, weather: object, history: object, selectedCandidates: object[], critic: object) => object;
     }>(['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'], '({ repairFinalBundleV2_ })', {
       ...common,
       loadHistoryV2_: () => [],
@@ -672,10 +668,10 @@ describe('history prompt contracts', () => {
       },
       validateFinalBundleV2_: () => []
     });
-    repairApi.repairFinalBundleV2_({ recommendations: [] }, ['invalid'], snapshot, weather, history, [{ candidates }], critic);
+    repairApi.repairFinalBundleV2_({ recommendations: [] }, ['invalid'], snapshot, weather, history, selectedCandidates, critic);
 
     expect(captured).toHaveLength(6);
-    captured.forEach(prompt => {
+    captured.slice(0, 5).forEach(prompt => {
       expect(prompt).toContain(guidance);
       expect(prompt).toContain('Keep ordinary prose intact with T001, INVALID_LABEL, and INVALID_LABEL.');
       expect(prompt).not.toContain(topId);
@@ -687,5 +683,13 @@ describe('history prompt contracts', () => {
       expect(prompt).not.toContain('cooldownItemIds');
       expect(prompt).not.toContain('wornItemIds');
     });
+    expect(captured[5]).not.toContain(guidance);
+    expect(captured[5]).not.toContain('Keep ordinary prose intact');
+    expect(captured[5]).not.toContain(topId);
+    expect(captured[5]).not.toContain(bottomId);
+    expect(captured[5]).not.toContain(shoeId);
+    expect(captured[5]).not.toContain(layerId);
+    expect(captured[5]).not.toContain(staleId);
+    expect(captured[5]).not.toContain(staleItemId);
   });
 });

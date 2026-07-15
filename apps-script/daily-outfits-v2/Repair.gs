@@ -16,36 +16,42 @@ function modelFacingInvalidCuratedV2_(curated, snapshot) {
   };
 }
 
-function validateFinalBundleSafelyV2_(curated, snapshot, weather, history, plannerResponses, critic) {
+function closedCuratedForRepairV2_(curated, snapshot) {
+  var resolved = resolveLabelsV2_(modelFacingInvalidCuratedV2_(curated, snapshot), snapshot);
+  var items = itemMapV2_(snapshot);
+  resolved.recommendations.forEach(function(recommendation) {
+    recommendation.itemIds = recommendation.itemIds.filter(function(id) {
+      return Object.prototype.hasOwnProperty.call(items, id);
+    });
+  });
+  return resolved;
+}
+
+function validateFinalBundleSafelyV2_(curated, snapshot, weather, history, selectedCandidates, critic) {
   if (curated && typeof curated === 'object' && !Array.isArray(curated) && Array.isArray(curated.recommendations)) {
     var recordsAreSafe = curated.recommendations.every(function(recommendation) {
       return recommendation && typeof recommendation === 'object' && !Array.isArray(recommendation) && Array.isArray(recommendation.itemIds);
     });
     if (!recordsAreSafe) return ['final recommendations must be object records with array itemIds'];
   }
-  return validateFinalBundleV2_(curated, snapshot, weather, history, plannerResponses, critic);
+  return validateFinalBundleV2_(curated, snapshot, weather, history, selectedCandidates, critic);
 }
 
-function repairFinalBundleV2_(curated, errors, snapshot, weather, history, plannerResponses, critic) {
-  var finalists = finalistsV2_(plannerResponses, critic);
+function repairFinalBundleV2_(curated, errors, snapshot, weather, history, selectedCandidates, critic) {
+  selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
   var current = curated;
   var currentErrors = errors;
   for (var attempt = 1; attempt <= 2; attempt += 1) {
     var prompt = [
-      'Repair only what is required in this invalid final-curator response. Select only from the six unchanged finalists; copy exact itemIds. Return exactly one recommendation per archetype.',
-      'Apply weather, palette, colorIntent, saved-outfit near-copy, history, and cross-outfit diversity constraints. Every recommendation needs a specific colorHook naming the visible relationship between at least two items. Do not explain the repair or expose chain-of-thought.',
+      'Repair only the customer-facing copy in this invalid final-curator response. The candidate ids, archetypes, item ids, and order are immutable. Do not select, swap, reorder, add, remove, or alter any outfit or item.',
+      'Every recommendation needs a specific colorHook naming the visible relationship between at least two items. Do not explain the repair or expose chain-of-thought.',
       'VALIDATION ERRORS:\n' + repairPromptErrorsV2_(currentErrors, snapshot).join('\n'),
-      'INVALID RESPONSE:\n' + JSON.stringify(modelFacingInvalidCuratedV2_(current, snapshot)),
-      'SIX FINALISTS:\n' + JSON.stringify(modelFacingCandidatesV2_(finalists, snapshot)),
-      'CRITIC:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic, snapshot)),
-      'SAVED OUTFIT SIGNATURES:\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
-      'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
-      'HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
-      historyGuidanceV2_()
+      'INVALID RESPONSE:\n' + JSON.stringify(modelFacingCuratedV2_(closedCuratedForRepairV2_(current, snapshot), snapshot)),
+      'IMMUTABLE SELECTED OUTFITS:\n' + JSON.stringify(modelFacingCandidatesV2_(selectedCandidates, snapshot))
     ].join('\n\n');
-    var raw = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.25);
+    var raw = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, selectedCandidates)), CURATOR_SCHEMA_V2, 0.25);
     current = resolveCuratorResponseForValidationV2_(raw, snapshot);
-    currentErrors = validateFinalBundleSafelyV2_(current, snapshot, weather, history, plannerResponses, critic);
+    currentErrors = validateFinalBundleSafelyV2_(current, snapshot, weather, history, selectedCandidates, critic);
     if (!currentErrors.length) return current;
   }
   throw new Error('Final repair failed quality gates: ' + currentErrors.join('; '));
@@ -55,9 +61,9 @@ function repairFinalBundleV2() {
   var pending = loadPendingV2_();
   if (!pending || !pending.curated) throw new Error('No invalid curated response is ready');
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-  var errors = validateFinalBundleSafelyV2_(pending.curated, snapshot, pending.weather, pending.history, pending.planners, pending.critic);
+  var errors = validateFinalBundleSafelyV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   if (!errors.length) return pending.curated;
-  pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.planners, pending.critic);
+  pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   pending.updatedAt = Date.now();
   savePendingV2_(pending);
   return pending.curated;

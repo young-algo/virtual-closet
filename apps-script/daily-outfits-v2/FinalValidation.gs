@@ -31,13 +31,11 @@ function weatherSafetyErrorsV2_(recommendation, itemMap, weather, snapshot) {
   return errors;
 }
 
-function validateFinalBundleV2_(curated, snapshot, weather, history, plannerResponses, critic) {
+function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCandidates, critic) {
   var errors = [];
   if (!curated || !Array.isArray(curated.recommendations) || curated.recommendations.length !== 3) return ['exactly three final recommendations are required'];
   var itemMap = itemMapV2_(snapshot);
-  var finalists = finalistsV2_(plannerResponses, critic);
-  var finalistMap = {};
-  finalists.forEach(function(candidate) { finalistMap[candidate.candidateId] = candidate; });
+  selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
   var scoreMap = scoreMapV2_(critic);
   var seenCandidate = {};
   var seenArchetype = {};
@@ -50,14 +48,14 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, plannerResp
 
   curated.recommendations.forEach(function(rec, index) {
     var path = 'recommendation[' + index + ']';
-    var candidate = finalistMap[rec.candidateId];
-    if (!candidate) errors.push(path + ' was not selected from the six critic finalists');
+    var candidate = selectedCandidates[index];
+    if (!candidate || rec.candidateId !== candidate.candidateId) errors.push(path + ' changed or reordered the selected candidateId');
+    if (!candidate || rec.archetype !== candidate.archetype) errors.push(path + ' changed the selected archetype');
+    if (!candidate || JSON.stringify(rec.itemIds) !== JSON.stringify(candidate.itemIds)) errors.push(path + ' changed or reordered the selected itemIds');
     if (seenCandidate[rec.candidateId]) errors.push(path + ' duplicates a final candidate');
     seenCandidate[rec.candidateId] = true;
     if (DAILY_V2.ARCHETYPES.indexOf(rec.archetype) < 0 || seenArchetype[rec.archetype]) errors.push(path + ' has a missing or duplicate archetype');
     seenArchetype[rec.archetype] = true;
-    if (!candidate || rec.archetype !== candidate.archetype) errors.push(path + ' archetype does not match its finalist');
-    if (!Array.isArray(rec.itemIds) || !candidate || rec.itemIds.slice().sort().join('|') !== candidate.itemIds.slice().sort().join('|')) errors.push(path + ' changed the finalist itemIds');
     var selected = (rec.itemIds || []).map(function(id) { return itemMap[id]; });
     if (selected.some(function(item) { return !item; })) errors.push(path + ' contains an invented item id');
     ['top', 'bottom', 'shoes'].forEach(function(slot) {
@@ -82,6 +80,10 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, plannerResp
     var savedNearCopy = savedOutfitNearCopyV2_(rec.itemIds || [], snapshot);
     if (savedNearCopy) errors.push(path + ' near-copies saved outfit "' + savedNearCopy.name + '" by retaining ' + savedNearCopy.sharedCoreItemIds.length + ' core pieces');
     if (historyKeys[(rec.itemIds || []).slice().sort().join('|')]) errors.push(path + ' exactly repeats a prior-14-day outfit');
+    var cooldown = new Set(history.cooldownItemIds || []);
+    if (candidate && (cooldown.has(candidate.topId) || cooldown.has(candidate.bottomId))) {
+      errors.push(path + ' violates the yesterday top/bottom cooldown');
+    }
     if (!rec.colorHook || rec.colorHook.length < 30 || rec.colorHook.length > 240) errors.push(path + '.colorHook must name a specific cross-item color relationship');
     if (!rec.whyItWorks || rec.whyItWorks.length < 30 || rec.whyItWorks.length > 320) errors.push(path + '.whyItWorks must be concise and specific');
     if (!rec.weatherNote || rec.weatherNote.length < 12 || rec.weatherNote.length > 220) errors.push(path + '.weatherNote must be concise and specific');
@@ -117,6 +119,6 @@ function validateFinalBundleV2() {
   var pending = loadPendingV2_();
   if (!pending || !pending.curated) throw new Error('No curated response is ready');
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-  var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.planners, pending.critic);
+  var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   return { ok: errors.length === 0, errors: errors };
 }

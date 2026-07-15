@@ -34,7 +34,7 @@ function archetypeBriefV2_(archetype) {
   return 'Use the strongest controlled color, graphic, jersey, pattern, or sneaker colorway. Prefer one dominant statement. Keep it wearable for an ordinary day and unmistakably different from Easy and Polished casual.';
 }
 
-function plannerPartsV2_(archetype, snapshot, weather, history) {
+function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance) {
   var prompt = [
     "You are planning Kevin's real wardrobe for an ordinary day with no inferred special event.",
     'Every available item is visible in the complete slot-specific atlases and JSON item index. Reference items only by their short label (T…, B…, L…, S…) exactly as printed in the index and atlases. Do not invent, shop, or omit an item because it is unfamiliar.',
@@ -53,7 +53,9 @@ function plannerPartsV2_(archetype, snapshot, weather, history) {
     historyGuidanceV2_(),
     'READ-ONLY SAVED TASTE EVIDENCE (weights indicate confidence; do not copy literally):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'COMPLETE ITEM INDEX:\n' + JSON.stringify(compactItemIndexV2_(snapshot))
-  ].join('\n\n');
+  ];
+  if (selectionGuidance) prompt.push(repairPromptStringV2_(selectionGuidance, snapshot));
+  prompt = prompt.join('\n\n');
   return [{ text: prompt }].concat(atlasPartsV2_(snapshot));
 }
 
@@ -140,8 +142,8 @@ function modelFacingInvalidPlannerCandidatesV2_(candidates, snapshot) {
   });
 }
 
-function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history) {
-  var parts = plannerPartsV2_(archetype, snapshot, weather, history);
+function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history, selectionGuidance) {
+  var parts = plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance);
   invalidResponse = invalidResponse && typeof invalidResponse === 'object' && !Array.isArray(invalidResponse) ? invalidResponse : {};
   var modelInvalidResponse = {
     archetype: typeof invalidResponse.archetype === 'string' ? repairPromptStringV2_(invalidResponse.archetype, snapshot) : archetype,
@@ -153,6 +155,43 @@ function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, 
   var repairedErrors = validatePlannerResponseSafelyV2_(repaired, archetype, snapshot);
   if (repairedErrors.length) throw new Error(archetype + ' planner repair failed: ' + repairedErrors.join('; '));
   return repaired;
+}
+
+function modelFacingReplanFailureNotesV2_(failureNotes, snapshot) {
+  return (Array.isArray(failureNotes) ? failureNotes : []).map(function(note) {
+    note = note && typeof note === 'object' && !Array.isArray(note) ? note : {};
+    var view = {};
+    var candidateId = repairPromptStringV2_(note.candidateId, snapshot);
+    if (candidateId !== null) view.candidateId = candidateId;
+    ['criticalDefects', 'reservations'].forEach(function(field) {
+      view[field] = (Array.isArray(note[field]) ? note[field] : []).reduce(function(values, value) {
+        var sanitized = repairPromptStringV2_(value, snapshot);
+        if (sanitized !== null) values.push(sanitized);
+        return values;
+      }, []);
+    });
+    return view;
+  });
+}
+
+function replanArchetypeV2_(archetype, snapshot, weather, history, failureNotes, avoidItemIds, round) {
+  if (DAILY_V2.ARCHETYPES.indexOf(archetype) < 0) throw new Error('Unknown targeted re-plan archetype');
+  if (round !== 1 && round !== 2) throw new Error('Targeted re-plan round must be 1 or 2');
+  var avoidLabels = (Array.isArray(avoidItemIds) ? avoidItemIds : []).map(function(id) {
+    return requiredItemLabelV2_(id, snapshot, 'Targeted re-plan avoid list');
+  });
+  var guidance = [
+    'TARGETED RE-PLAN ROUND ' + round + ': Return five new ' + archetype + ' candidates with candidateIds not used in the prior response.',
+    'Your previous five candidates failed because:\n' + JSON.stringify(modelFacingReplanFailureNotesV2_(failureNotes, snapshot)),
+    'Other looks in today\'s set already use these items; prefer alternatives:\n' + avoidLabels.join(', ')
+  ].join('\n\n');
+  var parts = plannerPartsV2_(archetype, snapshot, weather, history, guidance);
+  var raw = callGeminiV2_('planner', parts, PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
+  var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
+  var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
+  return errors.length
+    ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history, guidance)
+    : response;
 }
 
 function runAllPlannersV2_(snapshot, weather, history) {

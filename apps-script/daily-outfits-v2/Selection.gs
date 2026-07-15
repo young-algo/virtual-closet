@@ -146,6 +146,12 @@ function safeSelectionSnapshotV2_(snapshot) {
   });
 }
 
+function criticScoreMeetsFinalFloorV2_(score) {
+  return Boolean(score) && !score.disqualified && score.weather >= 8 &&
+    score.palette >= 7.5 && score.colorIntent >= 8 &&
+    (score.palette + score.silhouette + score.formality) / 3 >= 7.5;
+}
+
 function compositeScoreV2_(score) {
   if (!validSelectionScoreV2_(score)) return -Infinity;
   return SELECTION_SCORE_METRICS_V2_.reduce(function(total, metric) {
@@ -479,4 +485,183 @@ function selectFinalSetV2_(finalistPools, scores, snapshot, weather) {
     feasibleSetCount: 0,
     needsReplan: chooseReplanArchetypeV2_(pools, scores, [])
   };
+}
+
+function selectionOrchestrationErrorsV2_(candidates, scores, context) {
+  var errors = [];
+  candidates = Array.isArray(candidates) ? candidates : [];
+  scores = Array.isArray(scores) ? scores : [];
+  var candidateIds = Object.create(null);
+  candidates.forEach(function(candidate, index) {
+    if (!validSelectionCandidateV2_(candidate) || DAILY_V2.ARCHETYPES.indexOf(candidate.archetype) < 0) {
+      errors.push(context + ' candidate[' + index + '] is malformed');
+      return;
+    }
+    if (ownSelectionKeyV2_(candidateIds, candidate.candidateId)) {
+      errors.push(context + ' contains duplicate candidateId ' + candidate.candidateId);
+      return;
+    }
+    candidateIds[candidate.candidateId] = true;
+  });
+  var scoreIds = Object.create(null);
+  scores.forEach(function(score, index) {
+    if (!validSelectionScoreV2_(score)) {
+      errors.push(context + ' score[' + index + '] is malformed');
+      return;
+    }
+    if (ownSelectionKeyV2_(scoreIds, score.candidateId)) {
+      errors.push(context + ' scored candidate twice: ' + score.candidateId);
+      return;
+    }
+    scoreIds[score.candidateId] = true;
+    if (!ownSelectionKeyV2_(candidateIds, score.candidateId)) {
+      errors.push(context + ' scored unknown candidate ' + score.candidateId);
+    }
+  });
+  Object.keys(candidateIds).forEach(function(candidateId) {
+    if (!ownSelectionKeyV2_(scoreIds, candidateId)) errors.push(context + ' must score ' + candidateId + ' exactly once');
+  });
+  if (scores.length !== candidates.length) errors.push(context + ' must score every candidate exactly once');
+  return Array.from(new Set(errors));
+}
+
+function plannerCandidatesForSelectionV2_(plannerResponses) {
+  if (!Array.isArray(plannerResponses) || plannerResponses.length !== DAILY_V2.ARCHETYPES.length) {
+    throw new Error('Daily selection requires one planner response per archetype');
+  }
+  var seenArchetypes = Object.create(null);
+  var candidates = [];
+  plannerResponses.forEach(function(response, index) {
+    if (!response || typeof response !== 'object' || Array.isArray(response) ||
+        DAILY_V2.ARCHETYPES.indexOf(response.archetype) < 0 ||
+        ownSelectionKeyV2_(seenArchetypes, response.archetype) ||
+        !Array.isArray(response.candidates) || response.candidates.length !== 5) {
+      throw new Error('Daily selection planner response[' + index + '] is malformed or duplicated');
+    }
+    seenArchetypes[response.archetype] = true;
+    response.candidates.forEach(function(candidate) {
+      if (!candidate || candidate.archetype !== response.archetype) {
+        throw new Error('Daily selection planner response candidate has the wrong archetype');
+      }
+      candidates.push(candidate);
+    });
+  });
+  return candidates;
+}
+
+function validateReplanResponseV2_(response, archetype) {
+  if (!response || typeof response !== 'object' || Array.isArray(response) ||
+      response.archetype !== archetype || !Array.isArray(response.candidates) ||
+      response.candidates.length !== 5) {
+    throw new Error('Targeted re-plan for ' + archetype + ' must return exactly five candidates');
+  }
+  var ids = Object.create(null);
+  response.candidates.forEach(function(candidate, index) {
+    if (!validSelectionCandidateV2_(candidate) || candidate.archetype !== archetype) {
+      throw new Error('Targeted re-plan candidate[' + index + '] is malformed or has the wrong archetype');
+    }
+    if (ownSelectionKeyV2_(ids, candidate.candidateId)) {
+      throw new Error('Targeted re-plan contains duplicate candidateId ' + candidate.candidateId);
+    }
+    ids[candidate.candidateId] = true;
+  });
+}
+
+function mergeReplannedCandidatesV2_(existing, additions) {
+  existing = Array.isArray(existing) ? existing : [];
+  additions = Array.isArray(additions) ? additions : [];
+  var ids = Object.create(null);
+  var combinations = Object.create(null);
+  existing.forEach(function(candidate, index) {
+    if (!validSelectionCandidateV2_(candidate)) throw new Error('Existing selection candidate[' + index + '] is malformed');
+    if (ownSelectionKeyV2_(ids, candidate.candidateId)) throw new Error('Daily selection contains duplicate candidateId ' + candidate.candidateId);
+    ids[candidate.candidateId] = true;
+    combinations[canonicalSelectionIdListV2_(candidate.itemIds)] = true;
+  });
+  var merged = existing.slice();
+  additions.forEach(function(candidate, index) {
+    if (!validSelectionCandidateV2_(candidate)) throw new Error('Targeted re-plan candidate[' + index + '] is malformed');
+    if (ownSelectionKeyV2_(ids, candidate.candidateId)) throw new Error('Targeted re-plan reused candidateId ' + candidate.candidateId);
+    ids[candidate.candidateId] = true;
+    var key = canonicalSelectionIdListV2_(candidate.itemIds);
+    if (ownSelectionKeyV2_(combinations, key)) return;
+    combinations[key] = true;
+    merged.push(candidate);
+  });
+  return merged;
+}
+
+function runSelectionV2_(snapshot, weather, history, plannerResponses, critic) {
+  var candidates = plannerCandidatesForSelectionV2_(plannerResponses);
+  var scores = critic && Array.isArray(critic.scores) ? critic.scores.slice() : [];
+  var initialErrors = selectionOrchestrationErrorsV2_(candidates, scores, 'Daily selection');
+  if (initialErrors.length) throw new Error(initialErrors.join('; '));
+  var replannedArchetypes = [];
+  for (var round = 0; round <= 2; round += 1) {
+    var finalists = selectFinalistsV2_(candidates, scores, snapshot, weather, history);
+    var setResult = finalists.needsReplan
+      ? { needsReplan: finalists.needsReplan, feasibleSetCount: 0 }
+      : selectFinalSetV2_(finalists.finalistPools, scores, snapshot, weather);
+    if (!setResult.needsReplan && setResult.selectedCandidates) {
+      return {
+        candidates: candidates,
+        critic: { scores: scores },
+        selectedCandidates: setResult.selectedCandidates,
+        selection: {
+          eligibleCountByArchetype: finalists.eligibleCountByArchetype,
+          compositeById: finalists.compositeById,
+          path: round ? 'replan-' + round : setResult.path,
+          feasibleSetCount: setResult.feasibleSetCount,
+          replannedArchetypes: replannedArchetypes.slice()
+        }
+      };
+    }
+    if (round === 2) throw new Error('Daily selection exhausted two targeted re-plan rounds');
+    var archetype = setResult.needsReplan;
+    if (replannedArchetypes.indexOf(archetype) >= 0) {
+      archetype = chooseReplanArchetypeV2_(finalists.eligibleByArchetype, scores, replannedArchetypes);
+    }
+    if (!archetype || DAILY_V2.ARCHETYPES.indexOf(archetype) < 0) {
+      throw new Error('No unreplanned archetype remains for targeted re-plan');
+    }
+    var scoreMap = selectionScoreMapV2_(scores);
+    var failed = candidates.filter(function(candidate) {
+      return candidate.archetype === archetype;
+    }).map(function(candidate) {
+      var score = scoreMap[candidate.candidateId] || {};
+      return {
+        candidateId: candidate.candidateId,
+        criticalDefects: Array.isArray(score.criticalDefects) ? score.criticalDefects.slice() : [],
+        reservations: Array.isArray(score.reservations) ? score.reservations.slice() : []
+      };
+    });
+    var claimed = DAILY_V2.ARCHETYPES.filter(function(value) {
+      return value !== archetype;
+    }).flatMap(function(value) {
+      return (finalists.finalistPools[value] || []).slice(0, 2).flatMap(function(candidate) {
+        return candidate.itemIds;
+      });
+    });
+    var replanned = replanArchetypeV2_(
+      archetype,
+      snapshot,
+      weather,
+      history,
+      failed,
+      Array.from(new Set(claimed)),
+      round + 1
+    );
+    validateReplanResponseV2_(replanned, archetype);
+    var priorLength = candidates.length;
+    candidates = mergeReplannedCandidatesV2_(candidates, replanned.candidates);
+    var additions = candidates.slice(priorLength);
+    if (!additions.length) throw new Error('Targeted re-plan returned only duplicate combinations');
+    var targetedCritic = runCriticCandidatesV2_(snapshot, weather, history, additions);
+    var targetedScores = targetedCritic && Array.isArray(targetedCritic.scores) ? targetedCritic.scores : [];
+    var targetedErrors = selectionOrchestrationErrorsV2_(additions, targetedScores, 'Targeted critic scores');
+    if (targetedErrors.length) throw new Error(targetedErrors.join('; '));
+    scores = scores.concat(targetedScores);
+    replannedArchetypes.push(archetype);
+  }
+  throw new Error('Daily selection loop exited unexpectedly');
 }

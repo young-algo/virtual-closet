@@ -20,14 +20,6 @@ var CURATOR_SCHEMA_V2 = {
   required: ['recommendations']
 };
 
-function finalistsV2_(plannerResponses, critic) {
-  var byId = {};
-  plannerResponses.flatMap(function(response) { return response.candidates; }).forEach(function(candidate) { byId[candidate.candidateId] = candidate; });
-  return criticFinalistIdsV2_(critic).map(function(id) { return byId[id]; }).filter(function(candidate) {
-    return candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Array.isArray(candidate.itemIds);
-  });
-}
-
 function curatorResponseCanResolveLabelsV2_(response) {
   if (!response || typeof response !== 'object' || Array.isArray(response) || !Array.isArray(response.recommendations)) return false;
   var recordsAreIterable = function(records) {
@@ -54,28 +46,34 @@ function resolveCuratorResponseForValidationV2_(response, snapshot) {
   return normalized;
 }
 
-function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
-  var finalists = finalistsV2_(plannerResponses, critic);
+function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
+  selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
+  var scoreMap = selectionScoreMapV2_(critic && critic.scores);
+  var selectedScores = selectedCandidates.map(function(candidate) {
+    return candidate && scoreMap[candidate.candidateId];
+  });
+  if (selectedScores.some(function(score) { return !score; })) {
+    throw new Error('Curator selected set is missing a unique critic score');
+  }
   var prompt = [
-    'Curate the final three daily recommendations from only these six multimodal-critic finalists.',
-    'Choose exactly one Easy, one Polished casual, and one Expressive look. Treat the three as a set: unique tops and bottoms, unique shoes when at least three weather-safe shoes exist, no pair sharing more than one item, distinct color or silhouette stories, and no exact prior-14-day repeat.',
-    'Favor finalists with the strongest real colorIntent, not the safest quantity of black, grey, and white. Each selected look must have a visible cross-item hook—accent echo, tonal bridge, analogous color, controlled complement, or precise trim/material link. A graphic top with unrelated achromatic bottoms and shoes is not thoughtful styling merely because it does not clash.',
-    'Weather suitability is non-negotiable. Do not modify a finalist. Copy its exact itemIds and candidateId. In colorHook, name the exact visible colors/details and at least two items that create the relationship. Do not use generic language such as "keeps it clean," "lets the top pop," or "ties everything together." Produce concise customer-facing explanations only; do not reveal chain-of-thought.',
+    'These three outfits are final — selected and validated upstream. Do not swap, reorder, or modify them. Write the customer-facing copy for each.',
+    'Copy each candidateId, archetype, and itemIds exactly in the same order. In colorHook, name the exact visible colors/details and at least two items that create the relationship.',
+    'Do not use generic language such as "keeps it clean," "lets the top pop," or "ties everything together." Produce concise customer-facing explanations only; do not reveal chain-of-thought.',
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     historyGuidanceV2_(),
-    'FINALISTS:\n' + JSON.stringify(modelFacingCandidatesV2_(finalists, snapshot)),
-    'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic, snapshot))
+    'FINAL SELECTED OUTFITS:\n' + JSON.stringify(modelFacingCandidatesV2_(selectedCandidates, snapshot)),
+    'CRITIC SCORES:\n' + JSON.stringify(modelFacingCriticResponseV2_({ scores: selectedScores }, snapshot).scores)
   ].join('\n\n');
-  var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.4);
+  var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, selectedCandidates)), CURATOR_SCHEMA_V2, 0.4);
   return resolveCuratorResponseForValidationV2_(raw, snapshot);
 }
 
 function runCuratorV2() {
   var pending = loadPendingV2_();
-  if (!pending || !pending.planners || !pending.critic) throw new Error('Planner and critic stages must be ready');
+  if (!pending || !pending.selectedCandidates || !pending.critic) throw new Error('Selection and critic stages must be ready');
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-  var curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.planners, pending.critic);
+  var curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   pending.curated = curated;
   pending.updatedAt = Date.now();
   savePendingV2_(pending);

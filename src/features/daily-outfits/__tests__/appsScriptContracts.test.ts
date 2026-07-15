@@ -17,10 +17,30 @@ const weatherSafety = new Function(`
   return weatherSafetyErrorsV2_;
 `)() as (recommendation: { itemIds: string[] }, itemMap: Record<string, unknown>, weather: Record<string, unknown>, snapshot: { items: unknown[] }) => string[];
 
-const criticValidator = new Function(`
+const criticApi = new Function(`
   ${apps('Critic.gs')}
-  return validateCriticResponseV2_;
-`)() as (response: unknown, candidates: unknown[]) => string[];
+  return { schema: CRITIC_SCHEMA_V2, validate: validateCriticResponseV2_ };
+`)() as {
+  schema: { properties: Record<string, unknown>; required: string[] };
+  validate: (response: unknown, candidates: unknown[]) => string[];
+};
+
+const criticValidator = criticApi.validate;
+
+const finalValidator = new Function(`
+  var DAILY_V2 = { ARCHETYPES: ['easy','polished-casual','expressive'], REQUIRED_SLOTS: ['top','bottom','shoes'] };
+  function itemMapV2_(snapshot) { var map = Object.create(null); snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
+  function savedOutfitNearCopyV2_() { return null; }
+  ${apps('FinalValidation.gs')}
+  return validateFinalBundleV2_;
+`)() as (
+  curated: unknown,
+  snapshot: unknown,
+  weather: unknown,
+  history: unknown,
+  selectedCandidates: unknown[],
+  critic: unknown
+) => string[];
 
 const snapshot = {
   tasteExamples: [
@@ -93,66 +113,89 @@ describe('Apps Script contracts', () => {
     expect(sentDateIndex).toBeGreaterThan(sendIndex);
   });
 
-  it('blocks critic finalists below the final weather or visual-coherence floor', () => {
-    const candidates = ['easy', 'polished-casual', 'expressive'].flatMap(archetype =>
-      Array.from({ length: 5 }, (_, index) => ({ candidateId: `${archetype}-${index}`, archetype }))
-    );
-    const scores = candidates.map(candidate => ({
-      candidateId: candidate.candidateId,
-      weather: 9,
-      palette: 8,
-      colorIntent: 8.5,
-      silhouette: 8,
-      formality: 8,
-      visualInterest: 8,
-      wearability: 8,
-      freshness: 8,
-      archetypeFit: 8,
-      disqualified: false,
-      criticalDefects: [],
-      reservations: []
-    }));
-    const response = {
-      scores,
-      finalists: {
-        easy: ['easy-0', 'easy-1'],
-        polishedCasual: ['polished-casual-0', 'polished-casual-1'],
-        expressive: ['expressive-0', 'expressive-1']
-      }
-    };
-    expect(criticValidator(response, candidates)).toEqual([]);
-    scores.find(score => score.candidateId === 'expressive-1')!.weather = 7.9;
-    expect(criticValidator(response, candidates).join(' ')).toMatch(/score floors/);
+  it('defines the critic as a score-only contract', () => {
+    expect(Object.keys(criticApi.schema.properties)).toEqual(['scores']);
+    expect(criticApi.schema.required).toEqual(['scores']);
   });
 
-  it('blocks finalists that are compatible but lack an intentional color hook', () => {
-    const candidates = ['easy', 'polished-casual', 'expressive'].flatMap(archetype =>
-      Array.from({ length: 5 }, (_, index) => ({ candidateId: `${archetype}-${index}`, archetype }))
-    );
-    const scores = candidates.map(candidate => ({
-      candidateId: candidate.candidateId,
-      weather: 9,
-      palette: 8,
-      colorIntent: 8.5,
-      silhouette: 8,
-      formality: 8,
-      visualInterest: 8,
-      wearability: 8,
-      freshness: 8,
-      archetypeFit: 8,
-      disqualified: false,
-      criticalDefects: [],
-      reservations: []
-    }));
+  it('accepts honest below-floor critic scores when every candidate is scored once', () => {
+    const candidates = [{ candidateId: 'easy-1', archetype: 'easy' }];
     const response = {
-      scores,
-      finalists: {
-        easy: ['easy-0', 'easy-1'],
-        polishedCasual: ['polished-casual-0', 'polished-casual-1'],
-        expressive: ['expressive-0', 'expressive-1']
-      }
+      scores: [{
+        candidateId: 'easy-1', weather: 4, palette: 5, colorIntent: 3, silhouette: 5,
+        formality: 5, visualInterest: 4, wearability: 6, freshness: 4, archetypeFit: 5,
+        disqualified: true, criticalDefects: ['weather'], reservations: []
+      }]
     };
-    scores.find(score => score.candidateId === 'easy-1')!.colorIntent = 7.9;
-    expect(criticValidator(response, candidates).join(' ')).toMatch(/score floors/);
+    expect(criticValidator(response, candidates)).toEqual([]);
+  });
+
+  it('validates any candidate count structurally and fails closed on duplicate or malformed ids', () => {
+    const candidates = Array.from({ length: 4 }, (_, index) => ({ candidateId: `c${index}`, archetype: 'easy' }));
+    const scores = candidates.map(({ candidateId }) => ({
+      candidateId, weather: 9, palette: 8, colorIntent: 8, silhouette: 8, formality: 8,
+      visualInterest: 8, wearability: 8, freshness: 8, archetypeFit: 8,
+      disqualified: false, criticalDefects: [], reservations: []
+    }));
+    expect(criticValidator({ scores }, candidates)).toEqual([]);
+    expect(criticValidator({ scores }, [candidates[0], candidates[0]]).join(' ')).toMatch(/duplicate candidateId/);
+    expect(criticValidator({ scores: [scores[0], scores[0]] }, [candidates[0]]).join(' ')).toMatch(/scored candidate twice|exactly once/);
+    expect(criticValidator({ scores: [{ ...scores[0], disqualified: 'false' }] }, [candidates[0]]).join(' ')).toMatch(/disqualified.*boolean/);
+    expect(() => criticValidator({ scores: [null] }, [candidates[0]])).not.toThrow();
+  });
+
+  it('enforces byte-exact selected echoes and mirrors the top-bottom cooldown', () => {
+    const archetypes = ['easy', 'polished-casual', 'expressive'];
+    const selected = archetypes.map((archetype, index) => ({
+      candidateId: `${archetype}-${index}`,
+      archetype,
+      topId: `selected-top-${index}`,
+      bottomId: `selected-bottom-${index}`,
+      shoeId: `selected-shoe-${index}`,
+      itemIds: [`selected-top-${index}`, `selected-bottom-${index}`, `selected-shoe-${index}`]
+    }));
+    const finalSnapshot = {
+      settings: {},
+      items: selected.flatMap((candidate, index) => [
+        { id: candidate.topId, slot: 'top', profile: { primaryColorFamily: `top-${index}`, silhouette: `top-shape-${index}`, warmth: 1, breathability: 4, available: true, excludedFromDaily: false } },
+        { id: candidate.bottomId, slot: 'bottom', category: 'Pants', profile: { primaryColorFamily: `bottom-${index}`, silhouette: `bottom-shape-${index}`, available: true, excludedFromDaily: false } },
+        { id: candidate.shoeId, slot: 'shoes', profile: { rainSafety: 'good', available: true, excludedFromDaily: false } }
+      ])
+    };
+    const critic = {
+      scores: selected.map(candidate => ({
+        candidateId: candidate.candidateId, weather: 9, palette: 9, colorIntent: 9,
+        silhouette: 9, formality: 9, visualInterest: 9, wearability: 9,
+        freshness: 9, archetypeFit: 9, disqualified: false, criticalDefects: [], reservations: []
+      }))
+    };
+    const curated = {
+      recommendations: selected.map(candidate => ({
+        candidateId: candidate.candidateId,
+        archetype: candidate.archetype,
+        itemIds: candidate.itemIds.slice(),
+        colorHook: 'The exact blue trim on the top repeats in the shoes for a deliberate bridge.',
+        whyItWorks: 'The proportions, formality, and palette align across all three selected pieces.',
+        weatherNote: 'Breathable and comfortable across the forecast window.'
+      }))
+    };
+    const weather = { morningFeelsLikeF: 60, middayFeelsLikeF: 70, eveningFeelsLikeF: 60, rainExpected: false, layerGuidance: 'none' };
+    const history = { exactOutfitsPrevious14Days: [], cooldownItemIds: [] };
+    expect(finalValidator(curated, finalSnapshot, weather, history, selected, critic)).toEqual([]);
+
+    const reordered = structuredClone(curated);
+    reordered.recommendations[0].itemIds.reverse();
+    expect(finalValidator(reordered, finalSnapshot, weather, history, selected, critic).join(' '))
+      .toMatch(/changed or reordered the selected itemIds/);
+
+    const swapped = structuredClone(curated);
+    [swapped.recommendations[0], swapped.recommendations[1]] = [swapped.recommendations[1], swapped.recommendations[0]];
+    expect(finalValidator(swapped, finalSnapshot, weather, history, selected, critic).join(' '))
+      .toMatch(/changed or reordered the selected candidateId/);
+
+    expect(finalValidator(curated, finalSnapshot, weather, {
+      ...history,
+      cooldownItemIds: [selected[0].topId, selected[1].shoeId]
+    }, selected, critic).join(' ')).toMatch(/yesterday top\/bottom cooldown/);
   });
 });

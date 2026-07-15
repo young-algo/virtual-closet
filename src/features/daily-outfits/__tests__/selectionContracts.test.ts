@@ -789,3 +789,262 @@ describe('deterministic replan choice and purity', () => {
     expect(forbiddenCalls).toBe(0);
   });
 });
+
+describe('bounded targeted replan orchestration', () => {
+  type SelectionRun = (
+    snapshot: object,
+    weather: object,
+    history: object,
+    planners: Array<{ archetype: string; candidates: Candidate[] }>,
+    critic: { scores: object[] }
+  ) => {
+    candidates: Candidate[];
+    critic: { scores: object[] };
+    selectedCandidates: Candidate[];
+    selection: {
+      path: string;
+      replannedArchetypes: string[];
+      feasibleSetCount: number;
+    };
+  };
+
+  const initialCandidates = () => ['easy', 'polished-casual', 'expressive'].flatMap((archetype, group) =>
+    Array.from({ length: 5 }, (_, index) => makeCandidate(
+      `${archetype}-${index}`,
+      archetype,
+      `t${group * 3 + 1}`,
+      `b${group * 3 + 1}`,
+      group < 2 ? 's1' : 's2'
+    ))
+  );
+
+  const plannerResponses = (candidates: Candidate[]) => ['easy', 'polished-casual', 'expressive'].map(archetype => ({
+    archetype,
+    candidates: candidates.filter(candidate => candidate.archetype === archetype)
+  }));
+
+  const replannedCandidates = (
+    archetype: string,
+    shoeId: string,
+    round: number,
+    startIndex = 1
+  ) => Array.from({ length: 5 }, (_, index) => makeCandidate(
+    `${archetype}-r${round}-${index}`,
+    archetype,
+    `t${startIndex + index}`,
+    `b${startIndex + index}`,
+    shoeId
+  ));
+
+  const orchestrationApi = (
+    replan: (...args: unknown[]) => { archetype: string; candidates: Candidate[] },
+    scoreNew: (...args: unknown[]) => { scores: object[] }
+  ) => evaluateAppsScript<{
+    runSelectionV2_: SelectionRun | null;
+    mergeReplannedCandidatesV2_: ((existing: Candidate[], additions: Candidate[]) => Candidate[]) | null;
+  }>(
+    ['Config.gs', 'Selection.gs'],
+    `({
+      runSelectionV2_: typeof runSelectionV2_ === 'function' ? runSelectionV2_ : null,
+      mergeReplannedCandidatesV2_: typeof mergeReplannedCandidatesV2_ === 'function' ? mergeReplannedCandidatesV2_ : null
+    })`,
+    {
+      replanArchetypeV2_: replan,
+      runCriticCandidatesV2_: scoreNew,
+      savedOutfitNearCopyV2_: () => null,
+      weatherSafetyErrorsV2_: () => [],
+      console
+    }
+  );
+
+  it('merges five new candidates, scores only them, and records replan-1', () => {
+    const initial = initialCandidates();
+    const initialScores = initial.map(candidate => makeScore(candidate.candidateId));
+    const replanned = replannedCandidates('easy', 's3', 1);
+    const scoredBatches: string[][] = [];
+    const api = orchestrationApi(
+      () => ({ archetype: 'easy', candidates: replanned }),
+      (_snapshot, _weather, _history, values) => {
+        const additions = values as Candidate[];
+        scoredBatches.push(additions.map(candidate => candidate.candidateId));
+        return { scores: additions.map(candidate => makeScore(candidate.candidateId, { colorIntent: 9 })) };
+      }
+    );
+    expect(api.runSelectionV2_).toBeTypeOf('function');
+    if (!api.runSelectionV2_) return;
+
+    const result = api.runSelectionV2_(
+      baseSnapshot,
+      baseWeather,
+      emptyHistory,
+      plannerResponses(initial),
+      { scores: initialScores }
+    );
+
+    expect(result.selection.path).toBe('replan-1');
+    expect(result.selection.replannedArchetypes).toEqual(['easy']);
+    expect(result.critic.scores).toHaveLength(20);
+    expect(scoredBatches).toEqual([replanned.map(candidate => candidate.candidateId)]);
+  });
+
+  it('uses injective item-combination identity and drops only true exact duplicates', () => {
+    const api = orchestrationApi(() => ({ archetype: 'easy', candidates: [] }), () => ({ scores: [] }));
+    expect(api.mergeReplannedCandidatesV2_).toBeTypeOf('function');
+    if (!api.mergeReplannedCandidatesV2_) return;
+    const existing = [makeCandidate('existing', 'easy', 'a', 'b|c', 'd')];
+    const colliding = makeCandidate('colliding', 'easy', 'a|b', 'c', 'd');
+    const exact = {
+      ...makeCandidate('exact', 'easy', 'a', 'b|c', 'd'),
+      itemIds: ['d', 'a', 'b|c']
+    };
+
+    expect(api.mergeReplannedCandidatesV2_(existing, [colliding]).map(candidate => candidate.candidateId))
+      .toEqual(['existing', 'colliding']);
+    expect(api.mergeReplannedCandidatesV2_(existing, [exact]).map(candidate => candidate.candidateId))
+      .toEqual(['existing']);
+  });
+
+  it('scores only newly accepted combinations after duplicate combinations are dropped', () => {
+    const initial = initialCandidates();
+    const unique = replannedCandidates('easy', 's3', 1);
+    const additions = [
+      { ...makeCandidate('easy-r1-duplicate', 'easy', 't1', 'b1', 's1'), itemIds: ['s1', 't1', 'b1'] },
+      ...unique.slice(1)
+    ];
+    const scored: string[][] = [];
+    const api = orchestrationApi(
+      () => ({ archetype: 'easy', candidates: additions }),
+      (_snapshot, _weather, _history, values) => {
+        const accepted = values as Candidate[];
+        scored.push(accepted.map(candidate => candidate.candidateId));
+        return { scores: accepted.map(candidate => makeScore(candidate.candidateId, { colorIntent: 9 })) };
+      }
+    );
+    expect(api.runSelectionV2_).toBeTypeOf('function');
+    if (!api.runSelectionV2_) return;
+
+    const result = api.runSelectionV2_(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+      scores: initial.map(candidate => makeScore(candidate.candidateId))
+    });
+    expect(scored).toEqual([unique.slice(1).map(candidate => candidate.candidateId)]);
+    expect(result.critic.scores).toHaveLength(19);
+  });
+
+  it('uses at most two distinct archetype replans and can succeed on replan-2', () => {
+    const initial = initialCandidates();
+    const calls: Array<{ archetype: string; round: number }> = [];
+    const first = replannedCandidates('easy', 's1', 1, 6);
+    const second = replannedCandidates('polished-casual', 's3', 2, 6);
+    const scoredCounts: number[] = [];
+    const api = orchestrationApi(
+      (archetype, _snapshot, _weather, _history, _failureNotes, _avoidIds, round) => {
+        calls.push({ archetype: archetype as string, round: round as number });
+        return {
+          archetype: archetype as string,
+          candidates: archetype === 'easy' ? first : second
+        };
+      },
+      (_snapshot, _weather, _history, values) => {
+        const additions = values as Candidate[];
+        scoredCounts.push(additions.length);
+        return { scores: additions.map(candidate => makeScore(candidate.candidateId, { colorIntent: 9 })) };
+      }
+    );
+    expect(api.runSelectionV2_).toBeTypeOf('function');
+    if (!api.runSelectionV2_) return;
+
+    const result = api.runSelectionV2_(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+      scores: initial.map(candidate => makeScore(candidate.candidateId))
+    });
+    expect(result.selection.path).toBe('replan-2');
+    expect(result.selection.replannedArchetypes).toEqual(['easy', 'polished-casual']);
+    expect(calls).toEqual([
+      { archetype: 'easy', round: 1 },
+      { archetype: 'polished-casual', round: 2 }
+    ]);
+    expect(scoredCounts).toEqual([5, 5]);
+  });
+
+  it('throws after exactly two no-solution rounds without replanning an archetype twice', () => {
+    const initial = initialCandidates();
+    const calls: Array<{ archetype: string; round: number }> = [];
+    const api = orchestrationApi(
+      (archetype, _snapshot, _weather, _history, _failureNotes, _avoidIds, round) => {
+        calls.push({ archetype: archetype as string, round: round as number });
+        const candidates = replannedCandidates(archetype as string, 's1', round as number, 6);
+        return {
+          archetype: archetype as string,
+          candidates: archetype === 'easy' ? candidates : candidates.map(candidate => ({
+            ...candidate,
+            layerId: 'l1',
+            itemIds: [...candidate.itemIds, 'l1']
+          }))
+        };
+      },
+      (_snapshot, _weather, _history, values) => ({
+        scores: (values as Candidate[]).map(candidate => makeScore(candidate.candidateId, { colorIntent: 9 }))
+      })
+    );
+    expect(api.runSelectionV2_).toBeTypeOf('function');
+    if (!api.runSelectionV2_) return;
+
+    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+      scores: initial.map(candidate => makeScore(candidate.candidateId))
+    })).toThrow('Daily selection exhausted two targeted re-plan rounds');
+    expect(calls).toEqual([
+      { archetype: 'easy', round: 1 },
+      { archetype: 'polished-casual', round: 2 }
+    ]);
+  });
+
+  it('throws a no-progress error when a targeted replan returns only duplicate combinations', () => {
+    const initial = initialCandidates();
+    const duplicates = Array.from({ length: 5 }, (_, index) => makeCandidate(
+      `easy-duplicate-${index}`,
+      'easy',
+      't1',
+      'b1',
+      's1'
+    ));
+    let criticCalls = 0;
+    const api = orchestrationApi(
+      () => ({ archetype: 'easy', candidates: duplicates }),
+      () => {
+        criticCalls += 1;
+        return { scores: [] };
+      }
+    );
+    expect(api.runSelectionV2_).toBeTypeOf('function');
+    if (!api.runSelectionV2_) return;
+
+    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+      scores: initial.map(candidate => makeScore(candidate.candidateId))
+    })).toThrow('Targeted re-plan returned only duplicate combinations');
+    expect(criticCalls).toBe(0);
+  });
+
+  it('fails closed on malformed candidates, duplicate ids, and invalid replan score sets', () => {
+    const initial = initialCandidates();
+    const replanned = replannedCandidates('easy', 's3', 1);
+    const duplicateId = initial.slice();
+    duplicateId[1] = { ...duplicateId[1], candidateId: duplicateId[0].candidateId };
+    const api = orchestrationApi(
+      () => ({ archetype: 'easy', candidates: replanned }),
+      () => ({ scores: [makeScore(replanned[0].candidateId), makeScore(replanned[0].candidateId)] })
+    );
+    expect(api.runSelectionV2_).toBeTypeOf('function');
+    if (!api.runSelectionV2_) return;
+
+    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(duplicateId), {
+      scores: duplicateId.map(candidate => makeScore(candidate.candidateId))
+    })).toThrow(/duplicate candidateId/);
+    const wrongPlannerGroup = plannerResponses(initial);
+    wrongPlannerGroup[0].candidates[0] = { ...wrongPlannerGroup[0].candidates[0], archetype: 'expressive' };
+    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, wrongPlannerGroup, {
+      scores: initial.map(candidate => makeScore(candidate.candidateId))
+    })).toThrow(/planner response.*wrong archetype/);
+    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+      scores: initial.map(candidate => makeScore(candidate.candidateId))
+    })).toThrow(/targeted critic scores|exactly once/);
+  });
+});
