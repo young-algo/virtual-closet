@@ -109,6 +109,21 @@ const richWeather = {
   weatherPhrase: 'clear'
 };
 
+const extremeHeatWeather = {
+  ...richWeather,
+  middayFeelsLikeF: 101
+};
+
+const EXACT_EXTREME_HEAT_CONTRACT = [
+  'EXTREME-HEAT POLISHED-CASUAL CONTRACT:',
+  '- Polish does not require trousers. Build polish through intentional palette, proportion, restrained graphics, and footwear.',
+  '- At least 3 of your 5 candidates must use a Shorts bottom.',
+  '- Every proposed top must have `warmth <= 2` and `breathability >= 4`.',
+  '- A Pants bottom is allowed only when it has `warmth <= 2` and `breathability >= 4`.',
+  '- Avoid heat-retaining layers. Include a removable layer only when the weather\'s edge-of-day layer guidance requires one, and only when that layer has `warmth <= 2`.',
+  '- Do not lower archetype intent: the result must still read as polished-casual rather than a generic gym or lounge outfit.'
+].join('\n');
+
 const richHistory = {
   exactOutfitsPrevious14Days: [{ localDate: '2026-07-13', itemIds: [topId, sneakerId], archetype: 'easy' }],
   itemUsagePrevious7Days: { [topId]: 2, [sneakerId]: 1 },
@@ -848,6 +863,24 @@ describe('model boundary views', () => {
 });
 
 describe('prompt and response label boundary', () => {
+  it('activates the exact extreme-heat contract only for numeric polished-casual heat above 90', () => {
+    const extremeHeatContract = evaluateAppsScript<(
+      archetype: string,
+      weather: object
+    ) => string>(
+      ['Planner.gs'],
+      'extremeHeatPolishedCasualContractV2_',
+      { DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] }, console }
+    );
+
+    expect(extremeHeatContract('polished-casual', { middayFeelsLikeF: 90 })).toBe('');
+    expect(extremeHeatContract('polished-casual', { middayFeelsLikeF: 90.1 })).toBe(EXACT_EXTREME_HEAT_CONTRACT);
+    expect(extremeHeatContract('polished-casual', { middayFeelsLikeF: 101 })).toBe(EXACT_EXTREME_HEAT_CONTRACT);
+    expect(extremeHeatContract('polished-casual', { middayFeelsLikeF: '101' })).toBe('');
+    expect(extremeHeatContract('easy', { middayFeelsLikeF: 101 })).toBe('');
+    expect(extremeHeatContract('expressive', { middayFeelsLikeF: 101 })).toBe('');
+  });
+
   it('assembles a planner prompt with labels and no long ids or full weather fields', () => {
     const plannerParts = evaluateAppsScript<(
       archetype: string,
@@ -884,10 +917,10 @@ describe('prompt and response label boundary', () => {
       tasteExamples: []
     };
     const invalidResponse = {
-      archetype: 'easy',
+      archetype: 'polished-casual',
       candidates: Array.from({ length: 5 }, (_, index) => ({
-        candidateId: `easy-${index}`,
-        archetype: 'easy',
+        candidateId: `polished-casual-${index}`,
+        archetype: 'polished-casual',
         topId: `top-${index}`,
         bottomId: `bottom-${index}`,
         shoeId: `shoe-${index}`,
@@ -939,14 +972,31 @@ describe('prompt and response label boundary', () => {
     );
 
     expect(shortColorStrategy).toHaveLength(29);
-    const initialPrompt = planner.plannerPartsV2_('easy', plannerSnapshot, richWeather, richHistory)[0].text || '';
-    const errors = planner.validatePlannerResponseV2_(invalidResponse, 'easy', plannerSnapshot);
-    planner.repairPlannerResponseV2_('easy', invalidResponse, errors, plannerSnapshot, richWeather, richHistory);
+    const initialPrompt = planner.plannerPartsV2_('polished-casual', plannerSnapshot, extremeHeatWeather, richHistory)[0].text || '';
+    const errors = planner.validatePlannerResponseV2_(invalidResponse, 'polished-casual', plannerSnapshot);
+    planner.repairPlannerResponseV2_('polished-casual', invalidResponse, errors, plannerSnapshot, extremeHeatWeather, richHistory);
 
     const contract = 'colorStrategy must be 30–280 characters and name a specific cross-item visual relationship';
     expect(errors).toEqual([`candidate[0].${contract}`]);
     expect(initialPrompt).toContain(contract);
     expect(repairPrompt).toContain(`candidate[0].${contract}`);
+    [initialPrompt, repairPrompt].forEach(prompt => {
+      expect(prompt.split(EXACT_EXTREME_HEAT_CONTRACT)).toHaveLength(2);
+      expect(prompt.indexOf('WEATHER PROFILE:')).toBeLessThan(prompt.indexOf(EXACT_EXTREME_HEAT_CONTRACT));
+      expect(prompt.indexOf(EXACT_EXTREME_HEAT_CONTRACT)).toBeLessThan(prompt.indexOf('DAILY ROTATION HISTORY:'));
+    });
+
+    const atThreshold = planner.plannerPartsV2_(
+      'polished-casual',
+      plannerSnapshot,
+      { ...extremeHeatWeather, middayFeelsLikeF: 90 },
+      richHistory
+    )[0].text || '';
+    const hotEasy = planner.plannerPartsV2_('easy', plannerSnapshot, extremeHeatWeather, richHistory)[0].text || '';
+    const hotExpressive = planner.plannerPartsV2_('expressive', plannerSnapshot, extremeHeatWeather, richHistory)[0].text || '';
+    [atThreshold, hotEasy, hotExpressive].forEach(prompt => {
+      expect(prompt).not.toContain('EXTREME-HEAT POLISHED-CASUAL CONTRACT:');
+    });
   });
 
   it('sanitizes every item-derived string in the planner complete item index', () => {
@@ -1452,14 +1502,13 @@ describe('prompt and response label boundary', () => {
     expect(result.candidates[0].shoeId).toBe(sneakerId);
   });
 
-  it('keeps targeted replan guidance optional, closed, label-safe, and present in planner repair', () => {
+  it('keeps targeted replan guidance optional, closed, label-safe, and present in both rounds', () => {
     const calls: Array<{ stage: string; prompt: string }> = [];
-    let validations = 0;
     const response = {
-      archetype: 'easy',
+      archetype: 'polished-casual',
       candidates: Array.from({ length: 5 }, (_, index) => ({
-        ...labelCandidate('easy'),
-        candidateId: `easy-targeted-${index}`
+        ...labelCandidate('polished-casual'),
+        candidateId: `polished-casual-targeted-${index}`
       }))
     };
     const planner = evaluateAppsScript<{
@@ -1487,10 +1536,7 @@ describe('prompt and response label boundary', () => {
           calls.push({ stage, prompt: parts.map(part => part.text || '').join('\n') });
           return response;
         },
-        validatePlannerResponseV2_: () => {
-          validations += 1;
-          return validations === 1 ? ['force one closed repair'] : [];
-        }
+        validatePlannerResponseV2_: () => []
       }
     );
     expect(planner.replanArchetypeV2_).toBeTypeOf('function');
@@ -1498,13 +1544,13 @@ describe('prompt and response label boundary', () => {
 
     const ordinary = JSON.stringify(planner.plannerPartsV2_('easy', richSnapshot, richWeather, richHistory));
     expect(ordinary).not.toContain('TARGETED RE-PLAN ROUND');
-    const result = planner.replanArchetypeV2_(
-      'easy',
+    const roundOne = planner.replanArchetypeV2_(
+      'polished-casual',
       richSnapshot,
-      richWeather,
+      extremeHeatWeather,
       richHistory,
       [{
-        candidateId: 'easy-previous',
+        candidateId: 'polished-casual-previous',
         criticalDefects: [`Current ${topId}`, `stale ${staleLongId}`],
         reservations: ['ordinary reservation'],
         privateNested: { wardrobeId: sneakerId }
@@ -1512,18 +1558,36 @@ describe('prompt and response label boundary', () => {
       [topId, sneakerId],
       1
     );
+    const roundTwo = planner.replanArchetypeV2_(
+      'polished-casual',
+      richSnapshot,
+      extremeHeatWeather,
+      richHistory,
+      [{
+        candidateId: 'polished-casual-previous',
+        criticalDefects: [`Current ${topId}`, `stale ${staleLongId}`],
+        reservations: ['ordinary reservation'],
+        privateNested: { wardrobeId: sneakerId }
+      }],
+      [topId, sneakerId],
+      2
+    );
 
-    expect(calls.map(call => call.stage)).toEqual(['planner', 'repair']);
-    calls.forEach(({ prompt }) => {
-      expect(prompt).toContain('TARGETED RE-PLAN ROUND 1');
+    expect(calls.map(call => call.stage)).toEqual(['planner', 'planner']);
+    calls.forEach(({ prompt }, index) => {
+      expect(prompt).toContain(`TARGETED RE-PLAN ROUND ${index + 1}`);
       expect(prompt).toContain('T004, S009');
       expect(prompt).toContain('ordinary reservation');
       expect(prompt).not.toContain(topId);
       expect(prompt).not.toContain(sneakerId);
       expect(prompt).not.toContain(staleLongId);
       expect(prompt).not.toContain('privateNested');
+      expect(prompt.split(EXACT_EXTREME_HEAT_CONTRACT)).toHaveLength(2);
+      expect(prompt.indexOf('WEATHER PROFILE:')).toBeLessThan(prompt.indexOf(EXACT_EXTREME_HEAT_CONTRACT));
+      expect(prompt.indexOf(EXACT_EXTREME_HEAT_CONTRACT)).toBeLessThan(prompt.indexOf('DAILY ROTATION HISTORY:'));
     });
-    expect(result.candidates[0].topId).toBe(topId);
+    expect(roundOne.candidates[0].topId).toBe(topId);
+    expect(roundTwo.candidates[0].topId).toBe(topId);
   });
 
   it.each([

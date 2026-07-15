@@ -34,6 +34,22 @@ function archetypeBriefV2_(archetype) {
   return 'Use the strongest controlled color, graphic, jersey, pattern, or sneaker colorway. Prefer one dominant statement. Keep it wearable for an ordinary day and unmistakably different from Easy and Polished casual.';
 }
 
+function extremeHeatPolishedCasualContractV2_(archetype, weather) {
+  if (archetype !== 'polished-casual' || !weather ||
+      typeof weather.middayFeelsLikeF !== 'number' ||
+      !Number.isFinite(weather.middayFeelsLikeF) ||
+      weather.middayFeelsLikeF <= 90) return '';
+  return [
+    'EXTREME-HEAT POLISHED-CASUAL CONTRACT:',
+    '- Polish does not require trousers. Build polish through intentional palette, proportion, restrained graphics, and footwear.',
+    '- At least 3 of your 5 candidates must use a Shorts bottom.',
+    '- Every proposed top must have `warmth <= 2` and `breathability >= 4`.',
+    '- A Pants bottom is allowed only when it has `warmth <= 2` and `breathability >= 4`.',
+    '- Avoid heat-retaining layers. Include a removable layer only when the weather\'s edge-of-day layer guidance requires one, and only when that layer has `warmth <= 2`.',
+    '- Do not lower archetype intent: the result must still read as polished-casual rather than a generic gym or lounge outfit.'
+  ].join('\n');
+}
+
 function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance) {
   var prompt = [
     "You are planning Kevin's real wardrobe for an ordinary day with no inferred special event.",
@@ -47,13 +63,17 @@ function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidanc
     'Return five genuinely viable and materially distinct candidates for the ' + archetype + ' direction—not superficial variations and not the same hero piece with small substitutions. Each needs one top, one bottom, one shoe, and zero or one layer.',
     'Do not reveal chain-of-thought. Return only the requested concise structured fields.',
     'ARCHETYPE BRIEF: ' + archetypeBriefV2_(archetype),
-    'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewV2_(weather))
+  ];
+  var extremeHeatContract = extremeHeatPolishedCasualContractV2_(archetype, weather);
+  if (extremeHeatContract) prompt.push(extremeHeatContract);
+  prompt = prompt.concat([
     'Items listed in cooldownItemLabels headlined yesterday\'s email; avoid them today unless history shows Kevin wore them.',
     'DAILY ROTATION HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     historyGuidanceV2_(),
     'READ-ONLY SAVED TASTE EVIDENCE (weights indicate confidence; do not copy literally):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'COMPLETE ITEM INDEX:\n' + JSON.stringify(compactItemIndexV2_(snapshot))
-  ];
+  ]);
   if (selectionGuidance) prompt.push(repairPromptStringV2_(selectionGuidance, snapshot));
   prompt = prompt.join('\n\n');
   return [{ text: prompt }].concat(atlasPartsV2_(snapshot));
