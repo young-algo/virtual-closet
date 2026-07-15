@@ -702,6 +702,52 @@ function buildBundleV2_(curated, snapshot, weather, history) {
   return bundle;
 }
 
+function validDailySendPropertyDateV2_(value) {
+  if (typeof value !== 'string') return false;
+  var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  var year = Number(match[1]);
+  var month = Number(match[2]);
+  var day = Number(match[3]);
+  var parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
+function assertUnambiguousDailySendStateV2_(properties, currentLocalDate) {
+  var marker = properties.getProperty('SEND_IN_PROGRESS_DATE_V2');
+  var lastSentDate = properties.getProperty('LAST_SENT_DATE_V2');
+  if (marker && (!validDailySendPropertyDateV2_(marker) || marker !== lastSentDate)) {
+    throw new Error('Ambiguous daily email send state for ' + marker + ': inspect the mailbox before retrying');
+  }
+  if (marker && marker === lastSentDate && marker !== currentLocalDate) {
+    properties.deleteProperty('SEND_IN_PROGRESS_DATE_V2');
+    marker = null;
+  }
+  return { marker: marker, lastSentDate: lastSentDate };
+}
+
+function finalizeSentBundleV2_(bundle, snapshot, state) {
+  var properties = getDailyPropertiesV2_();
+  if (properties.getProperty('LAST_SENT_DATE_V2') !== bundle.localDate) {
+    properties.setProperty('LAST_SENT_DATE_V2', bundle.localDate);
+  }
+  recordSentBundleV2_(bundle, snapshot);
+  var repairedState = state;
+  if (typeof saveJobStateV2_ === 'function') {
+    if (!validScheduledJobStateV2_(repairedState, bundle.localDate, bundle.wardrobeFingerprint)) {
+      repairedState = newJobStateV2_(bundle.localDate, bundle.wardrobeFingerprint);
+    }
+    repairedState.stage = 'sent';
+    repairedState.updatedAt = Date.now();
+    repairedState.lastError = null;
+    saveJobStateV2_(repairedState);
+  }
+  if (typeof properties.deleteProperty === 'function') {
+    properties.deleteProperty('SEND_IN_PROGRESS_DATE_V2');
+  }
+  return repairedState;
+}
+
 function recordSentBundleV2_(bundle, snapshot) {
   var history = loadHistoryV2_();
   var existing = history.find(function(entry) { return entry.localDate === bundle.localDate; });
@@ -709,7 +755,9 @@ function recordSentBundleV2_(bundle, snapshot) {
     localDate: bundle.localDate,
     weatherKey: [Math.round(bundle.weather.highTemperatureF), Math.round(bundle.weather.maxRainProbability), bundle.weather.layerGuidance].join('|'),
     generatedAt: bundle.generatedAt,
-    sentAt: Date.now(),
+    sentAt: existing && typeof existing.sentAt === 'number' && Number.isFinite(existing.sentAt) && existing.sentAt >= 0
+      ? existing.sentAt
+      : Date.now(),
     recommendations: bundle.recommendations,
     encore: bundle.encore || null,
     feedback: existing ? (existing.feedback || []) : []

@@ -670,9 +670,10 @@ describe('Apps Script contracts', () => {
     expect(diagnostics).toMatch(/eligibleCountByArchetype/);
     expect(diagnostics).toMatch(/attemptCounts/);
     const sendIndex = scheduler.indexOf('sendDailyBundleNowV2_');
-    const sentDateIndex = scheduler.indexOf("setProperty('LAST_SENT_DATE_V2'", sendIndex);
+    const finalizeIndex = scheduler.indexOf('finalizeSentBundleV2_', sendIndex);
     expect(sendIndex).toBeGreaterThan(-1);
-    expect(sentDateIndex).toBeGreaterThan(sendIndex);
+    expect(finalizeIndex).toBeGreaterThan(sendIndex);
+    expect(apps('JobState.gs')).toMatch(/setProperty\('LAST_SENT_DATE_V2',[\s\S]*recordSentBundleV2_/);
   });
 
   it('persists manual selection output and resumes selection-ready without selecting again', () => {
@@ -1232,6 +1233,7 @@ describe('Apps Script contracts', () => {
           localMinutesV2_: () => 405,
           getDailyPropertiesV2_: () => properties,
           getBooleanPropertyV2_: () => false,
+          assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
           mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
           loadJobStateV2_: () => structuredClone(state),
           loadPendingV2_: () => ({
@@ -1254,7 +1256,11 @@ describe('Apps Script contracts', () => {
             events.push('send');
             if (sendFails) throw new Error('send failed');
           },
-          recordSentBundleV2_: () => { events.push('record'); },
+          finalizeSentBundleV2_: (_bundle: unknown, _snapshot: unknown, current: typeof state) => {
+            events.push('set:LAST_SENT_DATE_V2');
+            events.push('record');
+            return { ...current, stage: 'sent' };
+          },
           saveJobStateV2_: () => undefined,
           sendOperationalAlertV2_: () => undefined,
           console: { error: () => undefined },
@@ -1270,6 +1276,284 @@ describe('Apps Script contracts', () => {
     const sent = runScheduler(false);
     expect(sent.result.ok).toBe(true);
     expect(sent.events).toEqual(['send', 'set:LAST_SENT_DATE_V2', 'record']);
+  });
+
+  it('sets the real-send marker immediately before MailApp while test delivery never touches it', () => {
+    const run = (testMode: boolean, markerFails = false, mailFails = false) => {
+      const events: string[] = [];
+      const values: Record<string, string> = {};
+      const pending = sendablePendingFixture();
+      const snapshotValue = sendableSnapshotFixture();
+      const send = evaluateAppsScript<(
+        bundle: unknown,
+        snapshot: unknown,
+        isTest: boolean,
+        persisted: unknown,
+        localDate: string,
+      ) => void>(
+        ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
+        'sendDailyBundleNowV2_',
+        {
+          DAILY_V2: dailySelectionRuntime,
+          getDailyPropertiesV2_: () => ({
+            getProperty: (key: string) => values[key] ?? null,
+            setProperty: (key: string, value: string) => {
+              events.push(`set:${key}:${value}`);
+              if (markerFails && key === 'SEND_IN_PROGRESS_DATE_V2') throw new Error('marker failed');
+              values[key] = value;
+            },
+          }),
+          getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+          applySnapshotSettingsV2_: (value: unknown) => value,
+          itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+          savedOutfitExactCopyV2_: () => null,
+          Utilities: emailUtilitiesFixture,
+          MailApp: { sendEmail: () => {
+            events.push('mail');
+            if (mailFails) throw new Error('mail failed');
+          } },
+        },
+      );
+      const invoke = () => send(pending.bundle, snapshotValue, testMode, pending, '2026-07-15');
+      return { events, invoke, values };
+    };
+
+    const real = run(false);
+    expect(real.invoke).not.toThrow();
+    expect(real.events.slice(-2)).toEqual(['set:SEND_IN_PROGRESS_DATE_V2:2026-07-15', 'mail']);
+    expect(real.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-15');
+
+    const test = run(true);
+    expect(test.invoke).not.toThrow();
+    expect(test.events).toEqual(['mail']);
+    expect(test.values).not.toHaveProperty('SEND_IN_PROGRESS_DATE_V2');
+
+    const markerFailure = run(false, true);
+    expect(markerFailure.invoke).toThrowError('marker failed');
+    expect(markerFailure.events).toEqual(['set:SEND_IN_PROGRESS_DATE_V2:2026-07-15']);
+
+    const mailFailure = run(false, false, true);
+    expect(mailFailure.invoke).toThrowError('mail failed');
+    expect(mailFailure.events.slice(-2)).toEqual(['set:SEND_IN_PROGRESS_DATE_V2:2026-07-15', 'mail']);
+    expect(mailFailure.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-15');
+  });
+
+  it('fails closed instead of resending after MailApp leaves an unresolved current or stale marker', () => {
+    const run = (initialMarker?: string, invalidatePending = false) => {
+      const events: string[] = [];
+      const values: Record<string, string> = initialMarker
+        ? { SEND_IN_PROGRESS_DATE_V2: initialMarker }
+        : {};
+      let mailFails = !initialMarker;
+      const pending = sendablePendingFixture();
+      if (invalidatePending) pending.bundle.recommendations = [];
+      const snapshotValue = sendableSnapshotFixture();
+      const send = evaluateAppsScript<() => unknown>(
+        ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
+        'sendDailyBundleNowV2',
+        {
+          DAILY_V2: dailySelectionRuntime,
+          loadSnapshotV2_: () => snapshotValue,
+          assertFreshSnapshotV2_: () => snapshotValue,
+          loadPendingV2_: () => pending,
+          getDailyPropertiesV2_: () => ({
+            getProperty: (key: string) => values[key] ?? null,
+            setProperty: (key: string, value: string) => {
+              events.push(`set:${key}:${value}`);
+              values[key] = value;
+            },
+            deleteProperty: (key: string) => {
+              events.push(`delete:${key}`);
+              delete values[key];
+            },
+          }),
+          getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+          applySnapshotSettingsV2_: (value: unknown) => value,
+          localDateV2_: () => '2026-07-15',
+          itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+          savedOutfitExactCopyV2_: () => null,
+          Utilities: emailUtilitiesFixture,
+          MailApp: { sendEmail: () => {
+            events.push('mail');
+            if (mailFails) throw new Error('mail failed');
+          } },
+          loadHistoryV2_: () => [],
+          saveHistoryV2_: () => events.push('record'),
+        },
+      );
+      return { events, send, values, allowMail: () => { mailFails = false; } };
+    };
+
+    const current = run();
+    expect(current.send).toThrowError('mail failed');
+    expect(current.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-15');
+    current.allowMail();
+    expect(current.send).toThrowError(/Ambiguous daily email send.*2026-07-15/);
+    expect(current.events.filter(event => event === 'mail')).toHaveLength(1);
+    expect(current.values).not.toHaveProperty('LAST_SENT_DATE_V2');
+
+    const stale = run('2026-07-14');
+    expect(stale.send).toThrowError(/Ambiguous daily email send.*2026-07-14/);
+    expect(stale.events).toEqual([]);
+    expect(stale.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-14');
+
+    const staleWithInvalidPending = run('2026-07-14', true);
+    expect(staleWithInvalidPending.send)
+      .toThrowError(/Ambiguous daily email send.*2026-07-14/);
+    expect(staleWithInvalidPending.events).toEqual([]);
+  });
+
+  it('finalizes real sends in recoverable order and reconciles matching sent state without another email', () => {
+    const run = (initialValues: Record<string, string> = {}, failHistoryOnce = false) => {
+      const events: string[] = [];
+      const values = { ...initialValues };
+      const pending = sendablePendingFixture();
+      const snapshotValue = sendableSnapshotFixture();
+      let history: unknown[] = [];
+      let state = {
+        stage: 'bundle-ready',
+        qualityPolicyVersion: 3,
+        localDate: '2026-07-15',
+        wardrobeFingerprint: snapshotValue.wardrobeFingerprint,
+        attemptCounts: {},
+      };
+      let historyFailuresRemaining = failHistoryOnce ? 1 : 0;
+      const send = evaluateAppsScript<() => unknown>(
+        ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
+        'sendDailyBundleNowV2',
+        {
+          DAILY_V2: dailySelectionRuntime,
+          loadSnapshotV2_: () => snapshotValue,
+          assertFreshSnapshotV2_: () => snapshotValue,
+          loadPendingV2_: () => pending,
+          loadJobStateV2_: () => structuredClone(state),
+          saveJobStateV2_: (next: typeof state) => {
+            events.push(`state:${next.stage}`);
+            state = structuredClone(next);
+          },
+          getDailyPropertiesV2_: () => ({
+            getProperty: (key: string) => values[key] ?? null,
+            setProperty: (key: string, value: string) => {
+              events.push(`set:${key}:${value}`);
+              values[key] = value;
+            },
+            deleteProperty: (key: string) => {
+              events.push(`delete:${key}`);
+              delete values[key];
+            },
+          }),
+          getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+          applySnapshotSettingsV2_: (value: unknown) => value,
+          localDateV2_: () => '2026-07-15',
+          itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+          savedOutfitExactCopyV2_: () => null,
+          Utilities: emailUtilitiesFixture,
+          MailApp: { sendEmail: () => events.push('mail') },
+          loadHistoryV2_: () => structuredClone(history),
+          saveHistoryV2_: (next: unknown[]) => {
+            events.push('history');
+            if (historyFailuresRemaining > 0) {
+              historyFailuresRemaining -= 1;
+              throw new Error('history failed');
+            }
+            history = structuredClone(next);
+          },
+        },
+      );
+      return { events, history: () => history, send, state: () => state, values };
+    };
+
+    const successful = run();
+    expect(successful.send).not.toThrow();
+    expect(successful.events).toEqual([
+      'set:SEND_IN_PROGRESS_DATE_V2:2026-07-15',
+      'mail',
+      'set:LAST_SENT_DATE_V2:2026-07-15',
+      'history',
+      'state:sent',
+      'delete:SEND_IN_PROGRESS_DATE_V2',
+    ]);
+    expect(successful.state().stage).toBe('sent');
+    expect(successful.values).toEqual({ LAST_SENT_DATE_V2: '2026-07-15' });
+
+    const retry = run({}, true);
+    expect(retry.send).toThrowError('history failed');
+    expect(retry.values).toMatchObject({
+      LAST_SENT_DATE_V2: '2026-07-15',
+      SEND_IN_PROGRESS_DATE_V2: '2026-07-15',
+    });
+    expect(retry.send).not.toThrow();
+    expect(retry.events.filter(event => event === 'mail')).toHaveLength(1);
+    expect(retry.events.slice(-3)).toEqual(['history', 'state:sent', 'delete:SEND_IN_PROGRESS_DATE_V2']);
+
+    const alreadySent = run({ LAST_SENT_DATE_V2: '2026-07-15' });
+    expect(alreadySent.send).not.toThrow();
+    expect(alreadySent.events).toEqual(['history', 'state:sent', 'delete:SEND_IN_PROGRESS_DATE_V2']);
+    expect(alreadySent.history()).toHaveLength(1);
+  });
+
+  it('makes Scheduler reconcile an already-sent persisted bundle and reject ambiguity before generation', () => {
+    const run = (values: Record<string, string>) => {
+      const events: string[] = [];
+      const state = {
+        stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: '2026-07-15',
+        wardrobeFingerprint: 'wardrobe-v3', attemptCounts: {},
+      };
+      const pending = { bundle: { localDate: '2026-07-15', wardrobeFingerprint: 'wardrobe-v3' } };
+      const scheduler = evaluateAppsScript<() => { ok: boolean; skipped?: string; error?: string; stage?: string }>(
+        ['Scheduler.gs'],
+        'runDailyOutfitScheduler',
+        {
+          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
+          LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+          assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+          loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+          applySnapshotSettingsV2_: () => ({ timezone: 'UTC', deliveryHour: 6, deliveryMinute: 45, generationLeadMinutes: 75 }),
+          getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+          localDateV2_: () => '2026-07-15',
+          localMinutesV2_: () => 300,
+          getDailyPropertiesV2_: () => ({
+            getProperty: (key: string) => values[key] ?? null,
+          }),
+          getBooleanPropertyV2_: () => false,
+          assertUnambiguousDailySendStateV2_: (properties: { getProperty: (key: string) => string | null }) => {
+            const marker = properties.getProperty('SEND_IN_PROGRESS_DATE_V2');
+            const last = properties.getProperty('LAST_SENT_DATE_V2');
+            events.push('send-state');
+            if (marker && marker !== last) throw new Error(`Ambiguous daily email send state for ${marker}`);
+            return { marker, lastSentDate: last };
+          },
+          loadJobStateV2_: () => { events.push('load-state'); return structuredClone(state); },
+          loadPendingV2_: () => { events.push('load-pending'); return pending; },
+          validScheduledJobStateV2_: () => true,
+          validFullBundleReadyV2_: () => true,
+          finalizeSentBundleV2_: (_bundle: unknown, _snapshot: unknown, current: typeof state) => {
+            events.push('reconcile');
+            return { ...current, stage: 'sent' };
+          },
+          sendDailyBundleNowV2_: () => events.push('mail'),
+          saveJobStateV2_: () => events.push('state'),
+          sendOperationalAlertV2_: () => events.push('alert'),
+          console: { error: () => undefined },
+        },
+      );
+      return { events, scheduler };
+    };
+
+    const alreadySent = run({
+      LAST_SENT_DATE_V2: '2026-07-15',
+      SEND_IN_PROGRESS_DATE_V2: '2026-07-15',
+    });
+    expect(alreadySent.scheduler()).toEqual({ ok: true, skipped: 'already-sent', stage: 'sent' });
+    expect(alreadySent.events).toEqual(['send-state', 'load-state', 'load-pending', 'reconcile']);
+
+    const ambiguous = run({ SEND_IN_PROGRESS_DATE_V2: '2026-07-14' });
+    expect(ambiguous.scheduler()).toMatchObject({
+      ok: false,
+      error: 'Ambiguous daily email send state for 2026-07-14',
+    });
+    expect(ambiguous.events).toEqual(['send-state']);
   });
 
   it('causally blocks policy, prior-date, and fingerprint metadata drift at all three send endpoints', () => {
@@ -1315,7 +1599,7 @@ describe('Apps Script contracts', () => {
 
       expect(() => send()).not.toThrow();
       expect(events).toEqual(exported === 'sendDailyBundleNowV2'
-        ? ['mail', 'set:LAST_SENT_DATE_V2', 'sent-history']
+        ? ['set:SEND_IN_PROGRESS_DATE_V2', 'mail', 'set:LAST_SENT_DATE_V2', 'sent-history']
         : ['mail']);
     });
 
@@ -1365,7 +1649,7 @@ describe('Apps Script contracts', () => {
       },
     );
     expect(scheduledBaseline()).toMatchObject({ ok: true, stage: 'sent' });
-    expect(scheduledEvents).toEqual(['mail', 'set:LAST_SENT_DATE_V2', 'sent-history']);
+    expect(scheduledEvents).toEqual(['set:SEND_IN_PROGRESS_DATE_V2', 'mail', 'set:LAST_SENT_DATE_V2', 'sent-history']);
 
     dimensions.forEach(dimension => {
       ['sendDailyBundleNowV2', 'sendDailyTestEmailV2'].forEach(exported => {

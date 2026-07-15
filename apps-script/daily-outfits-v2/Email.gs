@@ -93,10 +93,13 @@ function sendDailyBundleNowV2_(bundle, snapshot, testMode, pending, expectedLoca
     throw new Error('No current quality-gated bundle is ready');
   }
   var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
-  if (!testMode && getDailyPropertiesV2_().getProperty('LAST_SENT_DATE_V2') === bundle.localDate) throw new Error('A daily outfit email was already sent for ' + bundle.localDate);
+  var properties = testMode ? null : getDailyPropertiesV2_();
+  var sendState = testMode ? null : assertUnambiguousDailySendStateV2_(properties, bundle.localDate);
+  if (!testMode && sendState.lastSentDate === bundle.localDate) throw new Error('A daily outfit email was already sent for ' + bundle.localDate);
   if (bundle.wardrobeFingerprint !== snapshot.wardrobeFingerprint) throw new Error('Bundle wardrobe fingerprint no longer matches the snapshot');
   var rendered = renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalDate);
   var subject = (testMode ? '[TEST] ' : '') + "Today's 3 outfits — " + Math.round(bundle.weather.highTemperatureF) + '° / ' + (bundle.weather.weatherPhrase || 'daily forecast');
+  if (!testMode) properties.setProperty('SEND_IN_PROGRESS_DATE_V2', bundle.localDate);
   MailApp.sendEmail({
     to: config.recipientEmail,
     subject: subject,
@@ -113,12 +116,21 @@ function sendDailyBundleNowV2() {
   var currentLocalDate = localDateV2_(new Date(), config.timezone);
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignored) {}
+  var properties = getDailyPropertiesV2_();
+  var sendState = assertUnambiguousDailySendStateV2_(properties, currentLocalDate);
   if (!validFullBundleReadyV2_(pending, snapshot, currentLocalDate)) {
     throw new Error('No quality-gated bundle is ready');
   }
+  var state = null;
+  try {
+    if (typeof loadJobStateV2_ === 'function') state = loadJobStateV2_();
+  } catch (_ignoredState) {}
+  if (sendState.lastSentDate === currentLocalDate) {
+    finalizeSentBundleV2_(pending.bundle, snapshot, state);
+    return pending.bundle;
+  }
   sendDailyBundleNowV2_(pending.bundle, snapshot, false, pending, currentLocalDate);
-  getDailyPropertiesV2_().setProperty('LAST_SENT_DATE_V2', pending.bundle.localDate);
-  recordSentBundleV2_(pending.bundle, snapshot);
+  finalizeSentBundleV2_(pending.bundle, snapshot, state);
   return pending.bundle;
 }
 

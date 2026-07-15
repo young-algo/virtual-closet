@@ -201,7 +201,18 @@ function runDailyOutfitScheduler() {
     var deliveryMinutes = config.deliveryHour * 60 + config.deliveryMinute;
     var generationStart = deliveryMinutes - config.generationLeadMinutes;
     if (config.enabled === false) return { ok: true, skipped: 'daily-email-disabled' };
-    if (getDailyPropertiesV2_().getProperty('LAST_SENT_DATE_V2') === localDate) return { ok: true, skipped: 'already-sent' };
+    var properties = getDailyPropertiesV2_();
+    var sendState = assertUnambiguousDailySendStateV2_(properties, localDate);
+    if (sendState.lastSentDate === localDate) {
+      try { state = loadJobStateV2_(); } catch (_ignoredSentState) { state = null; }
+      var sentPending = null;
+      try { sentPending = loadPendingV2_(); } catch (_ignoredSentPending) {}
+      if (!validFullBundleReadyV2_(sentPending, snapshot, localDate)) {
+        throw new Error('Sent date has no current persisted bundle to reconcile');
+      }
+      state = finalizeSentBundleV2_(sentPending.bundle, snapshot, state);
+      return { ok: true, skipped: 'already-sent', stage: state && state.stage };
+    }
     if (currentMinutes < generationStart) return { ok: true, skipped: 'before-generation-window' };
 
     try { state = loadJobStateV2_(); } catch (_ignored) { state = null; }
@@ -218,11 +229,7 @@ function runDailyOutfitScheduler() {
         throw new Error('Bundle-ready state has no current persisted bundle');
       }
       sendDailyBundleNowV2_(advanced.pending.bundle, snapshot, false, advanced.pending, localDate);
-      getDailyPropertiesV2_().setProperty('LAST_SENT_DATE_V2', localDate);
-      recordSentBundleV2_(advanced.pending.bundle, snapshot);
-      state.stage = 'sent';
-      state.updatedAt = Date.now();
-      saveJobStateV2_(state);
+      state = finalizeSentBundleV2_(advanced.pending.bundle, snapshot, state);
     }
     return { ok: true, stage: state.stage };
   } catch (error) {

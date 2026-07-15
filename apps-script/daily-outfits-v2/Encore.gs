@@ -196,6 +196,67 @@ function encoreLastSurfacedDateV2_(outfitId, history) {
   return dates.length ? dates[dates.length - 1] : null;
 }
 
+function validDislikedEncoreIdsV2_(value) {
+  if (!validEncoreArrayV2_(value)) return false;
+  var previous = null;
+  for (var index = 0; index < value.length; index += 1) {
+    var candidateId = value[index];
+    if (typeof candidateId !== 'string' || !/^encore:.+/.test(candidateId) ||
+        (previous !== null && previous >= candidateId)) return false;
+    previous = candidateId;
+  }
+  return true;
+}
+
+function parseDislikedEncoreIdsV2_(raw) {
+  if (raw === null || raw === undefined || raw === '') return [];
+  var parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_ignored) {
+    throw new Error('Corrupt DISLIKED_ENCORE_IDS_V2: expected a sorted JSON array');
+  }
+  if (!validDislikedEncoreIdsV2_(parsed)) {
+    throw new Error('Corrupt DISLIKED_ENCORE_IDS_V2: expected unique sorted encore candidate ids');
+  }
+  return parsed.slice();
+}
+
+function mergeDislikedEncoreIdsV2_(ledger, snapshot, retained) {
+  var merged = Object.create(null);
+  ledger.forEach(function(candidateId) { merged[candidateId] = true; });
+  var addSignal = function(signal) {
+    if (!validEncoreFeedbackSignalV2_(signal) || signal.value !== 'disliked' ||
+        !/^encore:.+/.test(signal.candidateId)) return;
+    merged[signal.candidateId] = true;
+  };
+  retained.forEach(function(entry) { entry.feedback.forEach(addSignal); });
+  if (ownEncoreKeyV2_(snapshot, 'dailyFeedback')) {
+    if (!validEncoreArrayV2_(snapshot.dailyFeedback)) {
+      throw new Error('Invalid snapshot dailyFeedback for Encore selection');
+    }
+    snapshot.dailyFeedback.forEach(addSignal);
+  }
+  return Object.keys(merged).sort();
+}
+
+function mostRecentHistoryEncoreDateV2_(retained) {
+  var dates = retained.filter(function(entry) {
+    return ownEncoreKeyV2_(entry, 'encore') && entry.encore !== null;
+  }).map(function(entry) { return entry.localDate; });
+  dates.sort();
+  return dates.length ? dates[dates.length - 1] : null;
+}
+
+function laterValidEncoreDateV2_(propertyDate, historyDate) {
+  if (propertyDate === null || propertyDate === undefined || propertyDate === '') return historyDate;
+  if (encoreCalendarOrdinalV2_(propertyDate) === null) {
+    throw new Error('Invalid LAST_ENCORE_DATE_V2; Encore cadence is uncertain');
+  }
+  if (!historyDate) return propertyDate;
+  return propertyDate > historyDate ? propertyDate : historyDate;
+}
+
 function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
   try {
     if (!validEncoreRecordV2_(snapshot) || !validEncoreWeatherV2_(weather) ||
@@ -212,6 +273,11 @@ function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
 
     var retained = encoreHistoricalEntriesV2_(history, weather.localDate);
     if (!retained) return null;
+    var dislikedEncoreIds = Object.create(null);
+    if (ownEncoreKeyV2_(snapshot, 'dislikedEncoreIdsV2')) {
+      if (!validDislikedEncoreIdsV2_(snapshot.dislikedEncoreIdsV2)) return null;
+      snapshot.dislikedEncoreIdsV2.forEach(function(candidateId) { dislikedEncoreIds[candidateId] = true; });
+    }
     var recentCoreKeys = Object.create(null);
     retained.forEach(function(entry) {
       var age = encoreDayDistanceV2_(entry.localDate, weather.localDate, timezone);
@@ -228,7 +294,7 @@ function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
       var coreKey = encoreCoreKeyV2_(outfit.itemIds, snapshot);
       if (!coreKey || ownEncoreKeyV2_(recentCoreKeys, coreKey)) return false;
       var candidateId = 'encore:' + outfit.id;
-      var disliked = retained.some(function(entry) {
+      var disliked = ownEncoreKeyV2_(dislikedEncoreIds, candidateId) || retained.some(function(entry) {
         if (!ownEncoreKeyV2_(entry, 'feedback') || !validEncoreArrayV2_(entry.feedback)) return false;
         return entry.feedback.some(function(signal) {
           return validEncoreRecordV2_(signal) && ownEncoreKeyV2_(signal, 'candidateId') &&
@@ -264,8 +330,21 @@ function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
 function selectEncoreForBundleV2_(snapshot, weather, history) {
   try {
     var retained = Array.isArray(history) ? history : loadHistoryV2_();
-    var lastEncoreDate = getDailyPropertiesV2_().getProperty('LAST_ENCORE_DATE_V2');
-    return selectEncoreV2_(snapshot, weather, retained, lastEncoreDate);
+    var properties = getDailyPropertiesV2_();
+    var ledger = parseDislikedEncoreIdsV2_(properties.getProperty('DISLIKED_ENCORE_IDS_V2'));
+    if (!validEncoreRecordV2_(snapshot) || !validEncoreWeatherV2_(weather)) return null;
+    var historical = encoreHistoricalEntriesV2_(retained, weather.localDate);
+    if (!historical) return null;
+    var mergedLedger = mergeDislikedEncoreIdsV2_(ledger, snapshot, historical);
+    if (JSON.stringify(mergedLedger) !== JSON.stringify(ledger)) {
+      properties.setProperty('DISLIKED_ENCORE_IDS_V2', JSON.stringify(mergedLedger));
+    }
+    var lastEncoreDate = laterValidEncoreDateV2_(
+      properties.getProperty('LAST_ENCORE_DATE_V2'),
+      mostRecentHistoryEncoreDateV2_(historical)
+    );
+    var selectorSnapshot = Object.assign({}, snapshot, { dislikedEncoreIdsV2: mergedLedger });
+    return selectEncoreV2_(selectorSnapshot, weather, retained, lastEncoreDate);
   } catch (_ignored) {
     return null;
   }

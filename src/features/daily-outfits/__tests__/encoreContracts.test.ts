@@ -553,7 +553,10 @@ describe('Encore bundle assembly and persistence', () => {
   it('loads retained history once for compact Scheduler context but not for an explicit retained array', () => {
     const retained = [{ localDate: '2020-01-01', recommendations: [], feedback: [{ candidateId: 'encore:older', value: 'disliked' }] }];
     let loads = 0;
-    const properties = { getProperty: (key: string) => key === 'LAST_ENCORE_DATE_V2' ? null : null };
+    const properties = {
+      getProperty: (key: string) => key === 'LAST_ENCORE_DATE_V2' ? null : null,
+      setProperty: () => undefined,
+    };
     const buildBundle = evaluateAppsScript<(curatedValue: object, snapshotValue: object, weatherValue: object, historyValue: unknown) => Record<string, unknown>>(
       ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'],
       'buildBundleV2_',
@@ -574,6 +577,133 @@ describe('Encore bundle assembly and persistence', () => {
     expect(loads).toBe(1);
     expect(explicit.encore).toEqual(expect.objectContaining({ outfitId: 'older' }));
     expect(explicit.recommendations).toEqual(curated.recommendations);
+  });
+
+  it('derives cadence from the later valid property or most recent retained-history Encore', () => {
+    const recentEncoreHistory = [{
+      localDate: '2026-07-10',
+      recommendations: [],
+      encore: {
+        outfitId: 'historical-only', candidateId: 'encore:historical-only',
+        itemIds: ['historical-top', 'historical-bottom', 'historical-shoe'],
+      },
+      feedback: [],
+    }];
+    const selectForBundle = (lastEncoreDate: string | null) => evaluateAppsScript<(
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object[],
+    ) => Record<string, unknown> | null>(
+      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      'selectEncoreForBundleV2_',
+      {
+        getDailyPropertiesV2_: () => ({
+          getProperty: (key: string) => key === 'LAST_ENCORE_DATE_V2' ? lastEncoreDate : null,
+          setProperty: () => undefined,
+        }),
+      },
+    );
+
+    expect(selectForBundle(null)(snapshot, weather, recentEncoreHistory)).toBeNull();
+    expect(selectForBundle('2026-06-01')(snapshot, weather, recentEncoreHistory)).toBeNull();
+    expect(selectForBundle('not-a-date')(snapshot, weather, [])).toBeNull();
+  });
+
+  it('persists a sorted permanent Encore-dislike ledger and honors it after history is pruned', () => {
+    const values: Record<string, string> = {};
+    const writes: string[] = [];
+    const selectForBundle = evaluateAppsScript<(
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object[],
+    ) => Record<string, unknown> | null>(
+      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      'selectEncoreForBundleV2_',
+      {
+        getDailyPropertiesV2_: () => ({
+          getProperty: (key: string) => values[key] ?? null,
+          setProperty: (key: string, value: string) => {
+            writes.push(`${key}:${value}`);
+            values[key] = value;
+          },
+        }),
+      },
+    );
+    const withSnapshotDislike = {
+      ...snapshot,
+      dailyFeedback: [{
+        localDate: '2026-05-01', candidateId: 'encore:older', value: 'disliked',
+      }],
+    };
+
+    expect(selectForBundle(withSnapshotDislike, weather, []))
+      .toEqual(expect.objectContaining({ outfitId: 'newer' }));
+    expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:older"]');
+
+    expect(selectForBundle(snapshot, weather, []))
+      .toEqual(expect.objectContaining({ outfitId: 'newer' }));
+    expect(writes).toEqual(['DISLIKED_ENCORE_IDS_V2:["encore:older"]']);
+
+    const retainedDislike = [{
+      localDate: '2026-05-01', recommendations: [],
+      feedback: [{ candidateId: 'encore:newer', value: 'disliked' }],
+    }];
+    expect(selectForBundle(snapshot, weather, retainedDislike)).toBeNull();
+    expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:newer","encore:older"]');
+  });
+
+  it('makes new permanent dislikes durable before an uncertain cadence property suppresses Encore', () => {
+    const values: Record<string, string> = { LAST_ENCORE_DATE_V2: 'not-a-date' };
+    const selectForBundle = evaluateAppsScript<(
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object[],
+    ) => Record<string, unknown> | null>(
+      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      'selectEncoreForBundleV2_',
+      {
+        getDailyPropertiesV2_: () => ({
+          getProperty: (key: string) => values[key] ?? null,
+          setProperty: (key: string, value: string) => { values[key] = value; },
+        }),
+      },
+    );
+
+    expect(selectForBundle({
+      ...snapshot,
+      dailyFeedback: [{
+        localDate: '2026-05-01', candidateId: 'encore:older', value: 'disliked',
+      }],
+    }, weather, [])).toBeNull();
+    expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:older"]');
+  });
+
+  it('suppresses optional Encore without overwrite when its strict permanent-dislike ledger parser detects corruption', () => {
+    const writes: string[] = [];
+    const selectForBundle = evaluateAppsScript<(
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object[],
+    ) => Record<string, unknown> | null>(
+      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      'selectEncoreForBundleV2_',
+      {
+        getDailyPropertiesV2_: () => ({
+          getProperty: (key: string) => key === 'DISLIKED_ENCORE_IDS_V2' ? '{"encore:older":true}' : null,
+          setProperty: (key: string) => writes.push(key),
+        }),
+      },
+    );
+
+    expect(selectForBundle(snapshot, weather, [])).toBeNull();
+    expect(writes).toEqual([]);
+    const parseLedger = evaluateAppsScript<(raw: string) => string[]>(
+      ['Encore.gs'],
+      'parseDislikedEncoreIdsV2_',
+    );
+    expect(() => parseLedger('{"encore:older":true}'))
+      .toThrowError(/Corrupt DISLIKED_ENCORE_IDS_V2/);
+    expect(apps('Encore.gs')).toMatch(/function selectEncoreV2_\(snapshot, weather, history, lastEncoreDate\)/);
   });
 
   it('passes the existing history to all synchronous, manual, and scheduled bundle builds', () => {
@@ -719,6 +849,51 @@ describe('Encore bundle assembly and persistence', () => {
     expect(events).toEqual(['history']);
   });
 
+  it('repairs the exact sent record idempotently without changing its original sentAt', () => {
+    const bundle = {
+      localDate: '2026-07-14', generatedAt: 100,
+      weather: { highTemperatureF: 70, maxRainProbability: 0, layerGuidance: 'none' },
+      recommendations: curated.recommendations,
+      encore: { outfitId: 'older', name: 'older', itemIds: ['top', 'bottom', 'shoe'], candidateId: 'encore:older' },
+    };
+    let history = [{
+      localDate: '2026-07-14', weatherKey: 'wrong', generatedAt: 1, sentAt: 123,
+      recommendations: [{ candidateId: 'wrong' }], encore: null,
+      feedback: [{ candidateId: 'encore:older', value: 'liked' }],
+    }];
+    const cadence: string[] = [];
+    const record = evaluateAppsScript<(bundleValue: object, snapshotValue: object) => void>(
+      ['JobState.gs'],
+      'recordSentBundleV2_',
+      {
+        DAILY_V2: daily,
+        Date: { now: () => 999 },
+        loadHistoryV2_: () => clone(history),
+        saveHistoryV2_: (next: typeof history) => { history = clone(next); },
+        getDailyPropertiesV2_: () => ({
+          setProperty: (key: string, value: string) => cadence.push(`${key}:${value}`),
+        }),
+      },
+    );
+
+    record(bundle, { settings: { maxDailyHistoryDays: 30 } });
+    record(bundle, { settings: { maxDailyHistoryDays: 30 } });
+
+    expect(history).toEqual([{
+      localDate: '2026-07-14',
+      weatherKey: '70|0|none',
+      generatedAt: 100,
+      sentAt: 123,
+      recommendations: curated.recommendations,
+      encore: bundle.encore,
+      feedback: [{ candidateId: 'encore:older', value: 'liked' }],
+    }]);
+    expect(cadence).toEqual([
+      'LAST_ENCORE_DATE_V2:2026-07-14',
+      'LAST_ENCORE_DATE_V2:2026-07-14',
+    ]);
+  });
+
   it('rejects persisted Encore identity and eligibility mutations without reselecting', () => {
     const validate = evaluateAppsScript<(encore: object, snapshotValue: object, weatherValue: object) => boolean>(
       ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
@@ -770,6 +945,7 @@ describe('Encore bundle assembly and persistence', () => {
         localMinutesV2_: () => 405,
         getDailyPropertiesV2_: () => properties,
         getBooleanPropertyV2_: () => false,
+        assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         loadJobStateV2_: () => ({
           stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
@@ -789,6 +965,15 @@ describe('Encore bundle assembly and persistence', () => {
           properties.setProperty('LAST_ENCORE_DATE_V2');
         },
         saveJobStateV2_: () => { events.push('state'); },
+        finalizeSentBundleV2_: (bundle: { encore: unknown }, _snapshot: unknown, current: Record<string, unknown>) => {
+          properties.setProperty('LAST_SENT_DATE_V2');
+          events.push('history-saved');
+          expect(bundle.encore).toBe(persistedEncore);
+          properties.setProperty('LAST_ENCORE_DATE_V2');
+          current.stage = 'sent';
+          events.push('state');
+          return current;
+        },
         sendOperationalAlertV2_: () => undefined,
         console: { error: () => undefined },
       },
@@ -825,6 +1010,7 @@ describe('Encore bundle assembly and persistence', () => {
           setProperty: (key: string) => events.push(`set:${key}`),
         }),
         getBooleanPropertyV2_: () => false,
+        assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         loadJobStateV2_: () => ({
           stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
@@ -916,6 +1102,7 @@ describe('Encore bundle assembly and persistence', () => {
           setProperty: (key: string) => events.push(`set:${key}`),
         }),
         getBooleanPropertyV2_: (key: string) => key === 'SHADOW_MODE',
+        assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         loadJobStateV2_: () => ({
           stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},

@@ -19,7 +19,7 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
    - `SEND_OPERATIONAL_ALERTS` — `true` or `false`
    - `SHADOW_MODE` — set `true` during the 3–5 morning rollout to generate and persist without sending
 
-   Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, and `LAST_ENCORE_DATE_V2` are managed by the script.
+   Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, `SEND_IN_PROGRESS_DATE_V2`, `LAST_ENCORE_DATE_V2`, and `DISLIKED_ENCORE_IDS_V2` are managed by the script. Do not pre-populate or routinely edit them.
 
 4. Deploy as a Web app that executes as the owner. Copy its `/exec` URL into **Wardrobe → Daily email** in the React app.
 5. Run `installDailyOutfitTrigger()` once from the Apps Script editor and approve Drive, external-request, email, and trigger scopes.
@@ -34,7 +34,7 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 
 ## Policy-v3 shadow rollout
 
-Deploy every `.gs` file, including `Selection.gs` and `Encore.gs`. Set `SHADOW_MODE=true` and keep automatic delivery disabled for 3–5 mornings.
+Deploy every `.gs` file, including `Selection.gs` and `Encore.gs`. For the 3–5-morning shadow window, keep both the React **Daily Email** toggle and the installed Apps Script trigger enabled, and set only `SHADOW_MODE=true`. Shadow mode continues scheduled generation and persistence while suppressing the real email send.
 
 - In **Wardrobe → Daily email**, run **Build visual inventory**, **Sync now**, then **Validate server snapshot** in that exact order. After Build, require `116 items` and a new `wardrobeFingerprint` that reflects the enriched profiles. After Sync, require sync state `synced` with that same fingerprint. Validation must report exactly `Stored snapshot passes every structural check.`
 - Use **Generate test bundle**, or call `generateDailyBundleStepV2` exactly five times. The returned stages must be `weather-ready`, `planners-ready`, `critic-ready`, `selection-ready`, then `bundle-ready`, in order. At `bundle-ready`, inspect the persisted pending bundle: it must contain exactly three recommendations whose real persisted `candidateId` values match the corresponding `pending.selectedCandidates`, one each for `easy`, `polished-casual`, and `expressive`; if Encore is present, its `candidateId` must begin `encore:`.
@@ -44,9 +44,18 @@ Deploy every `.gs` file, including `Selection.gs` and `Encore.gs`. Set `SHADOW_M
 - Confirm the job fails closed without sending when two targeted re-plan rounds cannot produce a feasible set.
 - Reproduce both email cases. With Encore, send/render the current pending bundle using **Send test email** and confirm the three-look order, exact-color hooks, item strip, HTML/plain-text parity, and the static Encore copy `One of yours, back in rotation for today's weather.` after the trio; Encore must contain no model-generated rationale. Without Encore, separately render an otherwise valid Encore-absent bundle through `renderDailyEmailV2_` in the Apps Script editor or test harness; require no Encore heading, Encore images, or blank Encore section, with HTML/plain-text parity intact. Confirm that both test rendering and test sending leave `LAST_SENT_DATE_V2` and `LAST_ENCORE_DATE_V2` unchanged.
 - Perform browser QA at desktop width and below `760px`, checking card alignment, Encore identity and feedback controls, imagery, stacking, and horizontal overflow.
-- Enable delivery only after the generated trio, copy, email layout, optional Encore, diagnostics, re-plan behavior, and fail-closed behavior pass review across the 3–5 morning shadow window.
+- Set `SHADOW_MODE=false` only after the generated trio, copy, email layout, optional Encore, diagnostics, re-plan behavior, and fail-closed behavior pass review across the 3–5 morning shadow window. Leave the **Daily Email** toggle and trigger enabled throughout.
 
 For each morning, record critic floor clustering, `selection.path`, eligible counts, replanned archetypes, stage attempt counts, final trio quality, repair use, and Encore cadence. The system intentionally sends no outfit email when weather, snapshot freshness, model, critic, curator, or deterministic quality gates fail.
+
+## Ambiguous-send recovery
+
+If `SEND_IN_PROGRESS_DATE_V2` remains set and does not match `LAST_SENT_DATE_V2`, the scheduler and manual real-send entry point fail closed because Apps Script cannot prove whether Gmail accepted the message. Inspect the mailbox for the marker date before changing either property:
+
+- If the email was delivered, set `LAST_SENT_DATE_V2` to the exact `SEND_IN_PROGRESS_DATE_V2` date, then rerun the scheduler or **Send now**. The script reconciles the persisted bundle into history, Encore cadence, and sent job state, then clears the marker without sending again.
+- If the email was definitely not delivered, delete `SEND_IN_PROGRESS_DATE_V2`, then rerun. The script may perform a new real send.
+
+Do not delete an unresolved marker merely because it is from a prior day; stale unresolved markers also fail closed until the mailbox check establishes which recovery path is safe.
 
 ## Diagnostics
 
