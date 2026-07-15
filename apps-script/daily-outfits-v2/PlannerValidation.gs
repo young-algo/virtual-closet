@@ -29,7 +29,7 @@ function validatePlannerResponseV2_(response, archetype, snapshot) {
     if (new Set(expected).size !== expected.length) errors.push(path + ' repeats an item within the outfit');
     if (!Array.isArray(candidate.itemIds) || candidate.itemIds.length !== expected.length || expected.some(function(id) { return candidate.itemIds.indexOf(id) < 0; })) errors.push(path + '.itemIds does not match its slots');
     if (!candidate.name || !candidate.styleSummary || !candidate.weatherSummary) errors.push(path + ' is missing customer-facing summary text');
-    if (!candidate.colorStrategy || candidate.colorStrategy.length < 30 || candidate.colorStrategy.length > 280) errors.push(path + '.colorStrategy must name a specific cross-item visual relationship');
+    if (!candidate.colorStrategy || candidate.colorStrategy.length < 30 || candidate.colorStrategy.length > 280) errors.push(path + '.colorStrategy must be 30–280 characters and name a specific cross-item visual relationship');
     if (!Array.isArray(candidate.potentialRisks)) errors.push(path + '.potentialRisks must be an array');
     var key = JSON.stringify(expected.slice().sort());
     if (Object.prototype.hasOwnProperty.call(combinations, key)) errors.push(path + ' exactly duplicates another candidate');

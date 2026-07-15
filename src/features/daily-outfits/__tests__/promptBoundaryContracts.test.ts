@@ -872,6 +872,83 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain('privateNote');
   });
 
+  it('exposes the validator color-strategy bounds in initial and repair prompts', () => {
+    const shortColorStrategy = 'Navy trim echoes white shoes.';
+    const plannerSnapshot = {
+      items: Array.from({ length: 5 }, (_, index) => [
+        { id: `top-${index}`, shortLabel: `T10${index}`, slot: 'top', profile: {} },
+        { id: `bottom-${index}`, shortLabel: `B10${index}`, slot: 'bottom', profile: {} },
+        { id: `shoe-${index}`, shortLabel: `S10${index}`, slot: 'shoes', profile: {} }
+      ]).flat(),
+      atlasPages: [],
+      tasteExamples: []
+    };
+    const invalidResponse = {
+      archetype: 'easy',
+      candidates: Array.from({ length: 5 }, (_, index) => ({
+        candidateId: `easy-${index}`,
+        archetype: 'easy',
+        topId: `top-${index}`,
+        bottomId: `bottom-${index}`,
+        shoeId: `shoe-${index}`,
+        itemIds: [`top-${index}`, `bottom-${index}`, `shoe-${index}`],
+        name: `Candidate ${index}`,
+        styleSummary: 'The proportions align cleanly across all three pieces.',
+        colorStrategy: index === 0
+          ? shortColorStrategy
+          : 'Navy trim on the top echoes the white shoes across the outfit.',
+        weatherSummary: 'The pieces are comfortable across the full day.',
+        potentialRisks: [],
+        plannerConfidence: 0.9
+      }))
+    };
+    const repairedResponse = {
+      ...invalidResponse,
+      candidates: invalidResponse.candidates.map((candidate, index) => ({
+        ...candidate,
+        topId: `T10${index}`,
+        bottomId: `B10${index}`,
+        shoeId: `S10${index}`,
+        itemIds: [`T10${index}`, `B10${index}`, `S10${index}`],
+        colorStrategy: 'Navy trim on the top echoes the white shoes across the outfit.'
+      }))
+    };
+    let repairPrompt = '';
+    const planner = evaluateAppsScript<{
+      plannerPartsV2_: (archetype: string, snapshot: object, weather: object, history: object) => Array<{ text?: string }>;
+      validatePlannerResponseV2_: (response: object, archetype: string, snapshot: object) => string[];
+      repairPlannerResponseV2_: (
+        archetype: string,
+        response: object,
+        errors: string[],
+        snapshot: object,
+        weather: object,
+        history: object
+      ) => object;
+    }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'PlannerValidation.gs', 'Planner.gs'],
+      '({ plannerPartsV2_, validatePlannerResponseV2_, repairPlannerResponseV2_ })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          repairPrompt = parts.map(part => part.text || '').join('\n');
+          return repairedResponse;
+        }
+      }
+    );
+
+    expect(shortColorStrategy).toHaveLength(29);
+    const initialPrompt = planner.plannerPartsV2_('easy', plannerSnapshot, richWeather, richHistory)[0].text || '';
+    const errors = planner.validatePlannerResponseV2_(invalidResponse, 'easy', plannerSnapshot);
+    planner.repairPlannerResponseV2_('easy', invalidResponse, errors, plannerSnapshot, richWeather, richHistory);
+
+    const contract = 'colorStrategy must be 30–280 characters and name a specific cross-item visual relationship';
+    expect(errors).toEqual([`candidate[0].${contract}`]);
+    expect(initialPrompt).toContain(contract);
+    expect(repairPrompt).toContain(`candidate[0].${contract}`);
+  });
+
   it('sanitizes every item-derived string in the planner complete item index', () => {
     const staleUserId = 'user_closet_1888888888888';
     const staleItemId = 'item_archived_1888888888887';
