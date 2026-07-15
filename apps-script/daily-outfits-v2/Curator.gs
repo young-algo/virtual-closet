@@ -70,11 +70,16 @@ function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
 }
 
 function runCuratorV2() {
+  var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
+  var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+  var localDate = localDateV2_(new Date(), config.timezone);
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignored) {}
-  assertDeterministicSelectionReadyV2_(pending);
+  assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint);
   assertPersistedSelectionContextV2_(pending);
-  var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
+  if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection)) {
+    throw new Error('Deterministic selection must be ready');
+  }
   var curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   pending.curated = curated;
   pending.updatedAt = Date.now();

@@ -12,7 +12,10 @@ function archetypeEmailLabelV2_(value) {
   return value === 'polished-casual' ? 'POLISHED CASUAL' : value.toUpperCase();
 }
 
-function renderDailyEmailV2_(bundle, snapshot, testMode) {
+function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalDate) {
+  if (!validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) || pending.bundle !== bundle) {
+    throw new Error('No current quality-gated bundle is ready');
+  }
   var itemMap = itemMapV2_(snapshot);
   var inlineImages = {};
   var plain = ['WARDROBE', bundle.localDate + ' · ' + bundle.weather.locationLabel, '', Math.round(bundle.weather.morningFeelsLikeF) + '° morning · ' + Math.round(bundle.weather.highTemperatureF) + '° high · ' + Math.round(bundle.weather.maxRainProbability) + '% rain', bundle.weather.plainEnglishSummary, ''];
@@ -51,12 +54,14 @@ function renderDailyEmailV2_(bundle, snapshot, testMode) {
   return { html: html, plain: plain.join('\n'), inlineImages: inlineImages };
 }
 
-function sendDailyBundleNowV2_(bundle, snapshot, testMode) {
-  if (!validCurrentBundlePayloadV2_(bundle)) throw new Error('No current-policy bundle is ready');
+function sendDailyBundleNowV2_(bundle, snapshot, testMode, pending, expectedLocalDate) {
+  if (!validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) || pending.bundle !== bundle) {
+    throw new Error('No current quality-gated bundle is ready');
+  }
   var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
   if (!testMode && getDailyPropertiesV2_().getProperty('LAST_SENT_DATE_V2') === bundle.localDate) throw new Error('A daily outfit email was already sent for ' + bundle.localDate);
   if (bundle.wardrobeFingerprint !== snapshot.wardrobeFingerprint) throw new Error('Bundle wardrobe fingerprint no longer matches the snapshot');
-  var rendered = renderDailyEmailV2_(bundle, snapshot, testMode);
+  var rendered = renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalDate);
   var subject = (testMode ? '[TEST] ' : '') + "Today's 3 outfits — " + Math.round(bundle.weather.highTemperatureF) + '° / ' + (bundle.weather.weatherPhrase || 'daily forecast');
   MailApp.sendEmail({
     to: config.recipientEmail,
@@ -74,11 +79,10 @@ function sendDailyBundleNowV2() {
   var currentLocalDate = localDateV2_(new Date(), config.timezone);
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignored) {}
-  if (!pending || !ownDailyJobKeyV2_(pending, 'bundle') ||
-      !validCurrentBundleV2_(pending, pending.bundle, currentLocalDate)) {
+  if (!validFullBundleReadyV2_(pending, snapshot, currentLocalDate)) {
     throw new Error('No quality-gated bundle is ready');
   }
-  sendDailyBundleNowV2_(pending.bundle, snapshot, false);
+  sendDailyBundleNowV2_(pending.bundle, snapshot, false, pending, currentLocalDate);
   getDailyPropertiesV2_().setProperty('LAST_SENT_DATE_V2', pending.bundle.localDate);
   recordSentBundleV2_(pending.bundle, snapshot);
   return pending.bundle;
@@ -90,11 +94,10 @@ function sendDailyTestEmailV2() {
   var currentLocalDate = localDateV2_(new Date(), config.timezone);
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignored) {}
-  if (!pending || !ownDailyJobKeyV2_(pending, 'bundle') ||
-      !validCurrentBundleV2_(pending, pending.bundle, currentLocalDate)) {
+  if (!validFullBundleReadyV2_(pending, snapshot, currentLocalDate)) {
     throw new Error('Generate a quality-gated test bundle first');
   }
-  sendDailyBundleNowV2_(pending.bundle, snapshot, true);
+  sendDailyBundleNowV2_(pending.bundle, snapshot, true, pending, currentLocalDate);
 }
 
 function sendOperationalAlertV2_(reason, detail) {

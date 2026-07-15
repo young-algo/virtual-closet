@@ -58,12 +58,17 @@ function repairFinalBundleV2_(curated, errors, snapshot, weather, history, selec
 }
 
 function repairFinalBundleV2() {
+  var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
+  var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+  var localDate = localDateV2_(new Date(), config.timezone);
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignored) {}
-  assertDeterministicSelectionReadyV2_(pending);
+  assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint);
   assertPersistedSelectionContextV2_(pending);
+  if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection)) {
+    throw new Error('Deterministic selection must be ready');
+  }
   if (!ownDailyJobKeyV2_(pending, 'curated') || !pending.curated) throw new Error('No invalid curated response is ready');
-  var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var errors = validateFinalBundleSafelyV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   if (!errors.length) return pending.curated;
   pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
