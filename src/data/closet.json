@@ -6,7 +6,25 @@
     "category": "Hoodies",
     "color": "White",
     "image": "/closet/user_user_1783385585982.jpg",
-    "description": "Maison Margiela collab. A light grey or white zip-up hooded sweatshirt featuring a tonal box logo on the chest and colorful paint splatter details across the body and sleeves."
+    "description": "Maison Margiela collab. A light grey or white zip-up hooded sweatshirt featuring a tonal box logo on the chest and colorful paint splatter details across the body and sleeves.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "red",
+        "green",
+        "blue",
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129471846
+    }
   },
   {
     "id": "item_staging_item_generic_men_s_solid_beige_pullover_hoodie",
@@ -15,7 +33,20 @@
     "color": "Beige",
     "brand": "Generic",
     "image": "/closet/item_staging_item_generic_men_s_solid_beige_pullover_hoodie.jpg",
-    "description": "A classic oversized pullover hoodie in a solid beige color, featuring a kangaroo pocket and matching drawstrings."
+    "description": "A classic oversized pullover hoodie in a solid beige color, featuring a kangaroo pocket and matching drawstrings.",
+    "dailyProfile": {
+      "silhouette": "oversized",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129491349
+    }
   },
   {
     "id": "item_staging_item_tesla_tesla_cybertruck_graphic_hoodie",
@@ -24,7 +55,22 @@
     "color": "White",
     "brand": "F*ck Elon",
     "image": "/closet/item_staging_item_tesla_tesla_cybertruck_graphic_hoodie.jpg",
-    "description": "A white pullover hoodie with a graphic print on the back showing a modern Tiananmen square with Tank Man blocking a line of Cybertrucks."
+    "description": "A white pullover hoodie with a graphic print on the back showing a modern Tiananmen square with Tank Man blocking a line of Cybertrucks.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129495734
+    }
   },
   {
     "id": "item_staging_item_levi_s_men_s_slim_fit_blue_jeans",
@@ -33,7 +79,23 @@
     "color": "Blue",
     "brand": "Levi's",
     "image": "/closet/item_staging_item_levi_s_men_s_slim_fit_blue_jeans.jpg",
-    "description": "Classic five-pocket denim jeans in a medium wash with a slim straight fit."
+    "description": "Classic five-pocket denim jeans in a medium wash with a slim straight fit.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "copper",
+        "silver"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129505567
+    }
   },
   {
     "id": "item_staging_item_nike_nike_acg_smith_summit_men_s_cargo_pants",
@@ -42,7 +104,24 @@
     "color": "Brown",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_acg_smith_summit_men_s_cargo_pants.jpg",
-    "description": "Outdoor utility trail pants with an integrated webbed belt, embroidered ACG logo, and articulated knees for mobility."
+    "description": "Outdoor utility trail pants with an integrated webbed belt, embroidered ACG logo, and articulated knees for mobility.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "white",
+        "silver",
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129516719
+    }
   },
   {
     "id": "item_staging_item_nike_nike_dri_fit_academy_short_sleeve_training_t_shirt",
@@ -51,7 +130,22 @@
     "color": "Grey",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_dri_fit_academy_short_sleeve_training_t_shirt.jpg",
-    "description": "Short-sleeve athletic training shirt featuring pink shoulder panels, black sleeve details, and a pink Swoosh logo on the chest."
+    "description": "Short-sleeve athletic training shirt featuring pink shoulder panels, black sleeve details, and a pink Swoosh logo on the chest.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "pink",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 5,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129537620
+    }
   },
   {
     "id": "item_staging_item_nike_nike_x_bode_striped_woven_pants",
@@ -60,7 +154,20 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_x_bode_striped_woven_pants.jpg",
-    "description": "Relaxed-fit striped track-style pants featuring vertical blue and cream stripes, an elastic waistband, and a small Nike swoosh logo on the left thigh."
+    "description": "Relaxed-fit striped track-style pants featuring vertical blue and cream stripes, an elastic waistband, and a small Nike swoosh logo on the left thigh.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "white",
+      "accentColors": [],
+      "patternIntensity": 2,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129542682
+    }
   },
   {
     "id": "item_staging_item_bode_nike_x_bode_striped_recreation_shorts",
@@ -69,7 +176,22 @@
     "color": "Black",
     "brand": "Bode",
     "image": "/closet/item_staging_item_bode_nike_x_bode_striped_recreation_shorts.jpg",
-    "description": "Satin-finish black athletic shorts featuring subtle tone-on-tone vertical shadow stripes, an elastic waistband, and an embroidered cream Bode logo on the left leg."
+    "description": "Satin-finish black athletic shorts featuring subtle tone-on-tone vertical shadow stripes, an elastic waistband, and an embroidered cream Bode logo on the left leg.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "gold"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129571941
+    }
   },
   {
     "id": "item_staging_item_jordan_jordan_gore_tex_colorblock_hooded_jacket",
@@ -78,7 +200,25 @@
     "color": "Black",
     "brand": "Jordan",
     "image": "/closet/item_staging_item_jordan_jordan_gore_tex_colorblock_hooded_jacket.jpg",
-    "description": "A weather-resistant hooded jacket featuring a bold retro colorblock design in black, teal, and purple, with Gore-Tex technology and Jordan branding."
+    "description": "A weather-resistant hooded jacket featuring a bold retro colorblock design in black, teal, and purple, with Gore-Tex technology and Jordan branding.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "teal",
+      "accentColors": [
+        "purple",
+        "pink",
+        "gold",
+        "white"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 2,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129581905
+    }
   },
   {
     "id": "item_staging_item_nocta_nike_nocta_track_pants",
@@ -87,7 +227,22 @@
     "color": "Teal",
     "brand": "NOCTA",
     "image": "/closet/item_staging_item_nocta_nike_nocta_track_pants.jpg",
-    "description": "Sporty nylon track pants in a teal colorway, featuring elastic cuffs and waistband with subtle branding."
+    "description": "Sporty nylon track pants in a teal colorway, featuring elastic cuffs and waistband with subtle branding.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129587280
+    }
   },
   {
     "id": "item_staging_item_nike_nike_club_quilted_coaches_jacket",
@@ -96,7 +251,22 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_club_quilted_coaches_jacket.jpg",
-    "description": "A classic button-up coaches jacket featuring an all-over quilted pattern with subtle logo detailing."
+    "description": "A classic button-up coaches jacket featuring an all-over quilted pattern with subtle logo detailing.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 2,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129606682
+    }
   },
   {
     "id": "item_staging_item_nike_nike_sportswear_club_woven_cargo_pants",
@@ -105,7 +275,22 @@
     "color": "Orange",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_sportswear_club_woven_cargo_pants.jpg",
-    "description": "Bright orange utility-style woven cargo pants featuring an integrated webbed belt with buckle, zippered cargo pockets, elastic cuffs, and a embroidered Nike logo."
+    "description": "Bright orange utility-style woven cargo pants featuring an integrated webbed belt with buckle, zippered cargo pockets, elastic cuffs, and a embroidered Nike logo.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129629128
+    }
   },
   {
     "id": "item_staging_item_nike_nike_life_chore_jacket",
@@ -114,7 +299,23 @@
     "color": "Yellow",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_life_chore_jacket.jpg",
-    "description": "A classic cotton canvas chore jacket with a button-down front, traditional collar, and utility patch pockets."
+    "description": "A classic cotton canvas chore jacket with a button-down front, traditional collar, and utility patch pockets.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "brown",
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129652004
+    }
   },
   {
     "id": "item_staging_item_jordan_jordan_brooklyn_fleece_hoodie",
@@ -123,7 +324,22 @@
     "color": "Pink",
     "brand": "Jordan",
     "image": "/closet/item_staging_item_jordan_jordan_brooklyn_fleece_hoodie.jpg",
-    "description": "A soft fleece pullover hoodie in light pink, featuring a front kangaroo pocket and a small embroidered Jumpman logo on the left chest."
+    "description": "A soft fleece pullover hoodie in light pink, featuring a front kangaroo pocket and a small embroidered Jumpman logo on the left chest.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129667550
+    }
   },
   {
     "id": "item_staging_item_nike_nike_acg_wolf_tree_full_zip_fleece_jacket",
@@ -132,7 +348,22 @@
     "color": "Grey",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_nike_acg_wolf_tree_full_zip_fleece_jacket.jpg",
-    "description": "A high-pile sherpa fleece jacket with a full-zip front, mock neck collar, contrasting side panels, and subtle ACG logo on the chest."
+    "description": "A high-pile sherpa fleece jacket with a full-zip front, mock neck collar, contrasting side panels, and subtle ACG logo on the chest.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 4,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129678156
+    }
   },
   {
     "id": "item_nike_perf_polo_grey",
@@ -141,7 +372,22 @@
     "color": "Grey",
     "brand": "Nike",
     "image": "/closet/item_nike_perf_polo_grey.jpg",
-    "description": "Solid light grey short-sleeve performance polo shirt with black Nike swoosh logo on the chest."
+    "description": "Solid light grey short-sleeve performance polo shirt with black Nike swoosh logo on the chest.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129691982
+    }
   },
   {
     "id": "user_1782964064364",
@@ -150,7 +396,22 @@
     "category": "Sweatshirts",
     "color": "Purple",
     "image": "/closet/user_user_1782964064364.jpg",
-    "description": "A vibrant purple fleece sweatshirt featuring contrasting hot pink side panels and a crewneck collar, adorned with the classic Nike ACG triangle logo on the chest."
+    "description": "A vibrant purple fleece sweatshirt featuring contrasting hot pink side panels and a crewneck collar, adorned with the classic Nike ACG triangle logo on the chest.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "pink",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129708160
+    }
   },
   {
     "id": "user_1782959086117",
@@ -159,7 +420,20 @@
     "category": "Polos",
     "color": "Green",
     "image": "/closet/user_user_1782959086117.jpg",
-    "description": "Short-sleeve knit polo shirt featuring a color-blocked vertical panel design in sage green and cream with a button-down front."
+    "description": "Short-sleeve knit polo shirt featuring a color-blocked vertical panel design in sage green and cream with a button-down front.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [],
+      "patternIntensity": 1,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129729301
+    }
   },
   {
     "id": "user_1782958672838",
@@ -168,7 +442,20 @@
     "category": "Pants",
     "color": "White",
     "image": "/closet/user_user_1782958672838.jpg",
-    "description": "Clean, minimalist white straight-leg pants featuring a classic five-pocket or chino design with belt loops."
+    "description": "Clean, minimalist white straight-leg pants featuring a classic five-pocket or chino design with belt loops.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129733641
+    }
   },
   {
     "id": "user_1782958473641",
@@ -177,7 +464,22 @@
     "category": "Shorts",
     "color": "Pink",
     "image": "/closet/user_user_1782958473641.jpg",
-    "description": "Coral and light pink vertically striped athletic shorts with an elastic drawstring waist and small embroidered swoosh logo."
+    "description": "Coral and light pink vertically striped athletic shorts with an elastic drawstring waist and small embroidered swoosh logo.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "orange",
+      "accentColors": [
+        "red"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129752503
+    }
   },
   {
     "id": "user_1782958298343",
@@ -186,7 +488,20 @@
     "category": "Shorts",
     "color": "Black",
     "image": "/closet/user_user_1782958298343.jpg",
-    "description": "Classic black chino-style shorts featuring a structured waistband with belt loops, side pockets, and a clean minimalist design."
+    "description": "Classic black chino-style shorts featuring a structured waistband with belt loops, side pockets, and a clean minimalist design.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129756449
+    }
   },
   {
     "id": "item_staging_item_be_kind_tee",
@@ -195,7 +510,24 @@
     "color": "Black",
     "brand": "Generic",
     "image": "/closet/item_staging_item_be_kind_tee.jpg",
-    "description": "An oversized, vintage-style mineral wash t-shirt in black. It features a small, distressed graphic on the left chest with two light blue oval 'eyes' and the text 'BE KIND TO YOUR MIND' arranged in a curve below them. The t-shirt has dropped shoulders and a relaxed fit."
+    "description": "An oversized, vintage-style mineral wash t-shirt in black. It features a small, distressed graphic on the left chest with two light blue oval 'eyes' and the text 'BE KIND TO YOUR MIND' arranged in a curve below them. The t-shirt has dropped shoulders and a relaxed fit.",
+    "dailyProfile": {
+      "silhouette": "oversized",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "blue",
+        "yellow",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129792058
+    }
   },
   {
     "id": "item_staging_item_taylor_stitch_waffle_blue",
@@ -204,7 +536,22 @@
     "color": "Blue",
     "brand": "Taylor Stitch",
     "image": "/closet/item_staging_item_taylor_stitch_waffle_blue.jpg",
-    "description": "A textured, long-sleeve shirt with two button-flap chest pockets and a spread collar, made from a heathered blue waffle-knit fabric."
+    "description": "A textured, long-sleeve shirt with two button-flap chest pockets and a spread collar, made from a heathered blue waffle-knit fabric.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "brown"
+      ],
+      "patternIntensity": 1,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129819270
+    }
   },
   {
     "id": "item_staging_item_taupe_long_sleeve",
@@ -213,7 +560,20 @@
     "color": "Taupe",
     "brand": "Muji",
     "image": "/closet/item_staging_item_taupe_long_sleeve.jpg",
-    "description": "An oversized, relaxed fit long sleeve t-shirt in a solid taupe color, featuring a single chest pocket and a ribbed crew neck. The garment has dropped shoulders and a loose, comfortable drape."
+    "description": "An oversized, relaxed fit long sleeve t-shirt in a solid taupe color, featuring a single chest pocket and a ribbed crew neck. The garment has dropped shoulders and a loose, comfortable drape.",
+    "dailyProfile": {
+      "silhouette": "oversized",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129825227
+    }
   },
   {
     "id": "item_staging_item_commanders_short_sleeve_hoodie",
@@ -222,7 +582,23 @@
     "color": "Burgundy",
     "brand": "Nike",
     "image": "/closet/item_staging_item_commanders_short_sleeve_hoodie.jpg",
-    "description": "A short-sleeved, hooded T-shirt in burgundy, featuring the Washington Commanders team logo and wordmark screen-printed on the chest. It has a relaxed fit and the Nike swoosh logo on the left sleeve. The fabric is a soft, lightweight cotton blend."
+    "description": "A short-sleeved, hooded T-shirt in burgundy, featuring the Washington Commanders team logo and wordmark screen-printed on the chest. It has a relaxed fit and the Nike swoosh logo on the left sleeve. The fabric is a soft, lightweight cotton blend.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "yellow",
+      "accentColors": [
+        "yellow",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129853704
+    }
   },
   {
     "id": "item_staging_item_nike_dri_fit_sweatshirt_blue",
@@ -231,7 +607,20 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_dri_fit_sweatshirt_blue.jpg",
-    "description": "A blue crewneck sweatshirt with raglan sleeves and a small embroidered Nike swoosh logo."
+    "description": "A blue crewneck sweatshirt with raglan sleeves and a small embroidered Nike swoosh logo.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129864017
+    }
   },
   {
     "id": "item_staging_item_nike_striped_v_neck_jersey",
@@ -240,7 +629,24 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_striped_v_neck_jersey.jpg",
-    "description": "A long-sleeve, V-neck soccer-style jersey in a deep blue color with horizontal white and black pinstripes. It features a grey embroidered Nike Swoosh on the right chest and a black and white ribbed collar and cuffs. There is a small jock tag detail near the bottom hem."
+    "description": "A long-sleeve, V-neck soccer-style jersey in a deep blue color with horizontal white and black pinstripes. It features a grey embroidered Nike Swoosh on the right chest and a black and white ribbed collar and cuffs. There is a small jock tag detail near the bottom hem.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "black",
+        "silver",
+        "red"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129874970
+    }
   },
   {
     "id": "item_staging_item_nike_dri_fit_training_tee_white",
@@ -249,7 +655,20 @@
     "color": "White",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_dri_fit_training_tee_white.jpg",
-    "description": "A classic white short-sleeve athletic t-shirt with a small tonal embroidered Nike Swoosh logo on the left chest, featuring flatlock stitching details on the sides and sleeves for a performance look."
+    "description": "A classic white short-sleeve athletic t-shirt with a small tonal embroidered Nike Swoosh logo on the left chest, featuring flatlock stitching details on the sides and sleeves for a performance look.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129881880
+    }
   },
   {
     "id": "item_staging_item_nike_dri_fit_adv_tee_blue",
@@ -258,7 +677,22 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_dri_fit_adv_tee_blue.jpg",
-    "description": "A short-sleeve light blue running t-shirt with advanced knit ventilation patterns and reflective swoosh logo."
+    "description": "A short-sleeve light blue running t-shirt with advanced knit ventilation patterns and reflective swoosh logo.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "silver"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 5,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129904902
+    }
   },
   {
     "id": "item_staging_item_nike_pattern_polo_golf_blue",
@@ -267,7 +701,23 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_pattern_polo_golf_blue.jpg",
-    "description": "A short-sleeve polo shirt featuring a blue textured geometric pattern, a classic collar, a two-button placket, and a white Nike Swoosh logo on the right chest. It has a standard fit."
+    "description": "A short-sleeve polo shirt featuring a blue textured geometric pattern, a classic collar, a two-button placket, and a white Nike Swoosh logo on the right chest. It has a standard fit.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "navy",
+      "accentColors": [
+        "white",
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129915573
+    }
   },
   {
     "id": "item_staging_item_stripe_perf_polo_blue",
@@ -276,7 +726,22 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_stripe_perf_polo_blue.jpg",
-    "description": "A short-sleeved performance fabric polo shirt with a light blue base and fine white horizontal micro-stripes. Features a self-fabric collar and a grey contrast inner placket with two white buttons. The fabric has a textured, moisture-wicking appearance."
+    "description": "A short-sleeved performance fabric polo shirt with a light blue base and fine white horizontal micro-stripes. Features a self-fabric collar and a grey contrast inner placket with two white buttons. The fabric has a textured, moisture-wicking appearance.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129934362
+    }
   },
   {
     "id": "item_staging_item_top_boy_jersey",
@@ -285,7 +750,23 @@
     "color": "white",
     "brand": "Nike",
     "image": "/closet/item_staging_item_top_boy_jersey.jpg",
-    "description": "A limited edition Nike football jersey in white with black and gold details, featuring the Hackney Wick FC crest and 'TOP BOY' sponsor logos."
+    "description": "A limited edition Nike football jersey in white with black and gold details, featuring the Hackney Wick FC crest and 'TOP BOY' sponsor logos.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "gold",
+        "red"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129956235
+    }
   },
   {
     "id": "item_staging_item_nike_polo_classic_black",
@@ -294,7 +775,20 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_polo_classic_black.jpg",
-    "description": "A classic black short-sleeve polo shirt featuring a pointed collar, a two-button placket with red tape detail, and a Nike Swoosh logo on the inner collar."
+    "description": "A classic black short-sleeve polo shirt featuring a pointed collar, a two-button placket with red tape detail, and a Nike Swoosh logo on the inner collar.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129963816
+    }
   },
   {
     "id": "item_staging_item_taylor_stitch_crater_beige",
@@ -303,7 +797,20 @@
     "color": "Beige",
     "brand": "Taylor Stitch",
     "image": "/closet/item_staging_item_taylor_stitch_crater_beige.jpg",
-    "description": "A beige textured waffle-knit long-sleeve utility shirt with two flap pockets and a button-down collar."
+    "description": "A beige textured waffle-knit long-sleeve utility shirt with two flap pockets and a button-down collar.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129975613
+    }
   },
   {
     "id": "item_staging_item_nike_moving_co_sweatshirt",
@@ -312,7 +819,23 @@
     "color": "Beige",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_moving_co_sweatshirt.jpg",
-    "description": "A cream-colored crewneck sweatshirt featuring a large green 'NIKE MOVING CO.' graphic and address text on the front. It includes a small green Swoosh logo and a utility zipper pocket on the left sleeve with a purple pull tab. The style is a relaxed, slightly oversized fit."
+    "description": "A cream-colored crewneck sweatshirt featuring a large green 'NIKE MOVING CO.' graphic and address text on the front. It includes a small green Swoosh logo and a utility zipper pocket on the left sleeve with a purple pull tab. The style is a relaxed, slightly oversized fit.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "green",
+      "accentColors": [
+        "purple",
+        "pink"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784129985168
+    }
   },
   {
     "id": "item_staging_item_uniqlo_rose_long_sleeve",
@@ -321,7 +844,20 @@
     "color": "Dusty Rose",
     "brand": "Uniqlo",
     "image": "/closet/item_staging_item_uniqlo_rose_long_sleeve.jpg",
-    "description": "A relaxed-fit, dusty rose crew neck long sleeve t-shirt with a small side hem split and a visible Uniqlo U neck tag."
+    "description": "A relaxed-fit, dusty rose crew neck long sleeve t-shirt with a small side hem split and a visible Uniqlo U neck tag.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130008739
+    }
   },
   {
     "id": "item_staging_item_turner_construction_tee",
@@ -330,7 +866,22 @@
     "color": "Blue",
     "brand": "Turner",
     "image": "/closet/item_staging_item_turner_construction_tee.jpg",
-    "description": "A royal blue short-sleeve crewneck t-shirt with a small, orange 'TURNER' logo on the left chest."
+    "description": "A royal blue short-sleeve crewneck t-shirt with a small, orange 'TURNER' logo on the left chest.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130020484
+    }
   },
   {
     "id": "item_staging_item_nike_rugby_striped_navy",
@@ -339,7 +890,20 @@
     "color": "Navy",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_rugby_striped_navy.jpg",
-    "description": "A vintage-style long sleeve polo shirt with thick navy blue and white horizontal stripes, a white twill collar, a three-button placket, and a classic Nike logo tag at the neck."
+    "description": "A vintage-style long sleeve polo shirt with thick navy blue and white horizontal stripes, a white twill collar, a three-button placket, and a classic Nike logo tag at the neck.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [],
+      "patternIntensity": 2,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130040554
+    }
   },
   {
     "id": "item_staging_item_commanders_long_sleeve_maroon",
@@ -348,7 +912,22 @@
     "color": "Maroon",
     "brand": "Nike",
     "image": "/closet/item_staging_item_commanders_long_sleeve_maroon.jpg",
-    "description": "A maroon heathered long-sleeve performance shirt featuring the Washington Commanders 'W' logo and 'Engineered For Washington Commanders' text in gold, with a gold NFL shield on the sleeve."
+    "description": "A maroon heathered long-sleeve performance shirt featuring the Washington Commanders 'W' logo and 'Engineered For Washington Commanders' text in gold, with a gold NFL shield on the sleeve.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130057629
+    }
   },
   {
     "id": "item_staging_item_multi_logo_tech_polo",
@@ -357,7 +936,25 @@
     "color": "White",
     "brand": "Generic",
     "image": "/closet/item_staging_item_multi_logo_tech_polo.jpg",
-    "description": "A white short-sleeved performance polo shirt featuring multiple prominent corporate logos (Amino Energy, Databricks, Zyn) printed on the chest and sleeves. Made from a moisture-wicking, textured performance fabric."
+    "description": "A white short-sleeved performance polo shirt featuring multiple prominent corporate logos (Amino Energy, Databricks, Zyn) printed on the chest and sleeves. Made from a moisture-wicking, textured performance fabric.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "blue",
+        "orange",
+        "yellow",
+        "red"
+      ],
+      "patternIntensity": 1,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130072295
+    }
   },
   {
     "id": "item_staging_item_nike_dri_fit_polo_blue",
@@ -366,7 +963,23 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_dri_fit_polo_blue.jpg",
-    "description": "A dusty blue short-sleeve polo shirt with a structured collar, a two-button placket, and subtle mesh texture."
+    "description": "A dusty blue short-sleeve polo shirt with a structured collar, a two-button placket, and subtle mesh texture.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "red",
+        "orange"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130087518
+    }
   },
   {
     "id": "item_staging_item_beige_twill_pants",
@@ -375,7 +988,20 @@
     "color": "Beige",
     "brand": "Levi's",
     "image": "/closet/item_staging_item_beige_twill_pants.jpg",
-    "description": "Classic five-pocket twill pants with a straight fit and a beige hue, featuring a button fly."
+    "description": "Classic five-pocket twill pants with a straight fit and a beige hue, featuring a button fly.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130095353
+    }
   },
   {
     "id": "item_staging_item_nike_heavyweight_pocket_tee_black",
@@ -384,7 +1010,20 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_staging_item_nike_heavyweight_pocket_tee_black.jpg",
-    "description": "A relaxed-fit, heavyweight cotton long-sleeve t-shirt with a single chest pocket and small embroidered tonal Nike logo. It features an oversized cut and a durable, vintage-washed look."
+    "description": "A relaxed-fit, heavyweight cotton long-sleeve t-shirt with a single chest pocket and small embroidered tonal Nike logo. It features an oversized cut and a durable, vintage-washed look.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130107803
+    }
   },
   {
     "id": "item_crewneck_sweatshirt",
@@ -393,7 +1032,20 @@
     "color": "Grey",
     "brand": "Nike",
     "image": "/closet/item_crewneck_sweatshirt.jpg",
-    "description": "Plain light grey crewneck sweatshirt with ribbed cuffs and hem."
+    "description": "Plain light grey crewneck sweatshirt with ribbed cuffs and hem.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130111197
+    }
   },
   {
     "id": "item_nike_total_90_jersey",
@@ -402,7 +1054,23 @@
     "color": "Olive",
     "brand": "Nike",
     "image": "/closet/item_nike_total_90_jersey.jpg",
-    "description": "Short-sleeved V-neck jersey in olive with a black collar and a circular gold '90' emblem on the front."
+    "description": "Short-sleeved V-neck jersey in olive with a black collar and a circular gold '90' emblem on the front.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "gold",
+        "brown"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130132397
+    }
   },
   {
     "id": "item_nike_grey_zip_hoodie",
@@ -411,7 +1079,22 @@
     "color": "Grey",
     "brand": "Nike",
     "image": "/closet/item_nike_grey_zip_hoodie.jpg",
-    "description": "A men's grey full-zip hoodie with a white drawstring and an embroidered Nike logo on the left chest, featuring a split kangaroo pocket."
+    "description": "A men's grey full-zip hoodie with a white drawstring and an embroidered Nike logo on the left chest, featuring a split kangaroo pocket.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130148931
+    }
   },
   {
     "id": "item_nike_golf_pants_blue",
@@ -420,7 +1103,22 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_nike_golf_pants_blue.jpg",
-    "description": "Light blue men's golf pants with a subtle textured pattern and a classic fit, worn by a model."
+    "description": "Light blue men's golf pants with a subtle textured pattern and a classic fit, worn by a model.",
+    "dailyProfile": {
+      "silhouette": "slim",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130158799
+    }
   },
   {
     "id": "item_nike_golf_polo_grey",
@@ -429,7 +1127,22 @@
     "color": "Light Grey",
     "brand": "Nike",
     "image": "/closet/item_nike_golf_polo_grey.jpg",
-    "description": "Short-sleeved light grey polo shirt with a classic collar and a three-button placket."
+    "description": "Short-sleeved light grey polo shirt with a classic collar and a three-button placket.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130167301
+    }
   },
   {
     "id": "item_nike_printed_shorts",
@@ -438,7 +1151,23 @@
     "color": "Multi-color",
     "brand": "Nike",
     "image": "/closet/item_nike_printed_shorts.jpg",
-    "description": "Men's athletic shorts with a red, black, white, and blue speckled or splatter-like pattern, featuring a red drawstring."
+    "description": "Men's athletic shorts with a red, black, white, and blue speckled or splatter-like pattern, featuring a red drawstring.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "red",
+      "accentColors": [
+        "white",
+        "blue"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130177058
+    }
   },
   {
     "id": "item_nike_golf_pants_grey",
@@ -447,7 +1176,20 @@
     "color": "Grey",
     "brand": "Nike",
     "image": "/closet/item_nike_golf_pants_grey.jpg",
-    "description": "Men's dark grey straight-leg golf pants worn by a model."
+    "description": "Men's dark grey straight-leg golf pants worn by a model.",
+    "dailyProfile": {
+      "silhouette": "slim",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130183049
+    }
   },
   {
     "id": "item_nike_checkered_jersey",
@@ -456,7 +1198,23 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_nike_checkered_jersey.jpg",
-    "description": "Men's long sleeve jersey featuring a black and grey checkered pattern with green Nike branding details."
+    "description": "Men's long sleeve jersey featuring a black and grey checkered pattern with green Nike branding details.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "green",
+        "white"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130200027
+    }
   },
   {
     "id": "item_uconn_basketball_jersey",
@@ -465,7 +1223,23 @@
     "color": "White",
     "brand": "Nike",
     "image": "/closet/item_uconn_basketball_jersey.jpg",
-    "description": "White sleeveless basketball jersey with UCONN text and number 5 in blue, featuring red and blue side stripes and collar trim."
+    "description": "White sleeveless basketball jersey with UCONN text and number 5 in blue, featuring red and blue side stripes and collar trim.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "navy",
+      "accentColors": [
+        "red",
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 5,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130207054
+    }
   },
   {
     "id": "item_nike_striped_shorts_navy",
@@ -474,7 +1248,22 @@
     "color": "Navy",
     "brand": "Nike",
     "image": "/closet/item_nike_striped_shorts_navy.jpg",
-    "description": "Navy blue athletic shorts with an orange elastic waistband and orange side stripes, featuring a small Nike logo on the left leg."
+    "description": "Navy blue athletic shorts with an orange elastic waistband and orange side stripes, featuring a small Nike logo on the left leg.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "orange",
+      "accentColors": [
+        "orange"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130232548
+    }
   },
   {
     "id": "item_nike_pattern_polo_blue",
@@ -483,7 +1272,22 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_nike_pattern_polo_blue.jpg",
-    "description": "Men's blue patterned short-sleeved polo shirt with a collar, three-button placket, and Nike swoosh logo on the chest."
+    "description": "Men's blue patterned short-sleeved polo shirt with a collar, three-button placket, and Nike swoosh logo on the chest.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130257439
+    }
   },
   {
     "id": "item_nike_acg_trail_pants",
@@ -492,7 +1296,22 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_nike_acg_trail_pants.jpg",
-    "description": "Men's black outdoor-style pants with an integrated brown buckle belt, elastic waist, tapered fit, and elasticated cuffs at the ankles. Features a white ACG logo on the right thigh."
+    "description": "Men's black outdoor-style pants with an integrated brown buckle belt, elastic waist, tapered fit, and elasticated cuffs at the ankles. Features a white ACG logo on the right thigh.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "brown",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130269523
+    }
   },
   {
     "id": "item_nike_camp_collar_black",
@@ -501,7 +1320,20 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_nike_camp_collar_black.jpg",
-    "description": "Men's relaxed fit short-sleeve black shirt with a wide camp collar and a single chest pocket."
+    "description": "Men's relaxed fit short-sleeve black shirt with a wide camp collar and a single chest pocket.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130275563
+    }
   },
   {
     "id": "item_nike_acg_goat_tee",
@@ -510,7 +1342,25 @@
     "color": "Taupe",
     "brand": "Nike ACG",
     "image": "/closet/item_nike_acg_goat_tee.jpg",
-    "description": "Short-sleeve t-shirt with a large graphic of a white goat on the back, set against a speckled blue background."
+    "description": "Short-sleeve t-shirt with a large graphic of a white goat on the back, set against a speckled blue background.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "blue",
+      "accentColors": [
+        "white",
+        "black",
+        "teal",
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130285623
+    }
   },
   {
     "id": "item_nike_acg_shorts_aqua",
@@ -519,7 +1369,23 @@
     "color": "Aqua",
     "brand": "Nike ACG",
     "image": "/closet/item_nike_acg_shorts_aqua.jpg",
-    "description": "Men's aqua blue nylon sport shorts with an elastic waistband, a black carabiner clip on the left side, and a white embroidered ACG logo on the right thigh."
+    "description": "Men's aqua blue nylon sport shorts with an elastic waistband, a black carabiner clip on the left side, and a white embroidered ACG logo on the right thigh.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white",
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130292972
+    }
   },
   {
     "id": "item_nike_golf_pants_black",
@@ -528,7 +1394,20 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_nike_golf_pants_black.jpg",
-    "description": "Men's black slim-fit athletic or golf pants, featuring a button closure and belt loops, worn with white golf shoes."
+    "description": "Men's black slim-fit athletic or golf pants, featuring a button closure and belt loops, worn with white golf shoes.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130298399
+    }
   },
   {
     "id": "item_nike_floral_shorts",
@@ -537,7 +1416,23 @@
     "color": "Blue",
     "brand": "Nike",
     "image": "/closet/item_nike_floral_shorts.jpg",
-    "description": "Blue athletic shorts featuring an all-over tropical pattern with orange fruits and white flowers, and a white drawstring closure."
+    "description": "Blue athletic shorts featuring an all-over tropical pattern with orange fruits and white flowers, and a white drawstring closure.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "orange",
+      "accentColors": [
+        "green",
+        "white"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130322205
+    }
   },
   {
     "id": "item_nike_acg_decomposition_tee",
@@ -546,7 +1441,25 @@
     "color": "Green",
     "brand": "Nike",
     "image": "/closet/item_nike_acg_decomposition_tee.jpg",
-    "description": "Short-sleeved graphic t-shirt featuring an environmental message and illustrations about the decomposition time of various items on the back."
+    "description": "Short-sleeved graphic t-shirt featuring an environmental message and illustrations about the decomposition time of various items on the back.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "orange",
+      "accentColors": [
+        "yellow",
+        "pink",
+        "blue",
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130331984
+    }
   },
   {
     "id": "item_nike_friendship_tournament_tee",
@@ -555,7 +1468,25 @@
     "color": "Cream",
     "brand": "Nike",
     "image": "/closet/item_nike_friendship_tournament_tee.jpg",
-    "description": "A cream short-sleeve t-shirt featuring a retro-style graphic print. The graphic depicts a soccer ball and cleats with text that reads 'FRIENDSHIP TOURNAMENT' and 'NIKE SPORTSWEAR' in blue and green. The print has a distressed or pixelated look."
+    "description": "A cream short-sleeve t-shirt featuring a retro-style graphic print. The graphic depicts a soccer ball and cleats with text that reads 'FRIENDSHIP TOURNAMENT' and 'NIKE SPORTSWEAR' in blue and green. The print has a distressed or pixelated look.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "blue",
+      "accentColors": [
+        "black",
+        "green",
+        "red",
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130341796
+    }
   },
   {
     "id": "item_nike_sb_black_tee",
@@ -564,7 +1495,20 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/item_nike_sb_black_tee.jpg",
-    "description": "Plain black short-sleeve t-shirt with a crew neck and relaxed fit."
+    "description": "Plain black short-sleeve t-shirt with a crew neck and relaxed fit.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130354398
+    }
   },
   {
     "id": "item_orange_crewneck_sweatshirt",
@@ -573,7 +1517,20 @@
     "color": "Orange",
     "brand": "Generic",
     "image": "/closet/item_orange_crewneck_sweatshirt.jpg",
-    "description": "A plain orange crewneck sweatshirt with long sleeves, worn by a male model."
+    "description": "A plain orange crewneck sweatshirt with long sleeves, worn by a male model.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130360146
+    }
   },
   {
     "id": "user_1782933669609",
@@ -582,7 +1539,20 @@
     "category": "Long Sleeves",
     "color": "Grey",
     "image": "/closet/user_user_1782933669609.jpg",
-    "description": "Plain grey crewneck sweatshirt with ribbed cuffs and hem, featuring a subtle V-stitch detail at the neckline."
+    "description": "Plain grey crewneck sweatshirt with ribbed cuffs and hem, featuring a subtle V-stitch detail at the neckline.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130365336
+    }
   },
   {
     "id": "img_0236",
@@ -591,7 +1561,23 @@
     "color": "Beige",
     "brand": "Nike",
     "image": "/closet/img_0236.jpg",
-    "description": "Short sleeve beige t-shirt with a front chest pocket and small Nike branding."
+    "description": "Short sleeve beige t-shirt with a front chest pocket and small Nike branding.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white",
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130374480
+    }
   },
   {
     "id": "img_0237",
@@ -600,7 +1586,22 @@
     "color": "Lavender",
     "brand": "Nike",
     "image": "/closet/img_0237.jpg",
-    "description": "Lavender short-sleeve polo shirt with standard collar and orange detail under buttons."
+    "description": "Lavender short-sleeve polo shirt with standard collar and orange detail under buttons.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "orange"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130379073
+    }
   },
   {
     "id": "img_0238",
@@ -609,7 +1610,22 @@
     "color": "Yellow",
     "brand": "Nike",
     "image": "/closet/img_0238.jpg",
-    "description": "Yellow long-sleeve athletic shirt with horizontal black stripes and Total 90 center chest logo."
+    "description": "Yellow long-sleeve athletic shirt with horizontal black stripes and Total 90 center chest logo.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "red"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130384125
+    }
   },
   {
     "id": "img_0239",
@@ -618,7 +1634,20 @@
     "color": "Beige",
     "brand": "Uniqlo",
     "image": "/closet/img_0239.jpg",
-    "description": "High-quality heavy cotton crewneck t-shirt in beige from Uniqlo U collection."
+    "description": "High-quality heavy cotton crewneck t-shirt in beige from Uniqlo U collection.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130410990
+    }
   },
   {
     "id": "img_0240",
@@ -627,7 +1656,22 @@
     "color": "White",
     "brand": "Nike",
     "image": "/closet/img_0240.jpg",
-    "description": "White athletic short sleeve shirt with reflective details and Nike swoosh."
+    "description": "White athletic short sleeve shirt with reflective details and Nike swoosh.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "grey"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 5,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130416695
+    }
   },
   {
     "id": "img_0241",
@@ -636,7 +1680,20 @@
     "color": "Mauve",
     "brand": "Nike",
     "image": "/closet/img_0241.jpg",
-    "description": "Dusty rose/mauve short sleeve Dri-Fit training shirt."
+    "description": "Dusty rose/mauve short sleeve Dri-Fit training shirt.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130423534
+    }
   },
   {
     "id": "img_0242",
@@ -645,7 +1702,20 @@
     "color": "Pink",
     "brand": "Nike",
     "image": "/closet/img_0242.jpg",
-    "description": "Light dusty pink casual cotton chinos."
+    "description": "Light dusty pink casual cotton chinos.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130432404
+    }
   },
   {
     "id": "img_0243",
@@ -654,7 +1724,20 @@
     "color": "Black",
     "brand": "Nike",
     "image": "/closet/img_0243.jpg",
-    "description": "Classic black casual cotton chinos, durable and versatile."
+    "description": "Classic black casual cotton chinos, durable and versatile.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130436853
+    }
   },
   {
     "id": "img_0244",
@@ -663,7 +1746,20 @@
     "color": "Off-White",
     "brand": "Nike",
     "image": "/closet/img_0244.jpg",
-    "description": "Tailored off-white trousers with clean center creases."
+    "description": "Tailored off-white trousers with clean center creases.",
+    "dailyProfile": {
+      "silhouette": "slim",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 4,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130446789
+    }
   },
   {
     "id": "img_0246",
@@ -672,6 +1768,22 @@
     "color": "Navy",
     "brand": "Rapha",
     "image": "/closet/img_0246.jpg",
-    "description": "Navy blue active utility pants with neon pink ankle highlights."
+    "description": "Navy blue active utility pants with neon pink ankle highlights.",
+    "dailyProfile": {
+      "silhouette": "slim",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "pink",
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 3,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130453747
+    }
   }
 ]

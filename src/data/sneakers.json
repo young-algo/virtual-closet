@@ -8,7 +8,24 @@
     "image": "/sneakers/user_user_sneaker_1783863184667_side.jpg",
     "description": "The Nike SB Dunk Low Run The Jewels are constructed with blue suede uppers that sit on top of a translucent blue outsole. Nike used pink suede on the Swoosh, and gold branded accents on the heel and tongue. The limited edition sneakers feature RTJ branding on the insoles.",
     "styleCode": "DO9404-400",
-    "imageTop": "/sneakers/user_user_sneaker_1783863184667_top.jpg"
+    "imageTop": "/sneakers/user_user_sneaker_1783863184667_top.jpg",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "blue",
+      "accentColors": [
+        "pink",
+        "gold"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130472786
+    }
   },
   {
     "id": "sneaker_384664-060",
@@ -19,7 +36,23 @@
     "image": "/sneakers/384664-060_A.png",
     "description": "This iconic high-top basketball sneaker features a premium black nubuck upper punctuated by vibrant infrared accents on the midsole, heel tab, and lace lock. Resting on a translucent outsole, it reads bold and nostalgic; suits casual streetwear and retro athletic looks.",
     "styleCode": "384664-060",
-    "imageTop": "/sneakers/384664-060_D.png"
+    "imageTop": "/sneakers/384664-060_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "red",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130497179
+    }
   },
   {
     "id": "sneaker_907958-015",
@@ -30,7 +63,24 @@
     "image": "/sneakers/907958-015_A.png",
     "description": "This iconic high-top silhouette features eye-catching iridescent leather panels on the toe box, heel, and ankle collar that shift color in the light, balanced by classic black and white leather overlays. It reads bold and futuristic; suits elevated streetwear and statement-making casual looks.",
     "styleCode": "907958-015",
-    "imageTop": "/sneakers/907958-015_D.png"
+    "imageTop": "/sneakers/907958-015_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "blue",
+        "silver"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130511343
+    }
   },
   {
     "id": "sneaker_DN3707-010",
@@ -41,7 +91,24 @@
     "image": "/sneakers/DN3707-010_A.png",
     "description": "This iconic mid-top silhouette features a premium black tumbled leather upper contrasted by signature elephant print overlays and vibrant red accents. Its heritage-rich aesthetic anchors sporty streetwear and elevated casual outfits.",
     "styleCode": "DN3707-010",
-    "imageTop": "/sneakers/DN3707-010_D.png"
+    "imageTop": "/sneakers/DN3707-010_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "red",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 2,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130521890
+    }
   },
   {
     "id": "sneaker_FB8938-001",
@@ -52,7 +119,25 @@
     "image": "/sneakers/FB8938-001_A.png",
     "description": "This retro mid-top court shoe features a blend of light grey leather and mesh, highlighted by sharp black accents and a checkerboard tongue tag. It reads sporty and retro-cool; suits casual streetwear and vintage-inspired athletic looks.",
     "styleCode": "FB8938-001",
-    "imageTop": "/sneakers/FB8938-001_D.png"
+    "imageTop": "/sneakers/FB8938-001_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "white",
+        "blue",
+        "red"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130536584
+    }
   },
   {
     "id": "user_sneaker_1783048231645",
@@ -63,7 +148,24 @@
     "image": "/sneakers/user_user_sneaker_1783048231645_side.jpg",
     "description": "",
     "styleCode": "IF0666-400",
-    "imageTop": "/sneakers/user_user_sneaker_1783048231645_top.jpg"
+    "imageTop": "/sneakers/user_user_sneaker_1783048231645_top.jpg",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "beige",
+      "accentColors": [
+        "beige",
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130545217
+    }
   },
   {
     "id": "sneaker_308497-406",
@@ -74,7 +176,24 @@
     "image": "/sneakers/308497-406_A.png",
     "description": "This mid-top sneaker features a premium university blue nubuck upper contrasted by black speckled accents, a red inner lining, and the classic Jordan 4 mesh detailing. It stands out as a bold, grail-status statement piece that perfectly anchors elevated streetwear and casual sportswear looks.",
     "styleCode": "308497-406",
-    "imageTop": "/sneakers/308497-406_D.png"
+    "imageTop": "/sneakers/308497-406_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "red",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130575391
+    }
   },
   {
     "id": "sneaker_378037-002",
@@ -85,7 +204,23 @@
     "image": "/sneakers/378037-002_A.png",
     "description": "Featuring a premium tumbled leather upper with a glossy black patent leather mudguard, this high-top silhouette sits atop a clean white midsole and a translucent outsole. It reads sleek and premium; suits streetwear looks and elevated sporty fits.",
     "styleCode": "378037-002",
-    "imageTop": "/sneakers/378037-002_D.png"
+    "imageTop": "/sneakers/378037-002_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "red"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130583723
+    }
   },
   {
     "id": "sneaker_378037-003",
@@ -96,7 +231,23 @@
     "image": "/sneakers/378037-003_A.png",
     "description": "This iconic mid-top silhouette features a premium black mesh upper paired with its signature glossy black patent leather mudguard and dark concord accents. Set on a contrasting white midsole and a translucent icy blue outsole, it reads bold and historic; suits elevated streetwear and retro-inspired athleisure outfits.",
     "styleCode": "378037-003",
-    "imageTop": "/sneakers/378037-003_D.png"
+    "imageTop": "/sneakers/378037-003_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "blue"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "acceptable",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130589096
+    }
   },
   {
     "id": "sneaker_378037-100",
@@ -107,7 +258,24 @@
     "image": "/sneakers/378037-100_A.png",
     "description": "This iconic mid-top basketball sneaker features a white ballistic mesh upper paired with a glossy black patent leather mudguard and an icy translucent outsole. Reads classic and elevated; anchors premium streetwear and smart-casual outfits alike.",
     "styleCode": "378037-100",
-    "imageTop": "/sneakers/378037-100_D.png"
+    "imageTop": "/sneakers/378037-100_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "blue",
+        "purple"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "acceptable",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130596707
+    }
   },
   {
     "id": "sneaker_555088-610",
@@ -118,7 +286,24 @@
     "image": "/sneakers/555088-610_A.png",
     "description": "This iconic high-top features a premium tumbled leather construction combining red, black, and off-white panels in a classic color-blocked design. It anchors bold streetwear ensembles and classic casual looks with a timeless athletic vibe.",
     "styleCode": "555088-610",
-    "imageTop": "/sneakers/555088-610_D.png"
+    "imageTop": "/sneakers/555088-610_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "red",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130634710
+    }
   },
   {
     "id": "sneaker_881432-612",
@@ -129,7 +314,23 @@
     "image": "/sneakers/881432-612_A.png",
     "description": "Featuring a rich bordeaux wine leather upper and an ultra-luxurious quilted tan lining, this premium high-top elevates a classic basketball silhouette with artisanal craftsmanship. The deep, sophisticated color palette and refined materials anchor elevated streetwear and smart-casual looks.",
     "styleCode": "881432-612",
-    "imageTop": "/sneakers/881432-612_D.png"
+    "imageTop": "/sneakers/881432-612_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "tan",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 2,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130638575
+    }
   },
   {
     "id": "sneaker_881758-110",
@@ -140,7 +341,23 @@
     "image": "/sneakers/881758-110_A.png",
     "description": "Featuring a high-top silhouette, this sneaker showcases an ultra-textured, hairy suede upper in off-white that mimics skate grip tape, offset by a black midsole and bright red outsole. It reads sporty and highly textured; suits casual streetwear and skate-inspired looks.",
     "styleCode": "881758-110",
-    "imageTop": "/sneakers/881758-110_D.png"
+    "imageTop": "/sneakers/881758-110_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "red"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130645434
+    }
   },
   {
     "id": "sneaker_AQ0818-100",
@@ -151,7 +368,25 @@
     "image": "/sneakers/AQ0818-100_A.png",
     "description": "This deconstructed high-top features a mix of leather, mesh, and suede panels in pristine white and light grey, highlighted by Virgil Abloh's signature zip tie, exposed foam, and bold text branding. It reads avant-garde and highly coveted; anchors premium streetwear looks and statement outfits.",
     "styleCode": "AQ0818-100",
-    "imageTop": "/sneakers/AQ0818-100_D.png"
+    "imageTop": "/sneakers/AQ0818-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "orange",
+        "blue",
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130651681
+    }
   },
   {
     "id": "sneaker_BQ8448-100",
@@ -162,7 +397,23 @@
     "image": "/sneakers/BQ8448-100_A.png",
     "description": "This iconic low-top silhouette features a premium white leather upper elevated by iridescent Swooshes that shift between red and blue, celebrating Dominican heritage. Completed with patterned laces and a translucent sole, it reads vibrant and celebratory; suits eye-catching streetwear and casual denim looks.",
     "styleCode": "BQ8448-100",
-    "imageTop": "/sneakers/BQ8448-100_D.png"
+    "imageTop": "/sneakers/BQ8448-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "blue",
+      "accentColors": [
+        "red"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130658718
+    }
   },
   {
     "id": "sneaker_BV1300-106",
@@ -173,7 +424,26 @@
     "image": "/sneakers/BV1300-106_A.png",
     "description": "This highly coveted collaborative high-top features a reconstructed DIY design, combining premium leather, exposed foam, and distinct blue contrast stitching. Its bold mashup styling reads as an instant classic, anchoring premium streetwear and vintage-inspired casual looks.",
     "styleCode": "BV1300-106",
-    "imageTop": "/sneakers/BV1300-106_D.png"
+    "imageTop": "/sneakers/BV1300-106_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "red",
+        "grey",
+        "yellow",
+        "blue"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "acceptable",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130663273
+    }
   },
   {
     "id": "sneaker_BV1358-003",
@@ -184,7 +454,21 @@
     "image": "/sneakers/BV1358-003_A.png",
     "description": "This retro-inspired runner features a layered mesh and synthetic upper completely saturated in a stealthy black and dark grey colorway. It reads highly utilitarian and sleek; suits monochrome streetwear and techwear-inspired outfits.",
     "styleCode": "BV1358-003",
-    "imageTop": "/sneakers/BV1358-003_D.png"
+    "imageTop": "/sneakers/BV1358-003_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130669765
+    }
   },
   {
     "id": "sneaker_CK9951-004",
@@ -195,7 +479,24 @@
     "image": "/sneakers/CK9951-004_A.png",
     "description": "This mid-cut tactical boot features a durable mesh and synthetic upper in light bone, accented by canyon rust hiking laces and a speckled React foam midsole. It reads rugged and technical; suits outdoor-ready gorpcore and utilitarian streetwear looks.",
     "styleCode": "CK9951-004",
-    "imageTop": "/sneakers/CK9951-004_D.png"
+    "imageTop": "/sneakers/CK9951-004_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "red",
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "acceptable",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130682435
+    }
   },
   {
     "id": "sneaker_CU1726-100",
@@ -206,7 +507,21 @@
     "image": "/sneakers/CU1726-100_A.png",
     "description": "This classic low-top silhouette features a crisp white leather upper accented by vibrant varsity royal blue overlays and matching swooshes. It delivers a timeless collegiate aesthetic that effortlessly anchors casual streetwear and denim-focused outfits.",
     "styleCode": "CU1726-100",
-    "imageTop": "/sneakers/CU1726-100_D.png"
+    "imageTop": "/sneakers/CU1726-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "blue",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130711585
+    }
   },
   {
     "id": "sneaker_CZ9747-900",
@@ -217,7 +532,25 @@
     "image": "/sneakers/CZ9747-900_A.png",
     "description": "This low-top sneaker features an eclectic patchwork canvas upper detailed with retro floral prints in turquoise, burgundy, and pale yellow. It reads bohemian and artistic, making it the perfect anchor for relaxed, earth-toned streetwear looks.",
     "styleCode": "CZ9747-900",
-    "imageTop": "/sneakers/CZ9747-900_D.png"
+    "imageTop": "/sneakers/CZ9747-900_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "yellow",
+      "accentColors": [
+        "burgundy",
+        "turquoise",
+        "red"
+      ],
+      "patternIntensity": 2,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130715972
+    }
   },
   {
     "id": "sneaker_DB3541-100",
@@ -228,7 +561,24 @@
     "image": "/sneakers/DB3541-100_A.png",
     "description": "This classic low-top silhouette features a canvas-like white upper accented by indigo-blue heel tabs and outsoles, with gold and light-blue embroidery highlighting the Swoosh. Its Streetfighter-inspired aesthetic reads clean and organic; suits relaxed, subtly cool casual outfits.",
     "styleCode": "DB3541-100",
-    "imageTop": "/sneakers/DB3541-100_D.png"
+    "imageTop": "/sneakers/DB3541-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "navy",
+      "accentColors": [
+        "gold",
+        "blue"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130725615
+    }
   },
   {
     "id": "sneaker_DC9533-001",
@@ -239,7 +589,25 @@
     "image": "/sneakers/DC9533-001_A.png",
     "description": "This collaborative mid-top silhouette features a premium black suede and mesh upper with blue collar mesh, red accents, and a pre-yellowed midsole for a vintage aesthetic. It reads bold and retro-inspired; suits streetwear and casual vintage-heavy looks.",
     "styleCode": "DC9533-001",
-    "imageTop": "/sneakers/DC9533-001_D.png"
+    "imageTop": "/sneakers/DC9533-001_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "cream",
+      "accentColors": [
+        "blue",
+        "red",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130737699
+    }
   },
   {
     "id": "sneaker_DJ0950-119",
@@ -250,7 +618,26 @@
     "image": "/sneakers/DJ0950-119_A.webp",
     "description": "This sneaker features a sail leather base with soft grey suede overlays, highlighted by Virgil Abloh's signature double-lacing system in vibrant orange and a textured teal tongue. It reads highly conceptual and artistic; suits progressive streetwear outfits and graphic-heavy casual looks.",
     "styleCode": "DJ0950-119",
-    "imageTop": "/sneakers/DJ0950-119_D.webp"
+    "imageTop": "/sneakers/DJ0950-119_D.webp",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "orange",
+        "teal",
+        "yellow",
+        "pink"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130749678
+    }
   },
   {
     "id": "sneaker_DO5880-100",
@@ -261,7 +648,24 @@
     "image": "/sneakers/DO5880-100_A.png",
     "description": "This retro basketball high-top features a crisp white leather upper detailed with black overlays, vibrant orange accents, and varsity purple branding. It reads bold and nostalgic; suits oversized streetwear and athletic casual looks.",
     "styleCode": "DO5880-100",
-    "imageTop": "/sneakers/DO5880-100_D.png"
+    "imageTop": "/sneakers/DO5880-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "purple",
+        "orange"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "acceptable",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130754090
+    }
   },
   {
     "id": "sneaker_DV2440-700",
@@ -272,7 +676,25 @@
     "image": "/sneakers/DV2440-700_A.png",
     "description": "This retro-futuristic runner features a lightweight, breathable mesh upper with supportive overlays and midfoot cables, anchored by a chunky, ultra-cushioned Lunarlon midsole. The soft cream and teal upper paired with a bold yellow sole delivers a striking contrast that reads techy and energetic, making it a perfect fit for sporty street-style and gorpcore-inspired outfits.",
     "styleCode": "DV2440-700",
-    "imageTop": "/sneakers/DV2440-700_D.png"
+    "imageTop": "/sneakers/DV2440-700_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "yellow",
+      "accentColors": [
+        "teal",
+        "black",
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130758496
+    }
   },
   {
     "id": "sneaker_DV6802-007",
@@ -283,7 +705,25 @@
     "image": "/sneakers/DV6802-007_A.png",
     "description": "This classic retro runner features a textile and suede upper with a vibrant yellow-to-orange gradient inspired by fresh produce, anchored by an off-white base and a dark Swoosh. It reads fun and energetic; suits casual streetwear and playful, warm-weather outfits.",
     "styleCode": "DV6802-007",
-    "imageTop": "/sneakers/DV6802-007_D.png"
+    "imageTop": "/sneakers/DV6802-007_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "black",
+        "green",
+        "red"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130764762
+    }
   },
   {
     "id": "sneaker_FB1299-200",
@@ -294,7 +734,23 @@
     "image": "/sneakers/FB1299-200_A.png",
     "description": "This low-top collaboration with AMBUSH features a tan nubuck upper contrasted by vibrant yellow 'AIR' lettering and a chunky black sole. It reads bold and utilitarian, anchoring streetwear-forward looks with cargos or relaxed denim.",
     "styleCode": "FB1299-200",
-    "imageTop": "/sneakers/FB1299-200_D.png"
+    "imageTop": "/sneakers/FB1299-200_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130776000
+    }
   },
   {
     "id": "sneaker_FN8454-800",
@@ -305,7 +761,25 @@
     "image": "/sneakers/FN8454-800_A.png",
     "description": "This high-performance running shoe features a lightweight, breathable mesh upper in vibrant orange and yellow tones, contrasted by a bold purple Swoosh and a chunky gradient ZoomX midsole. It reads ultra-energetic and athletic; suits vibrant running gear or bold athleisure street looks.",
     "styleCode": "FN8454-800",
-    "imageTop": "/sneakers/FN8454-800_D.png"
+    "imageTop": "/sneakers/FN8454-800_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "purple",
+      "accentColors": [
+        "green",
+        "pink",
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130783983
+    }
   },
   {
     "id": "sneaker_FQ2942-100",
@@ -316,7 +790,23 @@
     "image": "/sneakers/FQ2942-100_A.png",
     "description": "This classic high-top features a premium white leather upper accented by textured green suede on the collar and Swoosh, set atop a vintage, pre-aged midsole. It reads retro and relaxed; suits heritage street style and casual denim looks.",
     "styleCode": "FQ2942-100",
-    "imageTop": "/sneakers/FQ2942-100_D.png"
+    "imageTop": "/sneakers/FQ2942-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "green",
+      "accentColors": [
+        "beige"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130788911
+    }
   },
   {
     "id": "sneaker_FQ3546-100",
@@ -327,7 +817,23 @@
     "image": "/sneakers/FQ3546-100_A.png",
     "description": "This low-top performance basketball shoe features a unique star-patterned textured upper in sail and light bone, accented by a bold black Swoosh. It reads sleek and sporty, anchoring premium athletic fits and modern streetwear looks.",
     "styleCode": "FQ3546-100",
-    "imageTop": "/sneakers/FQ3546-100_D.png"
+    "imageTop": "/sneakers/FQ3546-100_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130796844
+    }
   },
   {
     "id": "sneaker_FQ7860-101",
@@ -338,7 +844,25 @@
     "image": "/sneakers/FQ7860-101_A.png",
     "description": "Featuring a futuristic silhouette with a white-to-blue gradient mesh upper, this sneaker is defined by its innovative sole embedded with deep red spherical Air pods. It reads highly technical and energetic, making it a perfect anchor for bold streetwear and athletic looks.",
     "styleCode": "FQ7860-101",
-    "imageTop": "/sneakers/FQ7860-101_D.png"
+    "imageTop": "/sneakers/FQ7860-101_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "blue",
+      "accentColors": [
+        "red",
+        "black",
+        "orange"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130802517
+    }
   },
   {
     "id": "sneaker_FQ7860-600",
@@ -349,7 +873,23 @@
     "image": "/sneakers/FQ7860-600_A.png",
     "description": "This futuristic silhouette features a vibrant hyper pink mesh upper with textured overlays, paired with a chunky black sole showcasing the signature circular Dynamic Air pods. Reads energetic and bold; suits statement-making streetwear and athleisure looks.",
     "styleCode": "FQ7860-600",
-    "imageTop": "/sneakers/FQ7860-600_D.png"
+    "imageTop": "/sneakers/FQ7860-600_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 0,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130822469
+    }
   },
   {
     "id": "sneaker_FQ8762-100",
@@ -360,7 +900,23 @@
     "image": "/sneakers/FQ8762-100_A.png",
     "description": "This retro gridiron silhouette features a clean white leather and textile upper contrasted by a vibrant red Swoosh and heel tab, all grounded by a solid black rubber outsole. It reads sporty and timeless; suits casual, vintage-inspired streetwear looks.",
     "styleCode": "FQ8762-100",
-    "imageTop": "/sneakers/FQ8762-100_D.png"
+    "imageTop": "/sneakers/FQ8762-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "red",
+      "accentColors": [
+        "black"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "good",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130827473
+    }
   },
   {
     "id": "sneaker_FV5029-100",
@@ -371,7 +927,24 @@
     "image": "/sneakers/FV5029-100_A.png",
     "description": "This classic mid-top silhouette features a premium white leather upper with distinctive speckled cement grey accents on the wings, heel tab, and midsole. Its timeless aesthetic reads sporty and iconic, perfectly anchoring streetwear, relaxed denim, and casual everyday looks.",
     "styleCode": "FV5029-100",
-    "imageTop": "/sneakers/FV5029-100_D.png"
+    "imageTop": "/sneakers/FV5029-100_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "black",
+        "red"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "acceptable",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130844218
+    }
   },
   {
     "id": "sneaker_HM0810-401",
@@ -382,7 +955,23 @@
     "image": "/sneakers/HM0810-401_A.png",
     "description": "This futuristic silhouette features a breathable mesh upper with a striking blue-to-black gradient, anchored by the innovative four-tubed Dynamic Air cushioning system in vibrant yellow. Reads technical and high-energy; suits progressive streetwear or techwear looks.",
     "styleCode": "HM0810-401",
-    "imageTop": "/sneakers/HM0810-401_D.png"
+    "imageTop": "/sneakers/HM0810-401_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130849518
+    }
   },
   {
     "id": "sneaker_HM4740-001",
@@ -393,7 +982,24 @@
     "image": "/sneakers/HM4740-001_A.png",
     "description": "This iconic runner features a tiered suede and mesh upper that gradients from light grey to dark grey, set against a solid black sole with vibrant volt accents. It delivers a bold, athletic retro vibe that anchors techwear and casual streetwear looks.",
     "styleCode": "HM4740-001",
-    "imageTop": "/sneakers/HM4740-001_D.png"
+    "imageTop": "/sneakers/HM4740-001_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130862722
+    }
   },
   {
     "id": "sneaker_HQ3822-001",
@@ -404,7 +1010,23 @@
     "image": "/sneakers/HQ3822-001_A.png",
     "description": "This low-top Air Force 1 features a durable Cordura fabric and suede upper in light orewood brown, set against a solid black sole unit. Its rugged, trail-ready texture combined with a neutral color block reads utilitarian and clean; suits rugged streetwear and outdoor-inspired casual looks.",
     "styleCode": "HQ3822-001",
-    "imageTop": "/sneakers/HQ3822-001_D.png"
+    "imageTop": "/sneakers/HQ3822-001_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "orange"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130881040
+    }
   },
   {
     "id": "sneaker_HQ4308-400",
@@ -415,7 +1037,24 @@
     "image": "/sneakers/HQ4308-400_A.png",
     "description": "This futuristic silhouette features a perforated, foam-like upper in deep obsidian blue paired with a chunky, textured midsole and vibrant orange traction pods. It reads ultra-modern and avant-garde; suits techwear and experimental streetwear looks.",
     "styleCode": "HQ4308-400",
-    "imageTop": "/sneakers/HQ4308-400_D.png"
+    "imageTop": "/sneakers/HQ4308-400_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "orange",
+      "accentColors": [
+        "black",
+        "orange"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130899798
+    }
   },
   {
     "id": "sneaker_IB4406-701",
@@ -426,7 +1065,25 @@
     "image": "/sneakers/IB4406-701_A.png",
     "description": "This retro-running silhouette features a breathable mesh base layered with synthetic overlays in vibrant luminous green, deep obsidian, and crisp white. Its complex technical look and comfortable foam sole read sporty and nostalgic; suits casual streetwear and activewear looks.",
     "styleCode": "IB4406-701",
-    "imageTop": "/sneakers/IB4406-701_D.png"
+    "imageTop": "/sneakers/IB4406-701_D.png",
+    "dailyProfile": {
+      "silhouette": "unknown",
+      "secondaryColorFamily": "green",
+      "accentColors": [
+        "blue",
+        "cream",
+        "orange"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 0,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130906523
+    }
   },
   {
     "id": "sneaker_IQ7708-095",
@@ -437,7 +1094,23 @@
     "image": "/sneakers/IQ7708-095_A.png",
     "description": "This collaborative sneaker features a striking gradient from metallic silver to deep black across its layered upper, punctuated by soft blue accents on the eyelets, heel, and Air units. Co-branded detailing from Palace Skateboards on the tongue and insole updates the classic retro runner, anchoring techwear and modern streetwear looks with a futuristic edge.",
     "styleCode": "IQ7708-095",
-    "imageTop": "/sneakers/IQ7708-095_D.png"
+    "imageTop": "/sneakers/IQ7708-095_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "blue"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130916409
+    }
   },
   {
     "id": "sneaker_IU1055-100",
@@ -448,6 +1121,23 @@
     "image": "/sneakers/IU1055-100_A.png",
     "description": "This iconic retro runner features a white leather upper layered with textured grey suede overlays, a black mudguard, and vibrant infrared accents. It reads energetic yet classic, perfectly anchoring casual streetwear and athletic-inspired outfits.",
     "styleCode": "IU1055-100",
-    "imageTop": "/sneakers/IU1055-100_D.png"
+    "imageTop": "/sneakers/IU1055-100_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "red",
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784130932054
+    }
   }
 ]
