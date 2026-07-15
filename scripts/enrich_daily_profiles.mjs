@@ -2,6 +2,7 @@
 //
 // Usage:
 //   GEMINI_API_KEY=... node scripts/enrich_daily_profiles.mjs [--dry-run] [--force]
+//   node scripts/enrich_daily_profiles.mjs --help
 //
 // The script deliberately makes one sequential structured-output request per
 // item. It writes neither manifest if any target fails validation or enrichment.
@@ -40,6 +41,14 @@ const SILHOUETTES = new Set(['slim', 'regular', 'relaxed', 'oversized', 'unknown
 const RAIN_SAFETY_VALUES = new Set(['poor', 'acceptable', 'good', 'unknown']);
 const PLAIN_COLOR_NAME = /^[a-z][a-z -]*$/i;
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const USAGE = [
+  'Usage: node scripts/enrich_daily_profiles.mjs [--dry-run] [--force]',
+  '',
+  'Options:',
+  '  --dry-run  Enrich in memory without writing either manifest.',
+  '  --force    Replace existing inferred profile fields.',
+  '  --help     Show this help without reading manifests or requiring a key.'
+].join('\n');
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -296,13 +305,13 @@ export const writeManifestsTransaction = async (
     temporary: transactionArtifactPath(entry.file, safeTransactionId, 'tmp'),
     backup: transactionArtifactPath(entry.file, safeTransactionId, 'backup')
   })));
-  const artifacts = prepared.flatMap(entry => [entry.temporary, entry.backup]);
-  let backupsReady = false;
+  const temporaryArtifacts = prepared.map(entry => entry.temporary);
+  const backupArtifacts = prepared.map(entry => entry.backup);
 
-  const cleanup = async () => {
+  const cleanupArtifacts = async (artifacts, description) => {
     const results = await Promise.allSettled(artifacts.map(file => removeArtifact(fileSystem, file)));
     const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
-    if (failures.length > 0) throw new AggregateError(failures, 'Failed to clean manifest transaction artifacts');
+    if (failures.length > 0) throw new AggregateError(failures, `Failed to clean manifest transaction ${description}`);
   };
 
   try {
@@ -312,34 +321,64 @@ export const writeManifestsTransaction = async (
     await awaitPreparationWrites(prepared.map(entry =>
       fileSystem.writeFile(entry.backup, entry.original, { flag: 'wx' })
     ));
-    backupsReady = true;
+  } catch (preparationError) {
+    const cleanupFailures = [];
+    try {
+      await cleanupArtifacts(temporaryArtifacts, 'temporary artifacts');
+    } catch (cleanupError) {
+      cleanupFailures.push(cleanupError);
+    }
+    try {
+      await cleanupArtifacts(backupArtifacts, 'backup artifacts');
+    } catch (cleanupError) {
+      cleanupFailures.push(cleanupError);
+    }
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(
+        [preparationError, ...cleanupFailures],
+        `Manifest transaction preparation failed and cleanup was incomplete: ${preparationError instanceof Error ? preparationError.message : String(preparationError)}`
+      );
+    }
+    throw preparationError;
+  }
 
+  let commitError = null;
+  try {
     for (const entry of prepared) await fileSystem.rename(entry.temporary, entry.file);
-    await cleanup();
   } catch (error) {
+    commitError = error;
+  }
+
+  if (commitError) {
     const rollbackFailures = [];
-    if (backupsReady) {
-      for (const entry of prepared) {
-        try {
-          await fileSystem.rename(entry.backup, entry.file);
-        } catch (rollbackError) {
-          rollbackFailures.push(rollbackError);
-        }
+    const retainedBackups = [];
+    for (const entry of prepared) {
+      try {
+        await fileSystem.rename(entry.backup, entry.file);
+      } catch (rollbackError) {
+        retainedBackups.push(entry.backup);
+        rollbackFailures.push(new Error(
+          `Failed to restore ${entry.file} from recovery backup ${entry.backup}: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+          { cause: rollbackError }
+        ));
       }
     }
     try {
-      await cleanup();
+      await cleanupArtifacts(temporaryArtifacts, 'temporary artifacts');
     } catch (cleanupError) {
       rollbackFailures.push(cleanupError);
     }
     if (rollbackFailures.length > 0) {
       throw new AggregateError(
-        [error, ...rollbackFailures],
-        `Manifest transaction failed and rollback was incomplete: ${error instanceof Error ? error.message : String(error)}`
+        [commitError, ...rollbackFailures],
+        `Manifest transaction failed and rollback was incomplete: ${commitError instanceof Error ? commitError.message : String(commitError)}. Recovery backup retained at: ${retainedBackups.join(', ')}`
       );
     }
-    throw error;
+    throw commitError;
   }
+
+  await cleanupArtifacts(temporaryArtifacts, 'temporary artifacts');
+  await cleanupArtifacts(backupArtifacts, 'backup artifacts');
 };
 
 const loadManifests = async () => Promise.all(MANIFESTS.map(async file => {
@@ -348,9 +387,23 @@ const loadManifests = async () => Promise.all(MANIFESTS.map(async file => {
   return { file, items };
 }));
 
+export const parseEnrichmentArguments = args => {
+  const allowed = new Set(['--dry-run', '--force', '--help']);
+  const unknown = args.find(argument => !allowed.has(argument));
+  if (unknown) throw new Error(`Unknown argument: ${unknown}`);
+  return {
+    dryRun: args.includes('--dry-run'),
+    force: args.includes('--force'),
+    help: args.includes('--help')
+  };
+};
+
 const main = async () => {
-  const dryRun = process.argv.includes('--dry-run');
-  const force = process.argv.includes('--force');
+  const { dryRun, force, help } = parseEnrichmentArguments(process.argv.slice(2));
+  if (help) {
+    console.log(USAGE);
+    return;
+  }
   const apiKey = (process.env.GEMINI_API_KEY ?? '').trim();
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set.');
 

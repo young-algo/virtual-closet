@@ -1,4 +1,7 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +10,9 @@ import type { DailyRecommendationProfileV2, DailySourceItem } from '../types';
 // The enrichment utility is intentionally plain ESM so it can run directly with Node.
 // @ts-expect-error TypeScript does not generate declarations for standalone .mjs scripts.
 import * as enrichmentScript from '../../../../scripts/enrich_daily_profiles.mjs';
+
+const execFileAsync = promisify(execFile);
+const enrichmentScriptPath = fileURLToPath(new URL('../../../../scripts/enrich_daily_profiles.mjs', import.meta.url));
 
 const {
   imagePathsFor,
@@ -84,6 +90,32 @@ describe('daily profile enrichment hydration', () => {
     const manifest = item({ silhouette: 'relaxed', source: 'ai-inferred' });
 
     expect(fillManifestDailyProfiles([local], [manifest])[0]).toBe(local);
+  });
+
+  it('hydrates null, string, and array local profiles while preserving an intentional empty object', () => {
+    const manifestProfile = { silhouette: 'relaxed', source: 'ai-inferred', confidence: 0.75, updatedAt: 1 } as const;
+    const local = [
+      item(null as unknown as DailySourceItem['dailyProfile'], 'null-profile'),
+      item('invalid' as unknown as DailySourceItem['dailyProfile'], 'string-profile'),
+      item([] as unknown as DailySourceItem['dailyProfile'], 'array-profile'),
+      item({}, 'empty-profile'),
+    ];
+    const manifest = local.map(entry => item(manifestProfile, entry.id));
+    const localBefore = structuredClone(local);
+    const manifestBefore = structuredClone(manifest);
+
+    const result = fillManifestDailyProfiles(local, manifest);
+
+    expect(result.slice(0, 3).map(entry => entry.dailyProfile)).toEqual([
+      manifestProfile,
+      manifestProfile,
+      manifestProfile,
+    ]);
+    expect(result.slice(0, 3).every((entry, index) => entry !== local[index])).toBe(true);
+    expect(result[3]).toBe(local[3]);
+    expect(result[3].dailyProfile).toEqual({});
+    expect(local).toEqual(localBefore);
+    expect(manifest).toEqual(manifestBefore);
   });
 
   it('does not mutate local or manifest inputs', () => {
@@ -325,6 +357,74 @@ describe('daily profile enrichment script helpers', () => {
     }
   });
 
+  it('retains the recovery backup when a second commit and rollback both fail', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'daily-profiles-incomplete-rollback-'));
+    const firstFile = path.join(directory, 'closet.json');
+    const secondFile = path.join(directory, 'sneakers.json');
+    const firstOriginal = '[{"id":"closet-original"}]\n';
+    const secondOriginal = '[{"id":"sneaker-original"}]\n';
+    const transactionId = 'incomplete-rollback-test';
+    const firstBackup = path.join(directory, `.closet.json.${transactionId}.backup`);
+    const firstTemporary = path.join(directory, `.closet.json.${transactionId}.tmp`);
+    const secondTemporary = path.join(directory, `.sneakers.json.${transactionId}.tmp`);
+    const writeManifestsTransaction = enrichmentScript.writeManifestsTransaction;
+
+    try {
+      await Promise.all([
+        writeFile(firstFile, firstOriginal),
+        writeFile(secondFile, secondOriginal),
+      ]);
+      expect(writeManifestsTransaction).toBeTypeOf('function');
+      if (typeof writeManifestsTransaction !== 'function') return;
+
+      let replacements = 0;
+      const injectedFileSystem = {
+        readFile,
+        writeFile,
+        unlink,
+        rename: async (source: string, destination: string) => {
+          if (source.endsWith('.tmp') && (destination === firstFile || destination === secondFile)) {
+            replacements += 1;
+            if (replacements === 2) throw new Error('injected second commit failure');
+          }
+          if (source === firstBackup && destination === firstFile) {
+            throw new Error(`injected rollback failure; recovery backup retained at ${firstBackup}`);
+          }
+          await rename(source, destination);
+        },
+      };
+
+      let thrown: unknown;
+      try {
+        await writeManifestsTransaction([
+          { file: firstFile, items: [{ id: 'closet-updated' }] },
+          { file: secondFile, items: [{ id: 'sneaker-updated' }] },
+        ], {
+          fileSystem: injectedFileSystem,
+          transactionId,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as Error).message).toContain('injected second commit failure');
+      expect((thrown as Error).message).toContain(firstBackup);
+      expect(await readFile(firstFile, 'utf8')).toBe('[\n  {\n    "id": "closet-updated"\n  }\n]\n');
+      expect(await readFile(secondFile, 'utf8')).toBe(secondOriginal);
+      expect(await readFile(firstBackup, 'utf8')).toBe(firstOriginal);
+      await expect(readFile(firstTemporary)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(readFile(secondTemporary)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect((await readdir(directory)).sort()).toEqual([
+        `.closet.json.${transactionId}.backup`,
+        'closet.json',
+        'sneakers.json',
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it.each(['tmp', 'backup'] as const)(
     'waits for every %s preparation write before cleaning failed transactions',
     async failingSuffix => {
@@ -434,5 +534,33 @@ describe('daily profile enrichment script helpers', () => {
     expect(shouldWriteManifests({ dryRun: false, failed: 1, enriched: 115 })).toBe(false);
     expect(shouldWriteManifests({ dryRun: false, failed: 0, enriched: 0 })).toBe(false);
     expect(shouldWriteManifests({ dryRun: false, failed: 0, enriched: 116 })).toBe(true);
+  });
+
+  it('rejects unknown CLI arguments before checking the API key', async () => {
+    const env = { ...process.env };
+    delete env.GEMINI_API_KEY;
+
+    let failure: unknown;
+    try {
+      await execFileAsync(process.execPath, [enrichmentScriptPath, '--dry-rnu'], { env });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({ code: 1 });
+    expect((failure as { stderr: string }).stderr).toContain('Unknown argument: --dry-rnu');
+    expect((failure as { stderr: string }).stderr).not.toContain('GEMINI_API_KEY');
+  });
+
+  it('prints CLI help without requiring a key or reading manifests', async () => {
+    const env = { ...process.env };
+    delete env.GEMINI_API_KEY;
+
+    const result = await execFileAsync(process.execPath, [enrichmentScriptPath, '--help'], { env });
+
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('Usage:');
+    expect(result.stdout).toContain('--dry-run');
+    expect(result.stdout).toContain('--force');
   });
 });

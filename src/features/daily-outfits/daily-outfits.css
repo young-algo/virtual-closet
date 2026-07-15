@@ -26,8 +26,9 @@
 .daily-encore { margin-top: 34px; padding: 28px; border: 1px solid #9b8f73; background: #ece7da; }
 .daily-encore h4 { margin: 8px 0 16px; font-size: 1.35rem; font-weight: 400; }
 .daily-encore .daily-look-images { width: min(100%, 420px); }
+.daily-encore .daily-look-label { color: #665d49; }
 .daily-encore > p { margin-top: 16px; font-size: .78rem; line-height: 1.6; }
-.daily-encore ul { list-style: none; margin-top: 14px; font-size: .68rem; color: #77746a; line-height: 1.7; }
+.daily-encore ul { list-style: none; margin-top: 14px; font-size: .68rem; color: #665d49; line-height: 1.7; }
 .daily-feedback { margin-top: 18px; padding-top: 14px; border-top: 1px solid #cbc8bd; }.daily-feedback-actions { display: flex; flex-wrap: wrap; gap: 5px; }.daily-feedback-actions button { padding: 7px; border: 1px solid transparent; font-size: .52rem; }.daily-feedback-actions button.is-selected { border-color: #151512; }.daily-reason-field { margin-top: 10px; }
 @keyframes daily-pulse { 50% { opacity: .25; } } @keyframes daily-spin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) { .daily-shell { padding: 26px 20px 42px; }.daily-section { grid-template-columns: 1fr; }.daily-form-grid,.daily-toggle,.daily-secondary-action,.daily-actions,.daily-busy,.daily-notice { grid-column: 1; }.daily-looks { grid-template-columns: 1fr; gap: 42px; }.daily-preview-heading { align-items: start; flex-direction: column; }.daily-header h2 { font-size: 3.4rem; } }

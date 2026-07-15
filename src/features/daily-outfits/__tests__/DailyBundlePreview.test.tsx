@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -42,7 +43,33 @@ const elementsIn = (node: ReactNode): ReactElement[] => {
   return [node, ...elementsIn(children)];
 };
 
+const relativeLuminance = (hex: string) => {
+  const channels = hex.match(/[a-f\d]{2}/gi)?.map(value => Number.parseInt(value, 16) / 255) ?? [];
+  const [red, green, blue] = channels.map(value => (
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  ));
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+};
+
+const contrastRatio = (foreground: string, background: string) => {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+};
+
 describe('DailyBundlePreview Encore', () => {
+  it('uses an accessible small-text color on the Encore background', () => {
+    const css = readFileSync(new URL('../daily-outfits.css', import.meta.url), 'utf8');
+    const labelColor = css.match(/\.daily-encore \.daily-look-label\s*\{[^}]*color:\s*(#[a-f\d]{6})/i)?.[1];
+    const listColor = css.match(/\.daily-encore ul\s*\{[^}]*color:\s*(#[a-f\d]{6})/i)?.[1];
+
+    expect(labelColor).toBeDefined();
+    expect(listColor).toBeDefined();
+    expect(contrastRatio(labelColor ?? '#ffffff', '#ece7da')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(listColor ?? '#ffffff', '#ece7da')).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('shows the exact label, static copy, safely rendered items, and Encore feedback identity', () => {
     const encoreBundle = bundle({
       encore: {

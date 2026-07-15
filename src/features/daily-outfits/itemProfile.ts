@@ -19,11 +19,15 @@ type ProfileHydratable = {
   dailyProfile?: Partial<DailyRecommendationProfileV2>;
 };
 
+const isDailyProfileObject = (value: unknown): value is Partial<DailyRecommendationProfileV2> => (
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+);
+
 export const fillManifestDailyProfiles = <T extends ProfileHydratable>(localItems: T[], manifestItems: T[]): T[] => {
   const manifestById = new Map(manifestItems.map(item => [item.id, item]));
   return localItems.map(item => {
     const manifest = manifestById.get(item.id);
-    if (item.dailyProfile !== undefined || manifest?.dailyProfile === undefined) return item;
+    if (isDailyProfileObject(item.dailyProfile) || !isDailyProfileObject(manifest?.dailyProfile)) return item;
     return { ...item, dailyProfile: { ...manifest.dailyProfile } };
   });
 };
