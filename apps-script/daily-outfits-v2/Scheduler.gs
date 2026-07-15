@@ -128,9 +128,10 @@ function runDailyOutfitScheduler() {
   if (!lock.tryLock(5000)) return { ok: true, skipped: 'lock-busy' };
   var startedAt = Date.now();
   var state;
+  var config = null;
   try {
     var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-    var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+    config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
     var now = new Date();
     var localDate = localDateV2_(now, config.timezone);
     var currentMinutes = localMinutesV2_(now, config.timezone);
@@ -161,16 +162,27 @@ function runDailyOutfitScheduler() {
     return { ok: true, stage: state.stage };
   } catch (error) {
     console.error('Daily scheduler failed: ' + error.message);
-    var configForError = applySnapshotSettingsV2_(getDailyConfigV2_(), loadSnapshotV2_());
-    var current = localMinutesV2_(new Date(), configForError.timezone);
-    if (state) {
-      state.lastError = error.message;
-      state.updatedAt = Date.now();
-      incrementAttemptV2_(state, state.stage + '-error');
-      if (current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) state.stage = 'failed';
-      saveJobStateV2_(state);
+    try {
+      var timezone = config && config.timezone;
+      if (!timezone) {
+        try {
+          timezone = getDailyConfigV2_().timezone;
+        } catch (configError) {
+          console.error('Daily scheduler could not read fallback timezone: ' + configError.message);
+        }
+      }
+      var current = timezone ? localMinutesV2_(new Date(), timezone) : null;
+      if (state) {
+        state.lastError = error.message;
+        state.updatedAt = Date.now();
+        incrementAttemptV2_(state, state.stage + '-error');
+        if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) state.stage = 'failed';
+        saveJobStateV2_(state);
+      }
+      if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) sendOperationalAlertV2_('recommendation quality gate failed', error.message);
+    } catch (handlerError) {
+      console.error('Daily scheduler error handler failed: ' + handlerError.message);
     }
-    if (current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) sendOperationalAlertV2_('recommendation quality gate failed', error.message);
     return { ok: false, error: error.message, stage: state && state.stage };
   } finally {
     lock.releaseLock();

@@ -22,7 +22,14 @@ function fetchDailyWeatherV2() {
     forecast_days: 1
   };
   var query = Object.keys(params).map(function(key) { return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]); }).join('&');
-  var response = UrlFetchApp.fetch('https://api.open-meteo.com/v1/forecast?' + query, { muteHttpExceptions: true });
+  var response;
+  try {
+    response = UrlFetchApp.fetch('https://api.open-meteo.com/v1/forecast?' + query, { muteHttpExceptions: true });
+  } catch (error) {
+    var exceptionCached = loadWeatherCacheV2_();
+    if (exceptionCached && exceptionCached.localDate === localDateV2_(new Date(), config.timezone) && Date.now() - exceptionCached.fetchedAt <= DAILY_V2.MAX_WEATHER_AGE_MS) return exceptionCached;
+    throw error;
+  }
   var status = response.getResponseCode();
   if (status < 200 || status >= 300) {
     var cached = loadWeatherCacheV2_();

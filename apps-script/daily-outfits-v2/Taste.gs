@@ -66,11 +66,18 @@ function dailyHistoryContextV2_(localDate) {
 
 function mergeSnapshotFeedbackIntoHistoryV2_(snapshot) {
   var history = loadHistoryV2_();
+  var changed = false;
   (snapshot.dailyFeedback || []).forEach(function(feedback) {
     var entry = history.find(function(value) { return value.localDate === feedback.localDate; });
     if (!entry) return;
-    entry.feedback = (entry.feedback || []).filter(function(value) { return value.candidateId !== feedback.candidateId; });
-    entry.feedback.push(feedback);
+    var before = entry.feedback || [];
+    var after = before.filter(function(value) { return value.candidateId !== feedback.candidateId; });
+    after.push(feedback);
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      entry.feedback = after;
+      changed = true;
+    }
   });
-  saveHistoryV2_(history);
+  if (changed) saveHistoryV2_(history);
+  return changed;
 }
