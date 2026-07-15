@@ -8,8 +8,15 @@ function validatePlannerResponseV2_(response, archetype, snapshot) {
   var coreSelections = [];
   response.candidates.forEach(function(candidate, index) {
     var path = 'candidate[' + index + ']';
-    if (!candidate.candidateId || Object.prototype.hasOwnProperty.call(candidateIds, candidate.candidateId)) errors.push(path + ' has a missing or duplicate candidateId');
-    candidateIds[candidate.candidateId] = true;
+    if (typeof candidate.candidateId !== 'string' || !candidate.candidateId ||
+        Object.prototype.hasOwnProperty.call(candidateIds, candidate.candidateId)) {
+      errors.push(path + ' has a missing or duplicate candidateId');
+    } else {
+      candidateIds[candidate.candidateId] = true;
+      if (historyTextForModelV2_(candidate.candidateId, snapshot) !== candidate.candidateId) {
+        errors.push(path + '.candidateId contains an unsafe model token');
+      }
+    }
     if (candidate.archetype !== archetype) errors.push(path + ' has the wrong archetype');
     var slots = [['topId', 'top'], ['bottomId', 'bottom'], ['shoeId', 'shoes']];
     if (candidate.layerId) slots.push(['layerId', 'layer']);

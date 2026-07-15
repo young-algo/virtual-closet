@@ -427,6 +427,93 @@ describe('model boundary views', () => {
     expect(JSON.stringify({ modelCandidate, modelHistory, modelCurated })).not.toContain(hiddenId);
   });
 
+  it('sanitizes every candidate-authored model string while preserving safe opaque candidate ids', () => {
+    const candidate = {
+      ...internalCandidate(),
+      candidateId: '__proto__',
+      archetype: `easy ${staleItemId}`,
+      name: `Current ${topId}; stale ${staleLongId}`,
+      styleSummary: `Current ${bottomId}; stale ${staleItemId}`,
+      colorStrategy: `Current ${sneakerId}; stale img_9999`,
+      weatherSummary: `Current ${topId}; stale sneaker_ZZ9999-404`,
+      potentialRisks: [
+        `Current ${bottomId}`,
+        `Stale ${staleLongId}`,
+        'Useful ordinary risk prose remains.',
+        42,
+      ],
+    };
+
+    const view = api.modelFacingCandidateV2_(candidate, richSnapshot);
+
+    expect(view).toEqual(expect.objectContaining({
+      candidateId: '__proto__',
+      archetype: 'easy INVALID_LABEL',
+      name: 'Current T004; stale INVALID_LABEL',
+      styleSummary: 'Current B002; stale INVALID_LABEL',
+      colorStrategy: 'Current S009; stale INVALID_LABEL',
+      weatherSummary: 'Current T004; stale INVALID_LABEL',
+      potentialRisks: ['Current B002', 'Stale INVALID_LABEL', 'Useful ordinary risk prose remains.'],
+    }));
+    ['constructor', 'toString'].forEach(candidateId => {
+      expect(api.modelFacingCandidateV2_({ ...internalCandidate(), candidateId }, richSnapshot).candidateId)
+        .toBe(candidateId);
+    });
+  });
+
+  it('rejects candidate ids changed by shared sanitation before a critic, curator, or repair model call', () => {
+    const unsafeCandidate = { ...internalCandidate(), candidateId: topId };
+    const unsafeCritic = { scores: [criticScore(topId)] };
+    let modelCalls = 0;
+    const runCritic = criticCandidateRunner(() => {
+      modelCalls += 1;
+      return unsafeCritic;
+    });
+    const runCurator = evaluateAppsScript<(
+      snapshotValue: object,
+      weather: object,
+      history: object,
+      candidates: object[],
+      critic: object
+    ) => object>(
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Selection.gs', 'Curator.gs'],
+      'runCuratorV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        callGeminiV2_: () => { modelCalls += 1; return { recommendations: [] }; },
+      }
+    );
+    const runRepair = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshotValue: object,
+      weather: object,
+      history: object,
+      candidates: object[],
+      critic: object
+    ) => object>(
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        validateFinalBundleV2_: () => [],
+        callGeminiV2_: () => { modelCalls += 1; return { recommendations: [] }; },
+      }
+    );
+
+    expect(() => runCritic(richSnapshot, richWeather, richHistory, [unsafeCandidate]))
+      .toThrow(/unsafe candidateId/);
+    expect(() => runCurator(richSnapshot, richWeather, richHistory, [unsafeCandidate], unsafeCritic))
+      .toThrow(/unsafe candidateId/);
+    expect(() => runRepair({ recommendations: [] }, ['copy needs repair'], richSnapshot, richWeather, richHistory, [unsafeCandidate], unsafeCritic))
+      .toThrow(/unsafe candidateId/);
+    expect(modelCalls).toBe(0);
+  });
+
   it('fails closed for stale current references and omits stale history references', () => {
     const removedId = 'user_closet_1783863199999';
 
@@ -560,6 +647,46 @@ describe('model boundary views', () => {
     expect(api.sharedTwoCoreSavedOutfitsV2_([topId, bottomId, 'other'], policySnapshot).map(value => value.name)).toEqual([
       'Manual', 'AI', 'Two', 'Duplicate'
     ]);
+  });
+
+  it('normalizes every taste source to ai or manual before summaries without changing policy semantics', () => {
+    expect(api.tasteEvidenceV2_).toBeTypeOf('function');
+    expect(api.savedOutfitExactCopyV2_).toBeTypeOf('function');
+    if (!api.tasteEvidenceV2_ || !api.savedOutfitExactCopyV2_) return;
+    const tasteEvidence = api.tasteEvidenceV2_;
+    const savedOutfitExactCopy = api.savedOutfitExactCopyV2_;
+    const cases = [
+      { label: 'AI', source: 'ai', expectedSource: 'ai', expectedWeight: 0.3, exactCopy: false },
+      { label: 'Manual', source: 'manual', expectedSource: 'manual', expectedWeight: 1, exactCopy: true },
+      { label: 'Malformed String', source: 'assistant', expectedSource: 'manual', expectedWeight: 1, exactCopy: true },
+      { label: 'Malformed Object', source: { privateId: staleLongId }, expectedSource: 'manual', expectedWeight: 1, exactCopy: true },
+    ];
+
+    cases.forEach(value => {
+      const sourceSnapshot = {
+        ...snapshot,
+        tasteExamples: [{
+          id: `saved-${value.label}`,
+          name: value.label,
+          source: value.source,
+          itemIds: [topId, bottomId, sneakerId],
+          createdAt: 1,
+        }],
+      };
+      const evidence = tasteEvidence(sourceSnapshot)[0];
+      const summary = api.buildTasteSummaryV2_(sourceSnapshot)[0];
+
+      expect({ source: evidence.source, weight: evidence.weight }).toEqual({
+        source: value.expectedSource,
+        weight: value.expectedWeight,
+      });
+      expect(summary).toEqual(expect.objectContaining({
+        source: value.expectedSource,
+        weight: value.expectedWeight,
+      }));
+      expect(Boolean(savedOutfitExactCopy([topId, bottomId, sneakerId], sourceSnapshot)))
+        .toBe(value.exactCopy);
+    });
   });
 
   it('keeps saved taste internals on real ids but emits label-only model summaries', () => {
@@ -1701,6 +1828,14 @@ describe('prompt and response label boundary', () => {
   });
 
   it('scrubs current and stale wardrobe ids from critic repair, curator, and final-repair prompts', () => {
+    const leakingCandidates = criticCandidates();
+    Object.assign(leakingCandidates[0], {
+      name: `Current ${topId}; stale ${staleLongId}`,
+      styleSummary: `Current ${bottomId}; stale ${staleItemId}`,
+      colorStrategy: `Current ${sneakerId}; stale img_9999`,
+      weatherSummary: `Current ${topId}; stale sneaker_ZZ9999-404`,
+      potentialRisks: [`Current ${bottomId}`, `Stale ${staleLongId}`, 'Useful ordinary candidate prose remains.'],
+    });
     const leakingCritic = validCriticResponse();
     leakingCritic.scores[0] = {
       ...leakingCritic.scores[0],
@@ -1727,11 +1862,12 @@ describe('prompt and response label boundary', () => {
             captured.criticRepair = parts.map(part => part.text || '').join('\n');
             return validCriticResponse();
           }
+          captured.critic = parts.map(part => part.text || '').join('\n');
           return leakingCritic;
         }
       }
     );
-    critic(richSnapshot, richWeather, richHistory, [{ candidates: criticCandidates() }]);
+    critic(richSnapshot, richWeather, richHistory, [{ candidates: leakingCandidates }]);
 
     const curator = evaluateAppsScript<(
       snapshot: object,
@@ -1754,9 +1890,9 @@ describe('prompt and response label boundary', () => {
       }
     );
     const selectedCandidates = [
-      criticCandidates().find(candidate => candidate.candidateId === 'easy-0')!,
-      criticCandidates().find(candidate => candidate.candidateId === 'polished-casual-0')!,
-      criticCandidates().find(candidate => candidate.candidateId === 'expressive-0')!
+      leakingCandidates.find(candidate => candidate.candidateId === 'easy-0')!,
+      leakingCandidates.find(candidate => candidate.candidateId === 'polished-casual-0')!,
+      leakingCandidates.find(candidate => candidate.candidateId === 'expressive-0')!
     ];
     curator(richSnapshot, richWeather, richHistory, selectedCandidates, leakingCritic);
 
@@ -1793,13 +1929,18 @@ describe('prompt and response label boundary', () => {
       leakingCritic
     );
 
-    expect(Object.keys(captured).sort()).toEqual(['criticRepair', 'curator', 'finalRepair']);
+    expect(Object.keys(captured).sort()).toEqual(['critic', 'criticRepair', 'curator', 'finalRepair']);
     Object.values(captured).forEach(prompt => {
       expect(prompt).not.toContain(sneakerId);
       expect(prompt).not.toContain(topId);
       expect(prompt).not.toContain(staleLongId);
       expect(prompt).not.toContain(staleItemId);
       expect(prompt).toContain('polished-casual-0');
+    });
+    [captured.critic, captured.criticRepair, captured.curator, captured.finalRepair].forEach(prompt => {
+      expect(prompt).not.toContain('img_9999');
+      expect(prompt).not.toContain('sneaker_ZZ9999-404');
+      expect(prompt).toContain('Useful ordinary candidate prose remains.');
     });
     [captured.criticRepair, captured.curator].forEach(prompt => {
       expect(prompt).toContain('Useful ordinary defect prose remains.');

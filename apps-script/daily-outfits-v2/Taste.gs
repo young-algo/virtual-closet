@@ -9,15 +9,20 @@ function coreTasteItemIdsV2_(itemIds, snapshot) {
   });
 }
 
+function normalizedTasteSourceV2_(outfit) {
+  return outfit && outfit.source === 'ai' ? 'ai' : 'manual';
+}
+
 function tasteEvidenceV2_(snapshot) {
   return (snapshot.tasteExamples || []).filter(function(outfit) {
     return outfit.seedStylist !== false;
   }).map(function(outfit) {
+    var source = normalizedTasteSourceV2_(outfit);
     return {
       id: outfit.id,
       name: outfit.name,
-      source: outfit.source || 'manual',
-      weight: outfit.source === 'ai' ? 0.3 : 1,
+      source: source,
+      weight: source === 'ai' ? 0.3 : 1,
       itemIds: (outfit.itemIds || []).slice(),
       coreItemIds: coreTasteItemIdsV2_(outfit.itemIds, snapshot),
       note: outfit.note || null
@@ -27,7 +32,7 @@ function tasteEvidenceV2_(snapshot) {
 
 function manualCoreTriosV2_(snapshot) {
   return (snapshot.tasteExamples || []).filter(function(outfit) {
-    return outfit.source !== 'ai';
+    return normalizedTasteSourceV2_(outfit) === 'manual';
   }).map(function(outfit) {
     return {
       id: outfit.id,

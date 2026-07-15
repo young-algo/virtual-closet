@@ -52,11 +52,9 @@ function fetchGeminiWithRetryV2_(request, stage) {
     var response;
     try {
       response = UrlFetchApp.fetch(request.url, request);
-    } catch (error) {
-      error.retryable = true;
-      var transportDelay = geminiRetryDelayV2_(error, attempt);
-      if (transportDelay === null) throw error;
-      Utilities.sleep(transportDelay);
+    } catch (_error) {
+      if (attempt >= 2) throw new Error(stage + ' model transport failed after one retry');
+      Utilities.sleep(4000);
       continue;
     }
     try {

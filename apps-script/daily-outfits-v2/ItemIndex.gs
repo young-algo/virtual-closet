@@ -105,11 +105,22 @@ function compactItemIndexV2_(snapshot) {
 
 function modelFacingCandidateV2_(candidate, snapshot) {
   candidate = candidate || {};
-  var view = copyStringFieldsV2_(candidate, {}, [
-    'candidateId', 'archetype', 'name', 'styleSummary', 'colorStrategy', 'weatherSummary'
-  ]);
+  var view = {};
+  if (typeof candidate.candidateId === 'string') {
+    if (historyTextForModelV2_(candidate.candidateId, snapshot) !== candidate.candidateId) {
+      throw new Error('Candidate has an unsafe candidateId for the model boundary');
+    }
+    view.candidateId = candidate.candidateId;
+  }
+  ['archetype', 'name', 'styleSummary', 'colorStrategy', 'weatherSummary'].forEach(function(key) {
+    if (typeof candidate[key] === 'string') view[key] = historyTextForModelV2_(candidate[key], snapshot);
+  });
   if (Array.isArray(candidate.potentialRisks)) {
-    view.potentialRisks = candidate.potentialRisks.filter(function(value) { return typeof value === 'string'; });
+    view.potentialRisks = candidate.potentialRisks.filter(function(value) {
+      return typeof value === 'string';
+    }).map(function(value) {
+      return historyTextForModelV2_(value, snapshot);
+    });
   }
   if (typeof candidate.plannerConfidence === 'number') view.plannerConfidence = candidate.plannerConfidence;
   ['topId', 'bottomId', 'shoeId', 'layerId'].forEach(function(key) {

@@ -41,6 +41,45 @@ describe('Gemini transport retry policy', () => {
     expect(sleep).toHaveBeenCalledWith(4000);
   });
 
+  it('sanitizes a terminal single-call transport exception after exactly one retry', () => {
+    const leakedUrl = 'https://generativelanguage.googleapis.com/private?key=raw-api-key';
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => { throw new Error(`first ${leakedUrl} user_closet_1783863184668`); })
+      .mockImplementationOnce(() => { throw new Error(`second ${leakedUrl} item_archived_1783863199998`); });
+    const sleep = vi.fn();
+    const api = transport(fetch, vi.fn(), sleep);
+
+    let thrown: unknown;
+    try {
+      api.callGeminiV2_('critic', [{ text: 'score' }], {}, 0.3);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(String(thrown)).toContain('critic model transport failed after one retry');
+    expect(String(thrown)).not.toContain(leakedUrl);
+    expect(String(thrown)).not.toContain('raw-api-key');
+    expect(String(thrown)).not.toContain('user_closet_1783863184668');
+    expect(String(thrown)).not.toContain('item_archived_1783863199998');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(4000);
+  });
+
+  it('preserves parsed terminal HTTP errors after one single-call retry', () => {
+    const fetch = vi.fn()
+      .mockReturnValueOnce(failure(503, 'first busy'))
+      .mockReturnValueOnce(failure(503, 'still busy'));
+    const sleep = vi.fn();
+    const api = transport(fetch, vi.fn(), sleep);
+
+    expect(() => api.callGeminiV2_('critic', [{ text: 'score' }], {}, 0.3))
+      .toThrow('critic model returned HTTP 503: still busy');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(4000);
+  });
+
   it('retries only failed planner indices and preserves successful responses', () => {
     const fetchAll = vi.fn()
       .mockReturnValueOnce([ok({ id: 'easy' }), failure(429, 'rate limited'), ok({ id: 'expressive' })])

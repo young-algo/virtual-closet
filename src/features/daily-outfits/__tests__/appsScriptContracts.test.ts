@@ -26,7 +26,7 @@ const evaluateAppsScript = <T>(
 };
 
 const plannerValidator = new Function(`
-  function itemMapV2_(snapshot) { var map = Object.create(null); snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
+  ${apps('ItemIndex.gs')}
   ${apps('Taste.gs')}
   ${apps('PlannerValidation.gs')}
   return validatePlannerResponseV2_;
@@ -584,28 +584,48 @@ describe('Apps Script contracts', () => {
     expect(mismatchErrors).toMatch(/exactly copies manual saved outfit "Saved Look"/);
   });
 
-  it('accepts opaque prototype-key candidate and wardrobe ids in planner validation', () => {
+  it('accepts safe prototype-key candidate ids alongside distinct opaque wardrobe ids', () => {
     const response = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
     response.candidates[0] = {
       ...response.candidates[0],
       candidateId: '__proto__',
-      topId: '__proto__',
-      bottomId: 'constructor',
-      shoeId: 'toString',
-      itemIds: ['toString', '__proto__', 'constructor'],
+      topId: 'wardrobe.__proto__',
+      bottomId: 'wardrobe.constructor',
+      shoeId: 'wardrobe.toString',
+      itemIds: ['wardrobe.toString', 'wardrobe.__proto__', 'wardrobe.constructor'],
     };
     response.candidates[1].candidateId = 'constructor';
     response.candidates[2].candidateId = 'toString';
     const opaqueSnapshot = {
       ...snapshot,
       items: snapshot.items.concat([
-        { id: '__proto__', slot: 'top', category: 'T-Shirts', profile: { warmth: 2, breathability: 4 } },
-        { id: 'constructor', slot: 'bottom', category: 'Pants', profile: {} },
-        { id: 'toString', slot: 'shoes', category: 'Sneakers', profile: { rainSafety: 'good' } },
+        { id: 'wardrobe.__proto__', slot: 'top', category: 'T-Shirts', profile: { warmth: 2, breathability: 4 } },
+        { id: 'wardrobe.constructor', slot: 'bottom', category: 'Pants', profile: {} },
+        { id: 'wardrobe.toString', slot: 'shoes', category: 'Sneakers', profile: { rainSafety: 'good' } },
       ]),
     };
 
     expect(plannerValidator(response, 'easy', opaqueSnapshot)).toEqual([]);
+  });
+
+  it('rejects planner candidate ids that shared model sanitation would rewrite', () => {
+    const currentWardrobeId = 'user_closet_1783863184668';
+    const privacySnapshot = {
+      ...snapshot,
+      items: snapshot.items.concat([{
+        id: currentWardrobeId,
+        slot: 'top',
+        category: 'T-Shirts',
+        profile: { warmth: 2, breathability: 4 },
+      }]),
+    };
+    const current = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
+    current.candidates[0].candidateId = currentWardrobeId;
+    const stale = structuredClone(current);
+    stale.candidates[0].candidateId = 'item_archived_1783863199998';
+
+    expect(plannerValidator(current, 'easy', privacySnapshot).join(' ')).toMatch(/candidateId.*unsafe model token/);
+    expect(plannerValidator(stale, 'easy', privacySnapshot).join(' ')).toMatch(/candidateId.*unsafe model token/);
   });
 
   it('does not collapse distinct planner combinations whose opaque ids contain delimiters', () => {
