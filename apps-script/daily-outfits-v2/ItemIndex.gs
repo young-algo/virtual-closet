@@ -90,17 +90,16 @@ function modelProfileViewV2_(profile, snapshot) {
 
 function compactItemIndexV2_(snapshot) {
   return snapshot.items.map(function(item) {
-    return {
+    var view = {
       label: item.shortLabel,
-      slot: item.slot,
-      name: typeof item.name === 'string' ? historyTextForModelV2_(item.name, snapshot) : item.name,
-      brand: typeof item.brand === 'string' ? historyTextForModelV2_(item.brand, snapshot) : item.brand,
-      category: typeof item.category === 'string' ? historyTextForModelV2_(item.category, snapshot) : item.category,
-      color: typeof item.color === 'string' ? historyTextForModelV2_(item.color, snapshot) : item.color,
-      description: typeof item.description === 'string' ? historyTextForModelV2_(item.description, snapshot) : item.description,
-      styleCode: typeof item.styleCode === 'string' ? historyTextForModelV2_(item.styleCode, snapshot) : null,
-      profile: modelProfileViewV2_(item.profile, snapshot)
+      slot: item.slot
     };
+    ['name', 'brand', 'category', 'color', 'description'].forEach(function(key) {
+      if (typeof item[key] === 'string') view[key] = historyTextForModelV2_(item[key], snapshot);
+    });
+    view.styleCode = typeof item.styleCode === 'string' ? historyTextForModelV2_(item.styleCode, snapshot) : null;
+    view.profile = modelProfileViewV2_(item.profile, snapshot);
+    return view;
   });
 }
 

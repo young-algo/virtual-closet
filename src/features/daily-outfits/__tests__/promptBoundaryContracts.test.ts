@@ -793,6 +793,87 @@ describe('prompt and response label boundary', () => {
       .forEach(id => expect(prompt).not.toContain(id));
   });
 
+  it('omits malformed top-level item metadata from the real planner index', () => {
+    const staleUserId = 'user_closet_1555555555555';
+    const staleItemId = 'item_archived_1555555555554';
+    const staleSneakerId = 'sneaker_WW6666-101';
+    const staleImageId = 'img_6666';
+    const safeProse = 'sneaker_rotation and img_reference stay readable';
+    const malformedSnapshot = {
+      ...richSnapshot,
+      tasteExamples: [],
+      items: richSnapshot.items.map(item => {
+        if (item.id === topId) {
+          return {
+            ...item,
+            name: { current: topId, stale: staleUserId, marker: 'private malformed name' },
+            brand: [bottomId, staleItemId, 'private malformed brand'],
+            category: { current: sneakerId, stale: staleSneakerId, marker: 'private malformed category' },
+            color: [topId, staleImageId, 'private malformed color'],
+            description: {
+              current: bottomId,
+              stale: staleUserId,
+              nested: [staleSneakerId, staleImageId],
+              marker: 'private malformed description'
+            },
+            styleCode: [sneakerId, staleSneakerId, staleImageId, 'private malformed styleCode']
+          };
+        }
+        if (item.id === bottomId) {
+          return {
+            ...item,
+            name: `Valid name ${topId} ${staleUserId}`,
+            brand: `Valid brand ${bottomId} ${staleItemId}`,
+            category: `Valid category ${sneakerId} ${staleSneakerId}`,
+            color: `valid olive ${topId} ${staleImageId}`,
+            description: `Valid description ${bottomId} ${staleUserId}; ${safeProse}`,
+            styleCode: `Valid style ${sneakerId} ${staleImageId}`
+          };
+        }
+        return item;
+      })
+    };
+    const plannerParts = evaluateAppsScript<(
+      archetype: string,
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => Array<{ text?: string }>>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'plannerPartsV2_',
+      { DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] }, console }
+    );
+
+    const index = api.compactItemIndexV2_(malformedSnapshot);
+    const malformedItem = index.find(item => item.label === 'T004')!;
+    expect(malformedItem).toEqual(expect.objectContaining({
+      label: 'T004',
+      slot: 'top',
+      styleCode: null
+    }));
+    ['name', 'brand', 'category', 'color', 'description']
+      .forEach(field => expect(malformedItem).not.toHaveProperty(field));
+
+    expect(index.find(item => item.label === 'B002')).toEqual(expect.objectContaining({
+      label: 'B002',
+      slot: 'bottom',
+      name: 'Valid name T004 INVALID_LABEL',
+      brand: 'Valid brand B002 INVALID_LABEL',
+      category: 'Valid category S009 INVALID_LABEL',
+      color: 'valid olive T004 INVALID_LABEL',
+      description: `Valid description B002 INVALID_LABEL; ${safeProse}`,
+      styleCode: 'Valid style S009 INVALID_LABEL'
+    }));
+
+    const prompt = plannerParts('easy', malformedSnapshot, richWeather, richHistory)[0].text || '';
+    expect(prompt).toContain('COMPLETE ITEM INDEX:');
+    expect(prompt).toContain('"label":"T004","slot":"top","styleCode":null');
+    expect(prompt).toContain(safeProse);
+    expect(prompt).not.toContain('private malformed');
+    [topId, bottomId, sneakerId, staleUserId, staleItemId, staleSneakerId, staleImageId]
+      .forEach(id => expect(prompt).not.toContain(id));
+  });
+
   it('sanitizes and type-filters every model-facing profile field in the planner item index', () => {
     const staleUserId = 'user_closet_1777777777777';
     const staleItemId = 'item_archived_1777777777776';
