@@ -83,12 +83,12 @@ function compactItemIndexV2_(snapshot) {
     return {
       label: item.shortLabel,
       slot: item.slot,
-      name: item.name,
-      brand: item.brand,
-      category: item.category,
-      color: item.color,
-      description: item.description,
-      styleCode: item.styleCode || null,
+      name: typeof item.name === 'string' ? historyTextForModelV2_(item.name, snapshot) : item.name,
+      brand: typeof item.brand === 'string' ? historyTextForModelV2_(item.brand, snapshot) : item.brand,
+      category: typeof item.category === 'string' ? historyTextForModelV2_(item.category, snapshot) : item.category,
+      color: typeof item.color === 'string' ? historyTextForModelV2_(item.color, snapshot) : item.color,
+      description: typeof item.description === 'string' ? historyTextForModelV2_(item.description, snapshot) : item.description,
+      styleCode: typeof item.styleCode === 'string' ? historyTextForModelV2_(item.styleCode, snapshot) : null,
       profile: modelProfileViewV2_(item.profile)
     };
   });

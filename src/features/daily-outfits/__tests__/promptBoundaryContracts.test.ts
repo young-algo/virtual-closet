@@ -745,6 +745,54 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain('privateNote');
   });
 
+  it('sanitizes every item-derived string in the planner complete item index', () => {
+    const staleUserId = 'user_closet_1888888888888';
+    const staleItemId = 'item_archived_1888888888887';
+    const staleSneakerId = 'sneaker_ZZ9999-404';
+    const staleImageId = 'img_9999';
+    const safeProse = 'sneaker_rotation and img_reference stay readable';
+    const leakingSnapshot = {
+      ...richSnapshot,
+      items: richSnapshot.items.map(item => item.id === topId ? {
+        ...item,
+        name: `Name ${topId} ${staleUserId}`,
+        brand: `Brand ${bottomId} ${staleItemId}`,
+        color: `Color ${sneakerId} ${staleSneakerId}`,
+        description: `Description ${topId} ${staleImageId}; ${safeProse}`,
+        category: `Category ${bottomId} ${staleUserId}`,
+        styleCode: `Style ${sneakerId} ${staleImageId}`
+      } : item)
+    };
+    const plannerParts = evaluateAppsScript<(
+      archetype: string,
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => Array<{ text?: string }>>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'plannerPartsV2_',
+      { DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] }, console }
+    );
+
+    const indexItem = api.compactItemIndexV2_(leakingSnapshot).find(item => item.label === 'T004');
+    expect(indexItem).toEqual(expect.objectContaining({
+      label: 'T004',
+      slot: 'top',
+      name: 'Name T004 INVALID_LABEL',
+      brand: 'Brand B002 INVALID_LABEL',
+      color: 'Color S009 INVALID_LABEL',
+      description: `Description T004 INVALID_LABEL; ${safeProse}`,
+      category: 'Category B002 INVALID_LABEL',
+      styleCode: 'Style S009 INVALID_LABEL'
+    }));
+
+    const prompt = plannerParts('easy', leakingSnapshot, richWeather, richHistory)[0].text || '';
+    expect(prompt).toContain('COMPLETE ITEM INDEX:');
+    expect(prompt).toContain(safeProse);
+    [topId, bottomId, sneakerId, staleUserId, staleItemId, staleSneakerId, staleImageId]
+      .forEach(id => expect(prompt).not.toContain(id));
+  });
+
   it('resolves batch and standalone planner responses before deterministic validation', () => {
     const validated: Array<Record<string, unknown>> = [];
     const planner = evaluateAppsScript<{
@@ -1604,6 +1652,87 @@ describe('prompt and response label boundary', () => {
     });
     expect(captured.finalRepair).not.toContain('Useful ordinary defect prose remains.');
     expect(captured.finalRepair).not.toContain('Useful ordinary reservation prose remains.');
+  });
+
+  it('scrubs exact-copy saved names from planner and final repair error prompts', () => {
+    const staleUserId = 'user_closet_1888888888888';
+    const staleItemId = 'item_archived_1888888888887';
+    const staleSneakerId = 'sneaker_ZZ9999-404';
+    const staleImageId = 'img_9999';
+    const safeProse = 'sneaker_rotation and img_reference stay readable';
+    const savedName = `Saved ${topId} ${staleUserId} ${staleItemId} ${staleSneakerId} ${staleImageId}; ${safeProse}`;
+    const exactCopyError = `candidate[0] exactly copies manual saved outfit "${savedName}"`;
+    const tasteSnapshot = {
+      ...richSnapshot,
+      tasteExamples: [{
+        id: 'saved-exact-copy-error',
+        name: savedName,
+        itemIds: [topId, bottomId, sneakerId],
+        source: 'manual',
+        createdAt: 1
+      }]
+    };
+    const captured: Record<string, string> = {};
+    const repairPlanner = evaluateAppsScript<(
+      archetype: string,
+      invalidResponse: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => object>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'repairPlannerResponseV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        validatePlannerResponseV2_: () => [],
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          captured.planner = parts.map(part => part.text || '').join('\n');
+          return labelPlannerResponse('easy');
+        }
+      }
+    );
+    repairPlanner('easy', { archetype: 'easy', candidates: [] }, [exactCopyError], tasteSnapshot, richWeather, richHistory);
+
+    const repairFinal = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object,
+      selectedCandidates: object[],
+      critic: object
+    ) => object>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        validateFinalBundleV2_: () => [],
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          captured.final = parts.map(part => part.text || '').join('\n');
+          return { recommendations: [] };
+        }
+      }
+    );
+    repairFinal(
+      { recommendations: [] },
+      [exactCopyError.replace('candidate[0]', 'recommendation[0]')],
+      tasteSnapshot,
+      richWeather,
+      richHistory,
+      [internalCandidate()],
+      { scores: [] }
+    );
+
+    expect(Object.keys(captured).sort()).toEqual(['final', 'planner']);
+    Object.values(captured).forEach(prompt => {
+      expect(prompt).toContain('Saved T004 INVALID_LABEL INVALID_LABEL INVALID_LABEL INVALID_LABEL');
+      expect(prompt).toContain(safeProse);
+      [topId, staleUserId, staleItemId, staleSneakerId, staleImageId]
+        .forEach(id => expect(prompt).not.toContain(id));
+    });
   });
 
   it('uses only the immutable selected set and its compact scores, then resolves curator output immediately', () => {

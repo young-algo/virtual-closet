@@ -89,12 +89,7 @@ function validatePlannerResponseSafelyV2_(response, archetype, snapshot) {
 }
 
 function repairPromptStringV2_(value, snapshot) {
-  if (typeof value !== 'string') return null;
-  var sanitized = value;
-  (snapshot && snapshot.items || []).forEach(function(item) {
-    if (typeof item.id === 'string' && item.id) sanitized = sanitized.split(item.id).join(item.shortLabel || 'INVALID_LABEL');
-  });
-  return sanitized.replace(/\b(?:user|item)_[A-Za-z0-9_-]+\b/g, 'INVALID_LABEL');
+  return typeof value === 'string' ? historyTextForModelV2_(value, snapshot) : null;
 }
 
 function repairPromptErrorsV2_(errors, snapshot) {
