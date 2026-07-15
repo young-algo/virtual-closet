@@ -43,7 +43,7 @@ describe('Daily V2 resilience contracts', () => {
     }],
     ['cache-age calculation', {
       loadWeatherCacheV2_: () => ({ localDate: '2026-07-14', fetchedAt: 9_000 }),
-      Date: class extends Date { static now() { throw new Error('clock unavailable'); } }
+      Date: class extends Date { static now(): never { throw new Error('clock unavailable'); } }
     }]
   ])('rethrows the original fetch error when %s fails during the cache gate', (_label, overrides) => {
     const fetchError = new Error('DNS timeout');
@@ -53,7 +53,6 @@ describe('Daily V2 resilience contracts', () => {
       applySnapshotSettingsV2_: (config: object) => config,
       getDailyConfigV2_: () => ({ latitude: 1, longitude: 2, timezone: 'America/New_York', locationLabel: 'Brooklyn, NY' }),
       loadSnapshotV2_: () => ({}),
-      loadWeatherCacheV2_: () => ({ localDate: '2026-07-14', fetchedAt: 9_000 }),
       localDateV2_: () => '2026-07-14',
       Date: class extends Date { static now() { return 10_000; } },
       encodeURIComponent,
