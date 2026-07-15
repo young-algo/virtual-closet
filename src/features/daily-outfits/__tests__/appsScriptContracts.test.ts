@@ -395,7 +395,9 @@ const deterministicSelectionSelectors = evaluateAppsScript<{
     weather: ReturnType<typeof persistedWeatherFixture>,
     history: ReturnType<typeof persistedHistoryFixture>,
   ) => {
+    needsReplan: string | null;
     finalistPools: Record<string, ReturnType<typeof persistedPlannerCandidateFixture>[]>;
+    eligibleByArchetype: Record<string, ReturnType<typeof persistedPlannerCandidateFixture>[]>;
     eligibleCountByArchetype: Record<string, number>;
     compositeById: Record<string, number>;
   };
@@ -451,6 +453,33 @@ const recomputePersistedSelectionFixture = (
     replannedArchetypes: replannedArchetypes.slice(),
   };
   return pending;
+};
+
+const persistedReplanFixture = (roundCount: 1 | 2) => {
+  const pending = currentPendingFixture();
+  const replannedArchetypes = dailyArchetypes.slice(0, roundCount);
+  pending.critic.scores.forEach(score => {
+    const candidate = pending.candidates.find(value => value.candidateId === score.candidateId);
+    if (candidate && replannedArchetypes.includes(candidate.archetype)) {
+      score.disqualified = true;
+      score.criticalDefects = ['fixture forces targeted re-plan'];
+    }
+  });
+  replannedArchetypes.forEach(archetype => {
+    Array.from({ length: 5 }, (_, offset) => persistedPlannerCandidateFixture(archetype, offset + 5))
+      .forEach(addition => {
+        pending.candidates.push(addition);
+        pending.critic.scores.push({
+          ...structuredClone(pending.critic.scores[0]),
+          candidateId: addition.candidateId,
+          disqualified: false,
+          criticalDefects: [],
+        });
+      });
+  });
+  const snapshotValue = persistedSnapshotFixture(pending);
+  recomputePersistedSelectionFixture(pending, snapshotValue, replannedArchetypes);
+  return { pending, snapshot: snapshotValue };
 };
 
 describe('Apps Script contracts', () => {
@@ -1156,11 +1185,9 @@ describe('Apps Script contracts', () => {
     });
 
     const scheduledEvents: string[] = [];
-    let baselineNowCalls = 0;
     class BaselineSchedulerDate extends Date {
       static now() {
-        baselineNowCalls += 1;
-        return baselineNowCalls === 1 ? 0 : 300_000;
+        return 0;
       }
     }
     const scheduledBaseline = evaluateAppsScript<() => { ok: boolean; stage: string }>(
@@ -1241,6 +1268,7 @@ describe('Apps Script contracts', () => {
       });
 
       const events: string[] = [];
+      const savedStates: Record<string, unknown>[] = [];
       const snapshotValue = sendableSnapshotFixture();
       const pendingValue = sendablePendingFixture();
       mutatePersistedMetadataDimension(pendingValue, dimension);
@@ -1251,11 +1279,9 @@ describe('Apps Script contracts', () => {
         wardrobeFingerprint: pendingValue.wardrobeFingerprint,
         attemptCounts: {},
       };
-      let nowCalls = 0;
       class SchedulerDate extends Date {
         static now() {
-          nowCalls += 1;
-          return nowCalls === 1 ? 0 : 300_000;
+          return 0;
         }
       }
       const scheduler = evaluateAppsScript<() => { ok: boolean; stage: string }>(
@@ -1280,12 +1306,19 @@ describe('Apps Script contracts', () => {
           loadJobStateV2_: () => structuredClone(state),
           loadPendingV2_: () => structuredClone(pendingValue),
           mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('feedback-history'); },
+          fetchDailyWeatherV2: () => {
+            events.push('generation');
+            throw new Error('drift recovery advanced into generation');
+          },
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitNearCopyV2_: () => null,
           MailApp: { sendEmail: () => { events.push('mail'); } },
           loadHistoryV2_: () => [],
           saveHistoryV2_: () => { events.push('sent-history'); },
-          saveJobStateV2_: () => 'job-file',
+          saveJobStateV2_: (value: Record<string, unknown>) => {
+            savedStates.push(structuredClone(value));
+            return 'job-file';
+          },
           savePendingV2_: () => 'pending-file',
           sendOperationalAlertV2_: () => undefined,
           console: { error: () => undefined },
@@ -1294,6 +1327,13 @@ describe('Apps Script contracts', () => {
 
       expect({ dimension, result: scheduler() }).toMatchObject({ dimension, result: { ok: true, stage: 'idle' } });
       expect(events).toEqual([]);
+      expect(savedStates).toEqual([expect.objectContaining({
+        qualityPolicyVersion: 3,
+        localDate: '2026-07-15',
+        wardrobeFingerprint: 'wardrobe-v3',
+        stage: 'idle',
+        attemptCounts: {},
+      })]);
     });
   });
 
@@ -1913,18 +1953,14 @@ describe('Apps Script contracts', () => {
     const validSnapshot = persistedSnapshotFixture(valid);
     expect(() => guard(valid, valid.localDate, valid.wardrobeFingerprint, validSnapshot)).not.toThrow();
 
-    const validReplan = structuredClone(valid);
-    const replanAddition = persistedPlannerCandidateFixture('easy', 5);
-    validReplan.candidates.push(structuredClone(replanAddition));
-    validReplan.critic.scores.push({
-      ...structuredClone(validReplan.critic.scores[0]),
-      candidateId: replanAddition.candidateId,
-    });
-    validReplan.selection.path = 'replan-1';
-    validReplan.selection.replannedArchetypes = ['easy'];
-    validReplan.selection.eligibleCountByArchetype.easy = 6;
-    validReplan.selection.compositeById[replanAddition.candidateId] = 10;
-    const replanSnapshot = persistedSnapshotFixture(validReplan);
+    const { pending: validReplan, snapshot: replanSnapshot } = persistedReplanFixture(1);
+    expect(deterministicSelectionSelectors.finalists(
+      validReplan.candidates.slice(0, 15),
+      validReplan.critic.scores.slice(0, 15),
+      replanSnapshot,
+      validReplan.weather,
+      validReplan.history,
+    ).needsReplan).toBe('easy');
     expect(() => guard(
       validReplan,
       validReplan.localDate,
@@ -2050,9 +2086,19 @@ describe('Apps Script contracts', () => {
     inheritedCandidateUniverse.candidates[0] = Object.create(inheritedCandidateUniverse.candidates[0]);
     invalids.push(inheritedCandidateUniverse);
 
+    const permutedCandidateUniverse = structuredClone(valid);
+    [permutedCandidateUniverse.candidates[0], permutedCandidateUniverse.candidates[1]] =
+      [permutedCandidateUniverse.candidates[1], permutedCandidateUniverse.candidates[0]];
+    invalids.push(permutedCandidateUniverse);
+
     const sparseScores = structuredClone(valid);
     delete sparseScores.critic.scores[0];
     invalids.push(sparseScores);
+
+    const permutedScores = structuredClone(valid);
+    [permutedScores.critic.scores[0], permutedScores.critic.scores[1]] =
+      [permutedScores.critic.scores[1], permutedScores.critic.scores[0]];
+    invalids.push(permutedScores);
 
     const inconsistentReplan = structuredClone(valid);
     inconsistentReplan.selection.path = 'replan-1';
@@ -2063,6 +2109,47 @@ describe('Apps Script contracts', () => {
       expect(() => guard(value, valid.localDate, valid.wardrobeFingerprint, validSnapshot))
         .toThrowError('Deterministic selection must be ready');
     });
+  });
+
+  it('rejects persisted replan additions after the initial selection already succeeds', () => {
+    const pending = currentPendingFixture();
+    Array.from({ length: 5 }, (_, offset) => persistedPlannerCandidateFixture('easy', offset + 5))
+      .forEach(addition => {
+        pending.candidates.push(addition);
+        pending.critic.scores.push({
+          ...structuredClone(pending.critic.scores[0]),
+          candidateId: addition.candidateId,
+        });
+      });
+    const snapshotValue = persistedSnapshotFixture(pending);
+    recomputePersistedSelectionFixture(pending, snapshotValue, ['easy']);
+
+    expect(() => deterministicSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toThrowError('Deterministic selection must be ready');
+  });
+
+  it('rejects a persisted round whose archetype differs from the intermediate replan request', () => {
+    const { pending, snapshot: snapshotValue } = persistedReplanFixture(2);
+    const initialCount = dailyArchetypes.length * 5;
+    const easyRound = pending.candidates.slice(initialCount, initialCount + 5);
+    const polishedRound = pending.candidates.slice(initialCount + 5);
+    const initialScores = pending.critic.scores.slice(0, initialCount);
+    const easyScores = pending.critic.scores.slice(initialCount, initialCount + 5);
+    const polishedScores = pending.critic.scores.slice(initialCount + 5);
+    pending.candidates = pending.candidates.slice(0, initialCount).concat(polishedRound, easyRound);
+    pending.critic.scores = initialScores.concat(polishedScores, easyScores);
+    pending.selection.replannedArchetypes = ['polished-casual', 'easy'];
+
+    expect(() => deterministicSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toThrowError('Deterministic selection must be ready');
   });
 
   it('preserves exact-recomputed top3 and two-round replan graphs', () => {
@@ -2084,17 +2171,21 @@ describe('Apps Script contracts', () => {
     expect(top3.selection.path).toBe('top3');
     expect(() => deterministicSelectionGuard(top3, top3.localDate, top3.wardrobeFingerprint, top3Snapshot)).not.toThrow();
 
-    const replan2 = currentPendingFixture();
-    ['easy', 'polished-casual'].forEach((archetype, round) => {
-      const addition = persistedPlannerCandidateFixture(archetype, 5);
-      replan2.candidates.push(addition);
-      replan2.critic.scores.push({
-        ...structuredClone(replan2.critic.scores[round * 5]),
-        candidateId: addition.candidateId,
-      });
-    });
-    const replan2Snapshot = persistedSnapshotFixture(replan2);
-    recomputePersistedSelectionFixture(replan2, replan2Snapshot, ['easy', 'polished-casual']);
+    const { pending: replan2, snapshot: replan2Snapshot } = persistedReplanFixture(2);
+    expect(deterministicSelectionSelectors.finalists(
+      replan2.candidates.slice(0, 15),
+      replan2.critic.scores.slice(0, 15),
+      replan2Snapshot,
+      replan2.weather,
+      replan2.history,
+    ).needsReplan).toBe('easy');
+    expect(deterministicSelectionSelectors.finalists(
+      replan2.candidates.slice(0, 20),
+      replan2.critic.scores.slice(0, 20),
+      replan2Snapshot,
+      replan2.weather,
+      replan2.history,
+    ).needsReplan).toBe('polished-casual');
     expect(replan2.selection.path).toBe('replan-2');
     expect(() => deterministicSelectionGuard(
       replan2,

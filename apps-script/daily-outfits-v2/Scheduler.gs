@@ -208,6 +208,7 @@ function runDailyOutfitScheduler() {
     if (!validScheduledJobStateV2_(state, localDate, snapshot.wardrobeFingerprint)) {
       state = newJobStateV2_(localDate, snapshot.wardrobeFingerprint);
       saveJobStateV2_(state);
+      return { ok: true, stage: state.stage };
     }
     if (state.stage === 'sent') return { ok: true, skipped: 'state-sent' };
     var advanced = advanceDailyJobV2_(state, snapshot, startedAt);
