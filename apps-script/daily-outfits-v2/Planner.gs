@@ -66,7 +66,12 @@ function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, 
 function runAllPlannersV2_(snapshot, weather, history) {
   var temperature = getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9);
   var calls = DAILY_V2.ARCHETYPES.map(function(archetype) {
-    return { parts: plannerPartsV2_(archetype, snapshot, weather, history), schema: PLANNER_SCHEMA_V2, temperature: temperature };
+    return {
+      context: archetype,
+      parts: plannerPartsV2_(archetype, snapshot, weather, history),
+      schema: PLANNER_SCHEMA_V2,
+      temperature: temperature
+    };
   });
   var responses = callGeminiBatchV2_('planner', calls);
   return responses.map(function(response, index) {
