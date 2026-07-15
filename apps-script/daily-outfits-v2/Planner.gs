@@ -55,16 +55,87 @@ function plannerPartsV2_(archetype, snapshot, weather, history) {
   return [{ text: prompt }].concat(atlasPartsV2_(snapshot));
 }
 
+function plannerResponseCanResolveLabelsV2_(response) {
+  if (!response || typeof response !== 'object' || Array.isArray(response) || !Array.isArray(response.candidates)) return false;
+  var recordsAreIterable = function(records) {
+    if (records === undefined || records === null) return true;
+    if (!Array.isArray(records)) return false;
+    return records.every(function(record) {
+      return record && typeof record === 'object' && !Array.isArray(record) &&
+        (record.itemIds === undefined || record.itemIds === null || Array.isArray(record.itemIds));
+    });
+  };
+  return recordsAreIterable(response.candidates) && recordsAreIterable(response.recommendations);
+}
+
+function resolvePlannerResponseForValidationV2_(response, snapshot) {
+  return plannerResponseCanResolveLabelsV2_(response) ? resolveLabelsV2_(response, snapshot) : response;
+}
+
+function repairPromptStringV2_(value, snapshot) {
+  if (typeof value !== 'string') return null;
+  var sanitized = value;
+  (snapshot && snapshot.items || []).forEach(function(item) {
+    if (typeof item.id === 'string' && item.id) sanitized = sanitized.split(item.id).join(item.shortLabel || 'INVALID_LABEL');
+  });
+  return sanitized.replace(/\b(?:user|item)_[A-Za-z0-9_-]+\b/g, 'INVALID_LABEL');
+}
+
+function repairPromptErrorsV2_(errors, snapshot) {
+  return (Array.isArray(errors) ? errors : []).map(function(error) {
+    return repairPromptStringV2_(error, snapshot) || 'Invalid response field requires repair';
+  });
+}
+
+function repairItemTokenV2_(token, snapshot) {
+  if (typeof token !== 'string') return 'INVALID_LABEL';
+  var label = labelForItemIdV2_(token, snapshot);
+  if (label) return label;
+  return Object.prototype.hasOwnProperty.call(itemLabelMapV2_(snapshot), token) ? token : 'INVALID_LABEL';
+}
+
+function modelFacingInvalidPlannerCandidateV2_(candidate, snapshot) {
+  candidate = candidate && typeof candidate === 'object' && !Array.isArray(candidate) ? candidate : {};
+  var view = {};
+  ['candidateId', 'archetype', 'name', 'styleSummary', 'colorStrategy', 'weatherSummary'].forEach(function(field) {
+    var value = repairPromptStringV2_(candidate[field], snapshot);
+    if (value !== null) view[field] = value;
+  });
+  ['topId', 'bottomId', 'shoeId', 'layerId'].forEach(function(field) {
+    if (!Object.prototype.hasOwnProperty.call(candidate, field)) return;
+    if (field === 'layerId' && candidate[field] === null) view[field] = null;
+    else view[field] = repairItemTokenV2_(candidate[field], snapshot);
+  });
+  view.itemIds = (Array.isArray(candidate.itemIds) ? candidate.itemIds : []).map(function(token) {
+    return repairItemTokenV2_(token, snapshot);
+  });
+  if (Array.isArray(candidate.potentialRisks)) {
+    view.potentialRisks = candidate.potentialRisks.reduce(function(values, value) {
+      var sanitized = repairPromptStringV2_(value, snapshot);
+      if (sanitized !== null) values.push(sanitized);
+      return values;
+    }, []);
+  }
+  if (typeof candidate.plannerConfidence === 'number' && isFinite(candidate.plannerConfidence)) view.plannerConfidence = candidate.plannerConfidence;
+  return view;
+}
+
+function modelFacingInvalidPlannerCandidatesV2_(candidates, snapshot) {
+  return (Array.isArray(candidates) ? candidates : []).map(function(candidate) {
+    return modelFacingInvalidPlannerCandidateV2_(candidate, snapshot);
+  });
+}
+
 function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history) {
   var parts = plannerPartsV2_(archetype, snapshot, weather, history);
   invalidResponse = invalidResponse && typeof invalidResponse === 'object' && !Array.isArray(invalidResponse) ? invalidResponse : {};
   var modelInvalidResponse = {
-    archetype: typeof invalidResponse.archetype === 'string' ? invalidResponse.archetype : archetype,
-    candidates: modelFacingCandidatesV2_(Array.isArray(invalidResponse.candidates) ? invalidResponse.candidates : [], snapshot)
+    archetype: typeof invalidResponse.archetype === 'string' ? repairPromptStringV2_(invalidResponse.archetype, snapshot) : archetype,
+    candidates: modelFacingInvalidPlannerCandidatesV2_(invalidResponse.candidates, snapshot)
   };
-  parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + errors.join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(modelInvalidResponse) });
+  parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + repairPromptErrorsV2_(errors, snapshot).join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(modelInvalidResponse) });
   var raw = callGeminiV2_('repair', parts, PLANNER_SCHEMA_V2, 0.25);
-  var repaired = resolveLabelsV2_(raw, snapshot);
+  var repaired = resolvePlannerResponseForValidationV2_(raw, snapshot);
   var repairedErrors = validatePlannerResponseV2_(repaired, archetype, snapshot);
   if (repairedErrors.length) throw new Error(archetype + ' planner repair failed: ' + repairedErrors.join('; '));
   return repaired;
@@ -83,7 +154,7 @@ function runAllPlannersV2_(snapshot, weather, history) {
   var rawResponses = callGeminiBatchV2_('planner', calls);
   return rawResponses.map(function(raw, index) {
     var archetype = DAILY_V2.ARCHETYPES[index];
-    var response = resolveLabelsV2_(raw, snapshot);
+    var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
     var errors = validatePlannerResponseV2_(response, archetype, snapshot);
     return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
   });
@@ -95,7 +166,7 @@ function runPlannerV2(archetype) {
   var weather = fetchDailyWeatherV2();
   var history = dailyHistoryContextV2_(weather.localDate);
   var raw = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
-  var response = resolveLabelsV2_(raw, snapshot);
+  var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
   var errors = validatePlannerResponseV2_(response, archetype, snapshot);
   return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
 }

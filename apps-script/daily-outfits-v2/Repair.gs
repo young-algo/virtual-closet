@@ -1,3 +1,21 @@
+function modelFacingInvalidCuratedV2_(curated, snapshot) {
+  curated = curated && typeof curated === 'object' && !Array.isArray(curated) ? curated : {};
+  return {
+    recommendations: (Array.isArray(curated.recommendations) ? curated.recommendations : []).map(function(recommendation) {
+      recommendation = recommendation && typeof recommendation === 'object' && !Array.isArray(recommendation) ? recommendation : {};
+      var view = {};
+      ['candidateId', 'archetype', 'name', 'colorHook', 'whyItWorks', 'weatherNote'].forEach(function(field) {
+        var value = repairPromptStringV2_(recommendation[field], snapshot);
+        if (value !== null) view[field] = value;
+      });
+      view.itemIds = (Array.isArray(recommendation.itemIds) ? recommendation.itemIds : []).map(function(token) {
+        return repairItemTokenV2_(token, snapshot);
+      });
+      return view;
+    })
+  };
+}
+
 function repairFinalBundleV2_(curated, errors, snapshot, weather, history, plannerResponses, critic) {
   var finalists = finalistsV2_(plannerResponses, critic);
   var current = curated;
@@ -6,8 +24,8 @@ function repairFinalBundleV2_(curated, errors, snapshot, weather, history, plann
     var prompt = [
       'Repair only what is required in this invalid final-curator response. Select only from the six unchanged finalists; copy exact itemIds. Return exactly one recommendation per archetype.',
       'Apply weather, palette, colorIntent, saved-outfit near-copy, history, and cross-outfit diversity constraints. Every recommendation needs a specific colorHook naming the visible relationship between at least two items. Do not explain the repair or expose chain-of-thought.',
-      'VALIDATION ERRORS:\n' + currentErrors.join('\n'),
-      'INVALID RESPONSE:\n' + JSON.stringify(modelFacingCuratedV2_(current, snapshot)),
+      'VALIDATION ERRORS:\n' + repairPromptErrorsV2_(currentErrors, snapshot).join('\n'),
+      'INVALID RESPONSE:\n' + JSON.stringify(modelFacingInvalidCuratedV2_(current, snapshot)),
       'SIX FINALISTS:\n' + JSON.stringify(modelFacingCandidatesV2_(finalists, snapshot)),
       'CRITIC:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic)),
       'SAVED OUTFIT SIGNATURES:\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
@@ -15,7 +33,7 @@ function repairFinalBundleV2_(curated, errors, snapshot, weather, history, plann
       'HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot))
     ].join('\n\n');
     var raw = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.25);
-    current = resolveLabelsV2_(raw, snapshot);
+    current = resolveCuratorResponseForValidationV2_(raw, snapshot);
     currentErrors = validateFinalBundleV2_(current, snapshot, weather, history, plannerResponses, critic);
     if (!currentErrors.length) return current;
   }

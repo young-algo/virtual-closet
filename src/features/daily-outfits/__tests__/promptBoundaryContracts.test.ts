@@ -4,6 +4,7 @@ import { apps, evaluateAppsScript } from './appsScriptTestHarness';
 const sneakerId = 'user_sneaker_1783863184667';
 const topId = 'user_closet_1783863184668';
 const bottomId = 'user_closet_1783863184669';
+const staleLongId = 'user_closet_1783863199999';
 
 const snapshot = {
   items: [
@@ -550,6 +551,115 @@ describe('prompt and response label boundary', () => {
     expect(validated.every(response => (response.candidates as Array<{ topId: string }>)[0].topId === topId)).toBe(true);
   });
 
+  it('routes null and non-array planner outputs through repair in batch and standalone flows', () => {
+    const malformed = [
+      null,
+      { archetype: 'easy', candidates: { malformed: true, wardrobeId: staleLongId } }
+    ];
+    let standaloneIndex = 0;
+    let malformedValidated = 0;
+    let repairCalls = 0;
+    const planner = evaluateAppsScript<{
+      runAllPlannersV2_: (snapshot: object, weather: object, history: object) => Array<Record<string, unknown>>;
+      runPlannerV2: (archetype: string) => Record<string, unknown>;
+    }>(
+      ['ItemIndex.gs', 'Planner.gs'],
+      '({ runAllPlannersV2_, runPlannerV2 })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        getNumberPropertyV2_: () => 0.9,
+        callGeminiBatchV2_: () => [malformed[0], malformed[1], labelPlannerResponse('expressive')],
+        callGeminiV2_: (stage: string) => {
+          if (stage === 'repair') {
+            repairCalls += 1;
+            return labelPlannerResponse('easy');
+          }
+          const response = malformed[standaloneIndex];
+          standaloneIndex += 1;
+          return response;
+        },
+        validatePlannerResponseV2_: (response: unknown) => {
+          if (!response || typeof response !== 'object' || !Array.isArray((response as { candidates?: unknown }).candidates)) {
+            malformedValidated += 1;
+            return ['exactly five candidates are required'];
+          }
+          return [];
+        },
+        assertFreshSnapshotV2_: (value: object) => value,
+        loadSnapshotV2_: () => richSnapshot,
+        fetchDailyWeatherV2: () => richWeather,
+        dailyHistoryContextV2_: () => richHistory
+      }
+    );
+
+    const batch = planner.runAllPlannersV2_(richSnapshot, richWeather, richHistory);
+    const standaloneNull = planner.runPlannerV2('easy');
+    const standaloneNonArray = planner.runPlannerV2('easy');
+
+    expect(batch).toHaveLength(3);
+    expect(standaloneNull).toHaveProperty('candidates');
+    expect(standaloneNonArray).toHaveProperty('candidates');
+    expect(malformedValidated).toBe(4);
+    expect(repairCalls).toBe(4);
+  });
+
+  it('repairs invented planner labels through closed prompts in batch and standalone flows', () => {
+    const invalidCandidate = {
+      ...labelCandidate(),
+      shoeId: 'S999',
+      itemIds: ['T004', 'B002', { wardrobeId: staleLongId }],
+      potentialRisks: [`Do not expose ${staleLongId}`]
+    };
+    const invalidResponse = { archetype: 'easy', candidates: [invalidCandidate] };
+    const repairPrompts: string[] = [];
+    const planner = evaluateAppsScript<{
+      runAllPlannersV2_: (snapshot: object, weather: object, history: object) => Array<Record<string, unknown>>;
+      runPlannerV2: (archetype: string) => Record<string, unknown>;
+    }>(
+      ['ItemIndex.gs', 'Planner.gs'],
+      '({ runAllPlannersV2_, runPlannerV2 })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        getNumberPropertyV2_: () => 0.9,
+        callGeminiBatchV2_: () => [invalidResponse, labelPlannerResponse('polished-casual'), labelPlannerResponse('expressive')],
+        callGeminiV2_: (stage: string, parts: Array<{ text?: string }>) => {
+          if (stage === 'repair') {
+            repairPrompts.push(parts.map(part => part.text || '').join('\n'));
+            return labelPlannerResponse('easy');
+          }
+          return invalidResponse;
+        },
+        validatePlannerResponseV2_: (response: { candidates?: Array<{ shoeId?: string }> } | null) => {
+          const candidate = response?.candidates?.[0];
+          return candidate?.shoeId === 'S999'
+            ? [`candidate[0] contains invented item ${staleLongId}`]
+            : [];
+        },
+        assertFreshSnapshotV2_: (value: object) => value,
+        loadSnapshotV2_: () => richSnapshot,
+        fetchDailyWeatherV2: () => richWeather,
+        dailyHistoryContextV2_: () => richHistory
+      }
+    );
+
+    planner.runAllPlannersV2_(richSnapshot, richWeather, richHistory);
+    planner.runPlannerV2('easy');
+
+    expect(repairPrompts).toHaveLength(2);
+    repairPrompts.forEach(prompt => {
+      expect(prompt).toContain('INVALID_LABEL');
+      expect(prompt).not.toContain('S999');
+      expect(prompt).not.toContain(staleLongId);
+      expect(prompt).not.toContain('wardrobeId');
+    });
+  });
+
   it('captures a planner repair prompt without real ids and resolves its response before validation', () => {
     let capturedParts: Array<{ text?: string }> = [];
     let validatedResolvedResponse = false;
@@ -747,6 +857,43 @@ describe('prompt and response label boundary', () => {
     expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
   });
 
+  it.each([
+    ['null response', null],
+    ['non-array recommendations', { recommendations: { malformed: true, wardrobeId: staleLongId } }]
+  ])('routes malformed curator output (%s) into final validation and repair', (_case, malformedCurated) => {
+    let validated: unknown;
+    let repaired: unknown;
+    const pipeline = evaluateAppsScript<(snapshot: object, weather: object) => { curated: { recommendations: unknown[] } }>(
+      ['ItemIndex.gs', 'Curator.gs', 'Scheduler.gs'],
+      'generationBundlePipelineV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        criticFinalistIdsV2_: () => ['easy-1'],
+        modelWeatherViewV2_: () => ({}),
+        modelFacingCriticResponseV2_: () => ({ scores: [], finalists: {} }),
+        dailyHistoryContextV2_: () => richHistory,
+        runAllPlannersV2_: () => [{ candidates: [internalCandidate()] }],
+        runCriticV2_: () => ({ scores: [], finalists: { easy: ['easy-1'], polishedCasual: [], expressive: [] } }),
+        callGeminiV2_: () => malformedCurated,
+        validateFinalBundleV2_: (curated: unknown) => {
+          validated = curated;
+          return ['exactly three final recommendations are required'];
+        },
+        repairFinalBundleV2_: (curated: unknown) => {
+          repaired = curated;
+          return { recommendations: [] };
+        },
+        buildBundleV2_: () => ({})
+      }
+    );
+
+    const result = pipeline(richSnapshot, richWeather);
+    expect(validated).toEqual(malformedCurated);
+    expect(repaired).toEqual(malformedCurated);
+    expect(result.curated).toEqual({ recommendations: [] });
+  });
+
   it('captures final repair prompts on compact views and resolves before validation', () => {
     let capturedParts: Array<{ text?: string }> = [];
     let validatedResolvedResponse = false;
@@ -801,6 +948,69 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain(topId);
     expect(serialized).not.toContain('privateNested');
     expect(serialized).not.toContain('hourly');
+    expect(validatedResolvedResponse).toBe(true);
+    expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+  });
+
+  it('repairs unknown final item labels through a closed invalid-curated prompt', () => {
+    let capturedPrompt = '';
+    let validatedResolvedResponse = false;
+    const repairFinal = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => { recommendations: Array<{ itemIds: string[] }> }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          capturedPrompt = parts.map(part => part.text || '').join('\n');
+          return {
+            recommendations: [{
+              candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
+              itemIds: ['T004', 'B002', 'S009'], colorHook: 'Cream, olive, and brown connect.',
+              whyItWorks: 'The relaxed proportions align across every piece.', weatherNote: 'Breathable enough for today.'
+            }]
+          };
+        },
+        validateFinalBundleV2_: (response: { recommendations: Array<{ itemIds: string[] }> }) => {
+          validatedResolvedResponse = JSON.stringify(response.recommendations[0].itemIds) === JSON.stringify([topId, bottomId, sneakerId]);
+          return [];
+        }
+      }
+    );
+    const current = {
+      recommendations: [{
+        candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
+        itemIds: [topId, bottomId, 'X404', { wardrobeId: staleLongId }], colorHook: `Unsafe ${staleLongId}`,
+        whyItWorks: 'The relaxed proportions align across every piece.', weatherNote: 'Breathable enough for today.'
+      }]
+    };
+    const critic = {
+      scores: [],
+      finalists: { easy: ['easy-1'], polishedCasual: [], expressive: [] }
+    };
+
+    const result = repairFinal(
+      current,
+      [`recommendation[0] contains invented item ${staleLongId}`],
+      richSnapshot,
+      richWeather,
+      richHistory,
+      [{ candidates: [internalCandidate()] }],
+      critic
+    );
+
+    expect(capturedPrompt).toContain('INVALID_LABEL');
+    expect(capturedPrompt).not.toContain('X404');
+    expect(capturedPrompt).not.toContain(staleLongId);
+    expect(capturedPrompt).not.toContain('wardrobeId');
     expect(validatedResolvedResponse).toBe(true);
     expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
   });

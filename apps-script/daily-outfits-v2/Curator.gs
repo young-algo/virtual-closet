@@ -26,6 +26,23 @@ function finalistsV2_(plannerResponses, critic) {
   return criticFinalistIdsV2_(critic).map(function(id) { return byId[id]; });
 }
 
+function curatorResponseCanResolveLabelsV2_(response) {
+  if (!response || typeof response !== 'object' || Array.isArray(response) || !Array.isArray(response.recommendations)) return false;
+  var recordsAreIterable = function(records) {
+    if (records === undefined || records === null) return true;
+    if (!Array.isArray(records)) return false;
+    return records.every(function(record) {
+      return record && typeof record === 'object' && !Array.isArray(record) &&
+        (record.itemIds === undefined || record.itemIds === null || Array.isArray(record.itemIds));
+    });
+  };
+  return recordsAreIterable(response.recommendations) && recordsAreIterable(response.candidates);
+}
+
+function resolveCuratorResponseForValidationV2_(response, snapshot) {
+  return curatorResponseCanResolveLabelsV2_(response) ? resolveLabelsV2_(response, snapshot) : response;
+}
+
 function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
   var finalists = finalistsV2_(plannerResponses, critic);
   var prompt = [
@@ -39,7 +56,7 @@ function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
     'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic))
   ].join('\n\n');
   var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.4);
-  return resolveLabelsV2_(raw, snapshot);
+  return resolveCuratorResponseForValidationV2_(raw, snapshot);
 }
 
 function runCuratorV2() {
