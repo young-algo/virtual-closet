@@ -144,15 +144,20 @@ describe('Apps Script contracts', () => {
     expect(() => criticValidator({ scores: [null] }, [candidates[0]])).not.toThrow();
   });
 
-  it('enforces byte-exact selected echoes and mirrors the top-bottom cooldown', () => {
+  it('enforces byte-exact opaque selected ids, true uniqueness, score integrity, and the top-bottom cooldown', () => {
     const archetypes = ['easy', 'polished-casual', 'expressive'];
+    const opaqueIds = ['__proto__', 'constructor', 'toString'];
     const selected = archetypes.map((archetype, index) => ({
-      candidateId: `${archetype}-${index}`,
+      candidateId: opaqueIds[index],
       archetype,
-      topId: `selected-top-${index}`,
-      bottomId: `selected-bottom-${index}`,
-      shoeId: `selected-shoe-${index}`,
-      itemIds: [`selected-top-${index}`, `selected-bottom-${index}`, `selected-shoe-${index}`]
+      topId: index === 0 ? '__proto__' : `selected-top-${index}`,
+      bottomId: index === 1 ? 'constructor' : `selected-bottom-${index}`,
+      shoeId: index === 2 ? 'toString' : `selected-shoe-${index}`,
+      itemIds: [
+        index === 0 ? '__proto__' : `selected-top-${index}`,
+        index === 1 ? 'constructor' : `selected-bottom-${index}`,
+        index === 2 ? 'toString' : `selected-shoe-${index}`
+      ]
     }));
     const finalSnapshot = {
       settings: {},
@@ -182,6 +187,30 @@ describe('Apps Script contracts', () => {
     const weather = { morningFeelsLikeF: 60, middayFeelsLikeF: 70, eveningFeelsLikeF: 60, rainExpected: false, layerGuidance: 'none' };
     const history = { exactOutfitsPrevious14Days: [], cooldownItemIds: [] };
     expect(finalValidator(curated, finalSnapshot, weather, history, selected, critic)).toEqual([]);
+
+    const duplicateSelected = structuredClone(selected);
+    const duplicateCurated = structuredClone(curated);
+    duplicateSelected[1].candidateId = duplicateSelected[0].candidateId;
+    duplicateCurated.recommendations[1].candidateId = duplicateCurated.recommendations[0].candidateId;
+    expect(finalValidator(duplicateCurated, finalSnapshot, weather, history, duplicateSelected, critic).join(' '))
+      .toMatch(/duplicates a final candidate/);
+
+    const duplicateItemsSelected = structuredClone(selected);
+    const duplicateItemsCurated = structuredClone(curated);
+    duplicateItemsSelected[1].topId = duplicateItemsSelected[0].topId;
+    duplicateItemsSelected[1].itemIds[0] = duplicateItemsSelected[0].itemIds[0];
+    duplicateItemsCurated.recommendations[1].itemIds[0] = duplicateItemsCurated.recommendations[0].itemIds[0];
+    expect(finalValidator(duplicateItemsCurated, finalSnapshot, weather, history, duplicateItemsSelected, critic).join(' '))
+      .toMatch(/tops must be unique/);
+
+    const duplicateScore = { scores: critic.scores.concat(structuredClone(critic.scores[0])) };
+    expect(finalValidator(curated, finalSnapshot, weather, history, selected, duplicateScore).join(' '))
+      .toMatch(/no eligible critic score/);
+
+    const malformedScore = structuredClone(critic);
+    malformedScore.scores[0].candidateId = '';
+    expect(finalValidator(curated, finalSnapshot, weather, history, selected, malformedScore).join(' '))
+      .toMatch(/no eligible critic score/);
 
     const reordered = structuredClone(curated);
     reordered.recommendations[0].itemIds.reverse();

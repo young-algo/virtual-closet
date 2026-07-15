@@ -1,18 +1,39 @@
+function ownFinalValidationKeyV2_(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 function scoreMapV2_(critic) {
-  var map = {};
-  critic.scores.forEach(function(score) { map[score.candidateId] = score; });
-  return map;
+  var map = Object.create(null);
+  var seen = Object.create(null);
+  var valid = true;
+  var scores = critic && Array.isArray(critic.scores) ? critic.scores : [];
+  scores.forEach(function(score) {
+    if (!score || typeof score !== 'object' || Array.isArray(score) ||
+        typeof score.candidateId !== 'string' || !score.candidateId) {
+      valid = false;
+      return;
+    }
+    if (ownFinalValidationKeyV2_(seen, score.candidateId)) {
+      valid = false;
+      return;
+    }
+    seen[score.candidateId] = true;
+    map[score.candidateId] = score;
+  });
+  return valid ? map : Object.create(null);
 }
 
 function exactHistoryKeysV2_(history) {
-  var keys = {};
+  var keys = Object.create(null);
   (history.exactOutfitsPrevious14Days || []).forEach(function(entry) { keys[entry.itemIds.slice().sort().join('|')] = true; });
   return keys;
 }
 
 function weatherSafetyErrorsV2_(recommendation, itemMap, weather, snapshot) {
   var errors = [];
-  var selected = recommendation.itemIds.map(function(id) { return itemMap[id]; }).filter(Boolean);
+  var selected = recommendation.itemIds.map(function(id) {
+    return ownFinalValidationKeyV2_(itemMap, id) ? itemMap[id] : null;
+  }).filter(Boolean);
   var top = selected.find(function(item) { return item.slot === 'top'; });
   var bottom = selected.find(function(item) { return item.slot === 'bottom'; });
   var shoes = selected.find(function(item) { return item.slot === 'shoes'; });
@@ -37,13 +58,13 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
   var itemMap = itemMapV2_(snapshot);
   selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
   var scoreMap = scoreMapV2_(critic);
-  var seenCandidate = {};
-  var seenArchetype = {};
-  var tops = {};
-  var bottoms = {};
-  var shoes = {};
-  var diversityStories = {};
-  var layerUse = {};
+  var seenCandidate = Object.create(null);
+  var seenArchetype = Object.create(null);
+  var tops = Object.create(null);
+  var bottoms = Object.create(null);
+  var shoes = Object.create(null);
+  var diversityStories = Object.create(null);
+  var layerUse = Object.create(null);
   var historyKeys = exactHistoryKeysV2_(history);
 
   curated.recommendations.forEach(function(rec, index) {
@@ -52,11 +73,13 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     if (!candidate || rec.candidateId !== candidate.candidateId) errors.push(path + ' changed or reordered the selected candidateId');
     if (!candidate || rec.archetype !== candidate.archetype) errors.push(path + ' changed the selected archetype');
     if (!candidate || JSON.stringify(rec.itemIds) !== JSON.stringify(candidate.itemIds)) errors.push(path + ' changed or reordered the selected itemIds');
-    if (seenCandidate[rec.candidateId]) errors.push(path + ' duplicates a final candidate');
+    if (ownFinalValidationKeyV2_(seenCandidate, rec.candidateId)) errors.push(path + ' duplicates a final candidate');
     seenCandidate[rec.candidateId] = true;
-    if (DAILY_V2.ARCHETYPES.indexOf(rec.archetype) < 0 || seenArchetype[rec.archetype]) errors.push(path + ' has a missing or duplicate archetype');
+    if (DAILY_V2.ARCHETYPES.indexOf(rec.archetype) < 0 || ownFinalValidationKeyV2_(seenArchetype, rec.archetype)) errors.push(path + ' has a missing or duplicate archetype');
     seenArchetype[rec.archetype] = true;
-    var selected = (rec.itemIds || []).map(function(id) { return itemMap[id]; });
+    var selected = (rec.itemIds || []).map(function(id) {
+      return ownFinalValidationKeyV2_(itemMap, id) ? itemMap[id] : null;
+    });
     if (selected.some(function(item) { return !item; })) errors.push(path + ' contains an invented item id');
     ['top', 'bottom', 'shoes'].forEach(function(slot) {
       if (selected.filter(function(item) { return item && item.slot === slot; }).length !== 1) errors.push(path + ' must contain exactly one ' + slot);
@@ -65,21 +88,21 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     var top = selected.find(function(item) { return item && item.slot === 'top'; });
     var bottom = selected.find(function(item) { return item && item.slot === 'bottom'; });
     var shoe = selected.find(function(item) { return item && item.slot === 'shoes'; });
-    if (top && tops[top.id]) errors.push('tops must be unique across final recommendations');
-    if (bottom && bottoms[bottom.id]) errors.push('bottoms must be unique across final recommendations');
+    if (top && ownFinalValidationKeyV2_(tops, top.id)) errors.push('tops must be unique across final recommendations');
+    if (bottom && ownFinalValidationKeyV2_(bottoms, bottom.id)) errors.push('bottoms must be unique across final recommendations');
     if (top) tops[top.id] = true;
     if (bottom) bottoms[bottom.id] = true;
-    if (shoe) shoes[shoe.id] = (shoes[shoe.id] || 0) + 1;
+    if (shoe) shoes[shoe.id] = (ownFinalValidationKeyV2_(shoes, shoe.id) ? shoes[shoe.id] : 0) + 1;
     var layer = selected.find(function(item) { return item && item.slot === 'layer'; });
-    if (layer) layerUse[layer.id] = (layerUse[layer.id] || 0) + 1;
+    if (layer) layerUse[layer.id] = (ownFinalValidationKeyV2_(layerUse, layer.id) ? layerUse[layer.id] : 0) + 1;
     if (top && bottom) {
       var story = [top.profile.primaryColorFamily, bottom.profile.primaryColorFamily, top.profile.silhouette, bottom.profile.silhouette].join('|');
-      if (diversityStories[story]) errors.push('final recommendations need materially different color or silhouette stories');
+      if (ownFinalValidationKeyV2_(diversityStories, story)) errors.push('final recommendations need materially different color or silhouette stories');
       diversityStories[story] = true;
     }
     var savedNearCopy = savedOutfitNearCopyV2_(rec.itemIds || [], snapshot);
     if (savedNearCopy) errors.push(path + ' near-copies saved outfit "' + savedNearCopy.name + '" by retaining ' + savedNearCopy.sharedCoreItemIds.length + ' core pieces');
-    if (historyKeys[(rec.itemIds || []).slice().sort().join('|')]) errors.push(path + ' exactly repeats a prior-14-day outfit');
+    if (ownFinalValidationKeyV2_(historyKeys, (rec.itemIds || []).slice().sort().join('|'))) errors.push(path + ' exactly repeats a prior-14-day outfit');
     var cooldown = new Set(history.cooldownItemIds || []);
     if (candidate && (cooldown.has(candidate.topId) || cooldown.has(candidate.bottomId))) {
       errors.push(path + ' violates the yesterday top/bottom cooldown');
@@ -87,7 +110,7 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     if (!rec.colorHook || rec.colorHook.length < 30 || rec.colorHook.length > 240) errors.push(path + '.colorHook must name a specific cross-item color relationship');
     if (!rec.whyItWorks || rec.whyItWorks.length < 30 || rec.whyItWorks.length > 320) errors.push(path + '.whyItWorks must be concise and specific');
     if (!rec.weatherNote || rec.weatherNote.length < 12 || rec.weatherNote.length > 220) errors.push(path + '.weatherNote must be concise and specific');
-    var score = scoreMap[rec.candidateId];
+    var score = ownFinalValidationKeyV2_(scoreMap, rec.candidateId) ? scoreMap[rec.candidateId] : null;
     if (!score || score.disqualified) errors.push(path + ' has no eligible critic score');
     else {
       if (score.weather < 8) errors.push(path + ' critic weather score is below 8');
@@ -97,7 +120,7 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     }
     errors = errors.concat(weatherSafetyErrorsV2_(rec, itemMap, weather, snapshot).map(function(error) { return path + ': ' + error; }));
   });
-  DAILY_V2.ARCHETYPES.forEach(function(archetype) { if (!seenArchetype[archetype]) errors.push('missing archetype: ' + archetype); });
+  DAILY_V2.ARCHETYPES.forEach(function(archetype) { if (!ownFinalValidationKeyV2_(seenArchetype, archetype)) errors.push('missing archetype: ' + archetype); });
   var weatherSafeShoes = snapshot.items.filter(function(item) { return item.slot === 'shoes' && (!weather.rainExpected || item.profile.rainSafety !== 'poor'); });
   var allowReuse = snapshot.settings && snapshot.settings.allowShoeReuseWhenNecessary;
   if (Object.keys(shoes).length < 3 && weatherSafeShoes.length >= 3) errors.push('shoes must be unique when at least three weather-safe options exist');
