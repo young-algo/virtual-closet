@@ -96,7 +96,7 @@ function generateDailyBundleStepV2() {
       pending.selection = selected.selection;
       pending.manualStage = 'selection-ready';
     } else if (pending.manualStage === 'selection-ready') {
-      assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint);
+      assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint, snapshot);
       assertPersistedSelectionContextV2_(pending);
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
@@ -160,7 +160,7 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
       pending.updatedAt = Date.now();
       state.stage = 'selection-ready';
     } else if (state.stage === 'selection-ready') {
-      assertDeterministicSelectionReadyV2_(pending, state.localDate, snapshot.wardrobeFingerprint);
+      assertDeterministicSelectionReadyV2_(pending, state.localDate, snapshot.wardrobeFingerprint, snapshot);
       assertPersistedSelectionContextV2_(pending);
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);

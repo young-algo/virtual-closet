@@ -91,9 +91,14 @@ function safeDailyAttemptCountsV2_(state, validJob) {
   return projected;
 }
 
-function safeDailySelectionProjectionV2_(pending, context) {
+function safeDailySelectionProjectionV2_(pending, context, snapshot) {
   if (!context || !validCurrentPendingV2_(pending, context.localDate, context.wardrobeFingerprint) ||
       !Object.prototype.hasOwnProperty.call(pending, 'selection')) return null;
+  try {
+    assertDeterministicSelectionReadyV2_(pending, context.localDate, context.wardrobeFingerprint, snapshot);
+  } catch (_ignored) {
+    return null;
+  }
   var selection = pending.selection;
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return null;
   var required = ['path', 'eligibleCountByArchetype', 'feasibleSetCount', 'replannedArchetypes'];
@@ -163,7 +168,7 @@ function getDailyOutfitDiagnosticsV2() {
   return {
     snapshot: safeDailySnapshotValidationProjectionV2_(validation),
     job: job,
-    selection: safeDailySelectionProjectionV2_(pending, context),
+    selection: safeDailySelectionProjectionV2_(pending, context, snapshot),
     attemptCounts: safeDailyAttemptCountsV2_(state, job !== null),
     lastSentDate: lastSentDate,
     modelsConfigured: modelsConfigured,

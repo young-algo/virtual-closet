@@ -197,7 +197,51 @@ function validPersistedPlannerCandidateV2_(candidate, archetype) {
     Number.isFinite(candidate.plannerConfidence) && candidate.plannerConfidence >= 0 && candidate.plannerConfidence <= 1;
 }
 
-function persistedPlannerCandidatesV2_(planners) {
+function persistedCandidateNearCopiesSavedOutfitV2_(candidate, snapshot) {
+  var inventory = selectionInventoryIndexV2_(snapshot);
+  if (!inventory) return true;
+  var coreIds = [candidate.topId, candidate.bottomId, candidate.shoeId];
+  var examples = snapshot && Array.isArray(snapshot.tasteExamples) ? snapshot.tasteExamples : [];
+  return examples.some(function(outfit) {
+    if (!outfit || typeof outfit !== 'object' || Array.isArray(outfit) || outfit.seedStylist === false ||
+        !Array.isArray(outfit.itemIds)) return false;
+    var savedCore = Object.create(null);
+    outfit.itemIds.forEach(function(id) {
+      var item = typeof id === 'string' && ownDailyJobKeyV2_(inventory, id) ? inventory[id] : null;
+      if (item && ['top', 'bottom', 'shoes'].indexOf(item.slot) >= 0) savedCore[id] = true;
+    });
+    return coreIds.filter(function(id) { return ownDailyJobKeyV2_(savedCore, id); }).length >= 2;
+  });
+}
+
+function validPersistedPlannerCandidateQualityV2_(candidate, archetype, snapshot) {
+  return validPersistedPlannerCandidateV2_(candidate, archetype) &&
+    candidate.colorStrategy.length >= 30 && candidate.colorStrategy.length <= 280 &&
+    selectionCandidateInventoryV2_(candidate, snapshot) !== null &&
+    !persistedCandidateNearCopiesSavedOutfitV2_(candidate, snapshot);
+}
+
+function validPersistedCandidateGroupQualityV2_(candidates, archetype, snapshot) {
+  if (!validOwnDailyArrayV2_(candidates) || candidates.length === 0) return false;
+  var combinations = Object.create(null);
+  var coreSelections = [];
+  for (var index = 0; index < candidates.length; index += 1) {
+    var candidate = candidates[index];
+    if (!validPersistedPlannerCandidateQualityV2_(candidate, archetype, snapshot)) return false;
+    var combination = canonicalSelectionIdListV2_(candidate.itemIds);
+    if (combination === null || ownDailyJobKeyV2_(combinations, combination)) return false;
+    combinations[combination] = true;
+    var coreIds = [candidate.topId, candidate.bottomId, candidate.shoeId];
+    for (var priorIndex = 0; priorIndex < coreSelections.length; priorIndex += 1) {
+      var priorIds = new Set(coreSelections[priorIndex]);
+      if (coreIds.filter(function(id) { return priorIds.has(id); }).length >= 2) return false;
+    }
+    coreSelections.push(coreIds);
+  }
+  return true;
+}
+
+function persistedPlannerCandidatesV2_(planners, snapshot) {
   if (!validOwnDailyArrayV2_(planners, DAILY_V2.ARCHETYPES.length)) return null;
   var seenArchetypes = Object.create(null);
   var seenCandidates = Object.create(null);
@@ -207,11 +251,12 @@ function persistedPlannerCandidatesV2_(planners) {
     if (!validOwnDailyRecordV2_(response) || !ownNonEmptyDailyStringV2_(response, 'archetype') ||
         response.archetype !== DAILY_V2.ARCHETYPES[responseIndex] ||
         ownDailyJobKeyV2_(seenArchetypes, response.archetype) || !ownDailyJobKeyV2_(response, 'candidates') ||
-        !validOwnDailyArrayV2_(response.candidates, 5)) return null;
+        !validOwnDailyArrayV2_(response.candidates, 5) ||
+        !validPersistedCandidateGroupQualityV2_(response.candidates, response.archetype, snapshot)) return null;
     seenArchetypes[response.archetype] = true;
     for (var candidateIndex = 0; candidateIndex < response.candidates.length; candidateIndex += 1) {
       var candidate = response.candidates[candidateIndex];
-      if (!validPersistedPlannerCandidateV2_(candidate, response.archetype) ||
+      if (!validPersistedPlannerCandidateQualityV2_(candidate, response.archetype, snapshot) ||
           ownDailyJobKeyV2_(seenCandidates, candidate.candidateId)) return null;
       seenCandidates[candidate.candidateId] = true;
       candidates.push(candidate);
@@ -270,10 +315,10 @@ function validPersistedSelectionSummaryV2_(selection) {
   return selection.replannedArchetypes.length === expectedReplans;
 }
 
-function persistedSelectionCandidatesV2_(pending, plannerCandidates) {
+function persistedSelectionCandidatesV2_(pending, plannerCandidates, snapshot) {
   if (!ownDailyJobKeyV2_(pending, 'candidates') ||
       !validOwnDailyArrayV2_(pending.candidates, undefined, function(candidate) {
-        return validPersistedPlannerCandidateV2_(candidate, candidate && candidate.archetype) &&
+        return validPersistedPlannerCandidateQualityV2_(candidate, candidate && candidate.archetype, snapshot) &&
           DAILY_V2.ARCHETYPES.indexOf(candidate.archetype) >= 0;
       }) || pending.candidates.length === 0) return null;
   var candidateById = Object.create(null);
@@ -294,25 +339,79 @@ function persistedSelectionCandidatesV2_(pending, plannerCandidates) {
   return pending.candidates;
 }
 
-function validPersistedSelectionSummaryForCandidatesV2_(selection, candidates) {
-  if (!validPersistedSelectionSummaryV2_(selection) ||
-      Object.keys(selection.compositeById).length !== candidates.length) return false;
-  var candidateCountByArchetype = Object.create(null);
-  DAILY_V2.ARCHETYPES.forEach(function(archetype) { candidateCountByArchetype[archetype] = 0; });
+function persistedReplannedArchetypesV2_(candidates, plannerCandidates, snapshot) {
+  var initialIds = Object.create(null);
+  plannerCandidates.forEach(function(candidate) { initialIds[candidate.candidateId] = true; });
+  var rounds = [];
+  var roundCandidates = [];
+  var seenArchetypes = Object.create(null);
   for (var index = 0; index < candidates.length; index += 1) {
     var candidate = candidates[index];
-    candidateCountByArchetype[candidate.archetype] += 1;
-    if (!ownDailyJobKeyV2_(selection.compositeById, candidate.candidateId)) return false;
+    if (ownDailyJobKeyV2_(initialIds, candidate.candidateId)) continue;
+    if (!rounds.length || rounds[rounds.length - 1] !== candidate.archetype) {
+      if (ownDailyJobKeyV2_(seenArchetypes, candidate.archetype)) return null;
+      if (roundCandidates.length && !validPersistedCandidateGroupQualityV2_(
+        roundCandidates,
+        rounds[rounds.length - 1],
+        snapshot
+      )) return null;
+      rounds.push(candidate.archetype);
+      seenArchetypes[candidate.archetype] = true;
+      roundCandidates = [];
+    }
+    roundCandidates.push(candidate);
+    if (roundCandidates.length > 5) return null;
   }
-  var replanned = Object.create(null);
-  selection.replannedArchetypes.forEach(function(archetype) { replanned[archetype] = true; });
-  return DAILY_V2.ARCHETYPES.every(function(archetype) {
-    var candidateCount = candidateCountByArchetype[archetype];
-    var eligibleCount = selection.eligibleCountByArchetype[archetype];
-    var additions = candidateCount - 5;
-    return candidateCount >= 5 && candidateCount <= 10 && eligibleCount <= candidateCount &&
-      (ownDailyJobKeyV2_(replanned, archetype) ? additions >= 1 : additions === 0);
-  });
+  if (roundCandidates.length && !validPersistedCandidateGroupQualityV2_(
+    roundCandidates,
+    rounds[rounds.length - 1],
+    snapshot
+  )) return null;
+  return rounds.length <= 2 ? rounds : null;
+}
+
+function exactPersistedSelectionMapV2_(persisted, recomputed) {
+  if (!validOwnDailyRecordV2_(persisted) || !recomputed || typeof recomputed !== 'object' ||
+      Array.isArray(recomputed)) return false;
+  var persistedKeys = Object.keys(persisted).sort();
+  var recomputedKeys = Object.keys(recomputed).sort();
+  if (persistedKeys.length !== recomputedKeys.length) return false;
+  for (var index = 0; index < persistedKeys.length; index += 1) {
+    var key = persistedKeys[index];
+    if (key !== recomputedKeys[index] || persisted[key] !== recomputed[key]) return false;
+  }
+  return true;
+}
+
+function validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandidates, snapshot) {
+  if (!validPersistedSelectionSummaryV2_(pending.selection) ||
+      typeof selectFinalistsV2_ !== 'function' || typeof selectFinalSetV2_ !== 'function') return false;
+  var actualReplans = persistedReplannedArchetypesV2_(candidates, plannerCandidates, snapshot);
+  if (actualReplans === null || !exactPersistedDailyValueV2_(pending.selection.replannedArchetypes, actualReplans)) {
+    return false;
+  }
+  var finalists = selectFinalistsV2_(
+    candidates,
+    pending.critic.scores,
+    snapshot,
+    pending.weather,
+    pending.history
+  );
+  if (!finalists || finalists.needsReplan) return false;
+  var finalSet = selectFinalSetV2_(
+    finalists.finalistPools,
+    pending.critic.scores,
+    snapshot,
+    pending.weather
+  );
+  if (!finalSet || finalSet.needsReplan || !Array.isArray(finalSet.selectedCandidates)) return false;
+  var expectedPath = actualReplans.length ? 'replan-' + actualReplans.length : finalSet.path;
+  if (pending.selection.path !== expectedPath ||
+      pending.selection.feasibleSetCount !== finalSet.feasibleSetCount ||
+      !exactPersistedSelectionMapV2_(pending.selection.eligibleCountByArchetype, finalists.eligibleCountByArchetype) ||
+      !exactPersistedSelectionMapV2_(pending.selection.compositeById, finalists.compositeById) ||
+      !exactPersistedDailyValueV2_(pending.selectedCandidates, finalSet.selectedCandidates)) return false;
+  return true;
 }
 
 function validDailyAttemptCountsV2_(attemptCounts) {
@@ -338,7 +437,7 @@ function validPersistedStagePrerequisitesV2_(stage, pending, localDate, wardrobe
   if (stage === 'weather-ready') return true;
   if (stage === 'planners-ready' || stage === 'critic-ready') {
     if (!ownDailyJobKeyV2_(pending, 'planners')) return false;
-    var candidates = persistedPlannerCandidatesV2_(pending.planners);
+    var candidates = persistedPlannerCandidatesV2_(pending.planners, snapshot);
     if (!candidates) return false;
     if (stage === 'planners-ready') return true;
     return validOwnDailyObjectV2_(pending, 'critic') && validPersistedCriticForCandidatesV2_(pending.critic, candidates);
@@ -346,7 +445,7 @@ function validPersistedStagePrerequisitesV2_(stage, pending, localDate, wardrobe
   if (stage === 'selection-ready') {
     if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection)) return false;
     try {
-      assertDeterministicSelectionReadyV2_(pending, localDate, wardrobeFingerprint);
+      assertDeterministicSelectionReadyV2_(pending, localDate, wardrobeFingerprint, snapshot);
       return true;
     } catch (_ignored) {
       return false;
@@ -417,8 +516,13 @@ function validPersistedSelectionScoreV2_(score) {
   return true;
 }
 
-function assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, wardrobeFingerprint) {
+function assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, wardrobeFingerprint, snapshot) {
   var valid = validCurrentPendingV2_(pending, expectedLocalDate, wardrobeFingerprint) &&
+    snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) &&
+    ownNonEmptyDailyStringV2_(snapshot, 'wardrobeFingerprint') &&
+    snapshot.wardrobeFingerprint === wardrobeFingerprint &&
+    validOwnDailyObjectV2_(pending, 'weather') && validPersistedWeatherV2_(pending.weather, pending.localDate) &&
+    validOwnDailyObjectV2_(pending, 'history') && validPersistedHistoryV2_(pending.history) &&
     ownDailyJobKeyV2_(pending, 'planners') &&
     ownDailyJobKeyV2_(pending, 'candidates') &&
     ownDailyJobKeyV2_(pending, 'selectedCandidates') &&
@@ -428,11 +532,11 @@ function assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, wardro
     ownDailyJobKeyV2_(pending, 'selection') && validOwnDailyRecordV2_(pending.selection);
   if (!valid) throw new Error('Deterministic selection must be ready');
 
-  var plannerCandidates = persistedPlannerCandidatesV2_(pending.planners);
-  var candidates = plannerCandidates && persistedSelectionCandidatesV2_(pending, plannerCandidates);
+  var plannerCandidates = persistedPlannerCandidatesV2_(pending.planners, snapshot);
+  var candidates = plannerCandidates && persistedSelectionCandidatesV2_(pending, plannerCandidates, snapshot);
   if (!plannerCandidates || !candidates ||
       !validPersistedCriticForCandidatesV2_(pending.critic, candidates) ||
-      !validPersistedSelectionSummaryForCandidatesV2_(pending.selection, candidates)) {
+      !validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandidates, snapshot)) {
     throw new Error('Deterministic selection must be ready');
   }
 
@@ -494,7 +598,7 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
         !validOwnDailyObjectV2_(bundle, 'weather') ||
         !validPersistedWeatherV2_(bundle.weather, bundle.localDate) ||
         JSON.stringify(bundle.weather) !== JSON.stringify(pending.weather)) return false;
-    assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, snapshot.wardrobeFingerprint);
+    assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, snapshot.wardrobeFingerprint, snapshot);
     if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection) ||
         !ownDailyJobKeyV2_(bundle, 'recommendations') ||
         !validOwnDailyArrayV2_(bundle.recommendations, DAILY_V2.ARCHETYPES.length)) return false;

@@ -63,7 +63,7 @@ function repairFinalBundleV2() {
   var localDate = localDateV2_(new Date(), config.timezone);
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignored) {}
-  assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint);
+  assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint, snapshot);
   assertPersistedSelectionContextV2_(pending);
   if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection)) {
     throw new Error('Deterministic selection must be ready');
