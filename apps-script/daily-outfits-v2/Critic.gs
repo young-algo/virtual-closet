@@ -160,6 +160,7 @@ function repairCriticResponseV2_(snapshot, weather, history, candidates, invalid
     'INVALID CRITIC RESPONSE:\n' + JSON.stringify(modelFacingCriticResponseV2_(invalidResponse, snapshot)),
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+    historyGuidanceV2_(),
     'SAVED OUTFIT SIGNATURES (near-copy reference only):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
@@ -180,6 +181,7 @@ function runCriticV2_(snapshot, weather, history, plannerResponses) {
     'ARCHETYPES:\n' + DAILY_V2.ARCHETYPES.map(function(value) { return value + ': ' + archetypeBriefV2_(value); }).join('\n'),
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+    historyGuidanceV2_(),
     'SAVED OUTFIT SIGNATURES (style evidence and near-copy reference):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');

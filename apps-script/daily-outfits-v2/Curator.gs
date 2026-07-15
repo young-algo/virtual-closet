@@ -63,6 +63,7 @@ function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
     'Weather suitability is non-negotiable. Do not modify a finalist. Copy its exact itemIds and candidateId. In colorHook, name the exact visible colors/details and at least two items that create the relationship. Do not use generic language such as "keeps it clean," "lets the top pop," or "ties everything together." Produce concise customer-facing explanations only; do not reveal chain-of-thought.',
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+    historyGuidanceV2_(),
     'FINALISTS:\n' + JSON.stringify(modelFacingCandidatesV2_(finalists, snapshot)),
     'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic, snapshot))
   ].join('\n\n');

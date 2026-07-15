@@ -28,6 +28,15 @@ function copyStringFieldsV2_(source, target, keys) {
   return target;
 }
 
+function historyGuidanceV2_() {
+  return [
+    'HOW TO USE DAILY HISTORY:',
+    '- exactOutfitsPrevious14Days — combinations already emailed. Never repeat one exactly.',
+    '- itemUsagePrevious7Days — how often each item appeared in the last seven emails (exposure, not wear). Treat 3+ appearances as over-exposed unless itemFeedbackSignals shows Kevin actually wore it.',
+    '- feedback — Kevin\'s explicit reactions. wore is the strongest positive evidence for that outfit\'s styling logic and its items. liked is positive. disliked is negative, and reason names the failing dimension (colors, too-warm, too-formal, …). Do not rebuild a disliked combination or repeat its failure pattern; do favor the visual logic of worn and liked outfits without copying them.'
+  ].join('\n');
+}
+
 function modelProfileViewV2_(profile) {
   var keys = ['warmth', 'breathability', 'rainSafety', 'windProtection', 'formality', 'silhouette', 'patternIntensity', 'primaryColorFamily', 'secondaryColorFamily', 'accentColors'];
   return keys.reduce(function(view, key) {
@@ -78,6 +87,11 @@ function modelFacingCandidatesV2_(candidates, snapshot) {
 
 function modelFacingHistoryV2_(history, snapshot) {
   history = history || {};
+  var knownLabels = itemLabelMapV2_(snapshot);
+  var safeItemDescriptions = (snapshot && snapshot.items || []).reduce(function(descriptions, item) {
+    descriptions[item.shortLabel + ' ' + item.brand + ' ' + item.name] = true;
+    return descriptions;
+  }, {});
   var exactOutfits = (history.exactOutfitsPrevious14Days || []).reduce(function(entries, entry) {
     var ids = Array.isArray(entry.itemIds) ? entry.itemIds : [];
     var labels = ids.map(function(id) { return labelForItemIdV2_(id, snapshot); });
@@ -94,15 +108,41 @@ function modelFacingHistoryV2_(history, snapshot) {
     return counts;
   }, {});
   var feedback = (history.feedback || []).map(function(entry) {
-    var modelEntry = copyStringFieldsV2_(entry, {}, ['localDate', 'candidateId', 'value', 'reason', 'note']);
+    var modelEntry = copyStringFieldsV2_(entry, {}, ['localDate', 'candidateId', 'value', 'reason', 'note', 'outfitName', 'archetype']);
     if (typeof entry.createdAt === 'number') modelEntry.createdAt = entry.createdAt;
+    if (Array.isArray(entry.items)) {
+      modelEntry.items = entry.items.filter(function(description) {
+        return typeof description === 'string' && Object.prototype.hasOwnProperty.call(safeItemDescriptions, description);
+      });
+    }
     return modelEntry;
   });
-  return {
+  var view = {
     exactOutfitsPrevious14Days: exactOutfits,
     itemUsagePrevious7Days: usageCounts,
     feedback: feedback
   };
+  if (Object.prototype.hasOwnProperty.call(history, 'itemFeedbackSignals')) {
+    view.itemFeedbackSignals = Object.keys(history.itemFeedbackSignals || {}).reduce(function(signals, label) {
+      if (!Object.prototype.hasOwnProperty.call(knownLabels, label)) return signals;
+      var source = history.itemFeedbackSignals[label] || {};
+      signals[label] = {
+        wore: typeof source.wore === 'number' ? source.wore : 0,
+        liked: typeof source.liked === 'number' ? source.liked : 0,
+        disliked: typeof source.disliked === 'number' ? source.disliked : 0
+      };
+      return signals;
+    }, {});
+  }
+  if (Object.prototype.hasOwnProperty.call(history, 'cooldownItemLabels')) {
+    var seenCooldownLabels = {};
+    view.cooldownItemLabels = (history.cooldownItemLabels || []).filter(function(label) {
+      if (!Object.prototype.hasOwnProperty.call(knownLabels, label) || seenCooldownLabels[label]) return false;
+      seenCooldownLabels[label] = true;
+      return true;
+    });
+  }
+  return view;
 }
 
 function modelFacingCuratedV2_(curated, snapshot) {

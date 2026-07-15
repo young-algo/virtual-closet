@@ -11,7 +11,7 @@ function removeDailyOutfitTriggers() {
 }
 
 function generationBundlePipelineV2_(snapshot, weather) {
-  var history = dailyHistoryContextV2_(weather.localDate);
+  var history = dailyHistoryContextV2_(weather.localDate, snapshot);
   var planners = runAllPlannersV2_(snapshot, weather, history);
   var critic = runCriticV2_(snapshot, weather, history, planners);
   var curated = runCuratorV2_(snapshot, weather, history, planners, critic);
@@ -57,7 +57,7 @@ function generateDailyBundleStepV2() {
 
     if (pending.manualStage === 'idle') {
       pending.weather = fetchDailyWeatherV2();
-      pending.history = dailyHistoryContextV2_(pending.weather.localDate);
+      pending.history = dailyHistoryContextV2_(pending.weather.localDate, snapshot);
       pending.manualStage = 'weather-ready';
     } else if (pending.manualStage === 'weather-ready') {
       pending.planners = runAllPlannersV2_(snapshot, pending.weather, pending.history);
@@ -93,7 +93,7 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
     incrementAttemptV2_(state, state.stage);
     if (state.stage === 'idle') {
       var weather = fetchDailyWeatherV2();
-      var history = dailyHistoryContextV2_(weather.localDate);
+      var history = dailyHistoryContextV2_(weather.localDate, snapshot);
       pending = { localDate: weather.localDate, qualityPolicyVersion: DAILY_V2.QUALITY_POLICY_VERSION, wardrobeFingerprint: snapshot.wardrobeFingerprint, weather: weather, history: history, updatedAt: Date.now() };
       state.stage = 'weather-ready';
     } else if (state.stage === 'weather-ready') {

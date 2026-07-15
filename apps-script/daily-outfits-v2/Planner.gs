@@ -48,7 +48,9 @@ function plannerPartsV2_(archetype, snapshot, weather, history) {
     'Do not reveal chain-of-thought. Return only the requested concise structured fields.',
     'ARCHETYPE BRIEF: ' + archetypeBriefV2_(archetype),
     'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'Items listed in cooldownItemLabels headlined yesterday\'s email; avoid them today unless history shows Kevin wore them.',
     'DAILY ROTATION HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+    historyGuidanceV2_(),
     'READ-ONLY SAVED TASTE EVIDENCE (weights indicate confidence; do not copy literally):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'COMPLETE ITEM INDEX:\n' + JSON.stringify(compactItemIndexV2_(snapshot))
   ].join('\n\n');
@@ -176,7 +178,7 @@ function runPlannerV2(archetype) {
   if (DAILY_V2.ARCHETYPES.indexOf(archetype) < 0) throw new Error('Unknown archetype');
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var weather = fetchDailyWeatherV2();
-  var history = dailyHistoryContextV2_(weather.localDate);
+  var history = dailyHistoryContextV2_(weather.localDate, snapshot);
   var raw = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
   var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
   var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
@@ -186,7 +188,7 @@ function runPlannerV2(archetype) {
 function runAllPlannersV2() {
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var weather = fetchDailyWeatherV2();
-  var history = dailyHistoryContextV2_(weather.localDate);
+  var history = dailyHistoryContextV2_(weather.localDate, snapshot);
   var planners = runAllPlannersV2_(snapshot, weather, history);
   savePendingV2_({ localDate: weather.localDate, wardrobeFingerprint: snapshot.wardrobeFingerprint, weather: weather, history: history, planners: planners, updatedAt: Date.now() });
   return planners;

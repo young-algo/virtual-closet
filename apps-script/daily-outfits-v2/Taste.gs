@@ -53,22 +53,87 @@ function buildTasteSummaryV2_(snapshot) {
   }).filter(function(example) { return example.pieces.length >= 2; }).slice(-12);
 }
 
-function dailyHistoryContextV2_(localDate) {
-  var history = loadHistoryV2_().filter(function(entry) { return entry.localDate < localDate; });
+function historyLooksV2_(entry) {
+  return (entry.recommendations || []).concat(entry.encore ? [Object.assign({ archetype: 'encore' }, entry.encore)] : []);
+}
+
+function previousLocalDateV2_(localDate, timezone) {
+  var midday = Utilities.parseDate(localDate + ' 12:00', timezone, 'yyyy-MM-dd HH:mm');
+  return Utilities.formatDate(new Date(midday.getTime() - 24 * 60 * 60 * 1000), timezone, 'yyyy-MM-dd');
+}
+
+function dailyHistoryContextV2_(localDate, snapshot) {
+  var allHistory = loadHistoryV2_().filter(function(entry) { return entry.localDate < localDate; });
+  var maxDays = snapshot.settings && snapshot.settings.maxDailyHistoryDays ? snapshot.settings.maxDailyHistoryDays : 30;
+  var history = allHistory.slice(-maxDays);
   var last14 = history.slice(-14);
   var last7 = history.slice(-7);
-  var counts = {};
+  var itemMap = itemMapV2_(snapshot);
+  var usage = {};
   last7.forEach(function(entry) {
-    (entry.recommendations || []).forEach(function(rec) {
-      rec.itemIds.forEach(function(id) { counts[id] = (counts[id] || 0) + 1; });
+    historyLooksV2_(entry).forEach(function(look) {
+      (look.itemIds || []).forEach(function(id) { usage[id] = (usage[id] || 0) + 1; });
     });
   });
+
+  var feedback = [];
+  var signals = {};
+  var worn = {};
+  history.forEach(function(entry) {
+    var byCandidate = {};
+    historyLooksV2_(entry).forEach(function(look) { byCandidate[look.candidateId] = look; });
+    (entry.feedback || []).forEach(function(signal) {
+      if (['liked', 'disliked', 'wore'].indexOf(signal.value) < 0) return;
+      var look = byCandidate[signal.candidateId];
+      if (!look) return;
+      var currentItemIds = (look.itemIds || []).filter(function(id) { return Boolean(itemMap[id]); });
+      var resolvedSignal = {
+        localDate: entry.localDate,
+        value: signal.value,
+        outfitName: look.name,
+        archetype: look.archetype || 'encore',
+        items: currentItemIds.map(function(id) {
+          var item = itemMap[id];
+          return item.shortLabel + ' ' + item.brand + ' ' + item.name;
+        })
+      };
+      if (signal.reason) resolvedSignal.reason = signal.reason;
+      if (signal.note) resolvedSignal.note = signal.note;
+      feedback.push(resolvedSignal);
+      currentItemIds.forEach(function(id) {
+        var label = itemMap[id].shortLabel;
+        if (!label) return;
+        signals[label] = signals[label] || { wore: 0, liked: 0, disliked: 0 };
+        signals[label][signal.value] += 1;
+        if (signal.value === 'wore') worn[id] = true;
+      });
+    });
+  });
+
+  var yesterday = previousLocalDateV2_(localDate, (snapshot.settings && snapshot.settings.timezone) || 'America/New_York');
+  var yesterdayEntry = history.find(function(entry) { return entry.localDate === yesterday; });
+  var cooldown = {};
+  if (yesterdayEntry) {
+    historyLooksV2_(yesterdayEntry).forEach(function(look) {
+      (look.itemIds || []).forEach(function(id) {
+        var item = itemMap[id];
+        if (item && (item.slot === 'top' || item.slot === 'bottom') && !worn[id]) cooldown[id] = true;
+      });
+    });
+  }
+  var cooldownItemIds = Object.keys(cooldown);
   return {
     exactOutfitsPrevious14Days: last14.flatMap(function(entry) {
-      return (entry.recommendations || []).map(function(rec) { return { localDate: entry.localDate, itemIds: rec.itemIds.slice().sort(), archetype: rec.archetype }; });
+      return historyLooksV2_(entry).map(function(look) {
+        return { localDate: entry.localDate, itemIds: (look.itemIds || []).slice().sort(), archetype: look.archetype || 'encore' };
+      });
     }),
-    itemUsagePrevious7Days: counts,
-    feedback: last14.flatMap(function(entry) { return entry.feedback || []; }).filter(function(entry) { return entry.value === 'disliked' || entry.value === 'wore'; })
+    itemUsagePrevious7Days: usage,
+    feedback: feedback,
+    itemFeedbackSignals: signals,
+    cooldownItemLabels: cooldownItemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }).filter(Boolean),
+    cooldownItemIds: cooldownItemIds,
+    wornItemIds: Object.keys(worn)
   };
 }
 

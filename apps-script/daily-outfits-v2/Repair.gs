@@ -40,7 +40,8 @@ function repairFinalBundleV2_(curated, errors, snapshot, weather, history, plann
       'CRITIC:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic, snapshot)),
       'SAVED OUTFIT SIGNATURES:\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
       'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
-      'HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot))
+      'HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+      historyGuidanceV2_()
     ].join('\n\n');
     var raw = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.25);
     current = resolveCuratorResponseForValidationV2_(raw, snapshot);
