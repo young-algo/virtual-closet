@@ -107,9 +107,10 @@ function modelFacingCandidateV2_(candidate, snapshot) {
   view.itemIds = (candidate.itemIds || []).map(function(id) {
     return requiredItemLabelV2_(id, snapshot, 'Candidate');
   });
-  view.sharesTwoCoreWith = sharedTwoCoreSavedOutfitsV2_(candidate.itemIds || [], snapshot).map(function(outfit) {
-    return outfit.name;
-  });
+  view.sharesTwoCoreWith = sharedTwoCoreSavedOutfitsV2_(candidate.itemIds || [], snapshot).reduce(function(names, outfit) {
+    if (typeof outfit.name === 'string') names.push(historyTextForModelV2_(outfit.name, snapshot));
+    return names;
+  }, []);
   return view;
 }
 

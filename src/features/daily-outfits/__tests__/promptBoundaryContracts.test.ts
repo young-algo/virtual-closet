@@ -582,6 +582,49 @@ describe('model boundary views', () => {
     ]);
   });
 
+  it('omits saved outfit ids and sanitizes saved names and notes at every model boundary', () => {
+    const privateSavedId = 'saved-private-identifier';
+    const removedId = 'user_closet_1783863199999';
+    const tasteSnapshot = {
+      ...snapshot,
+      tasteExamples: [{
+        id: privateSavedId,
+        name: `Saved ${topId} with ${removedId}`,
+        note: `Repeat ${bottomId}, not ${removedId}`,
+        itemIds: [topId, bottomId, sneakerId],
+        source: 'manual',
+        createdAt: 1
+      }]
+    };
+
+    const summary = api.buildTasteSummaryV2_(tasteSnapshot)[0];
+    expect(summary).not.toHaveProperty('id');
+    expect(summary).toEqual(expect.objectContaining({
+      name: 'Saved T004 with INVALID_LABEL',
+      note: 'Repeat B002, not INVALID_LABEL'
+    }));
+
+    const candidate = api.modelFacingCandidateV2_({
+      candidateId: 'candidate',
+      topId,
+      bottomId,
+      shoeId: 'other-shoe',
+      itemIds: [topId, bottomId, 'other-shoe']
+    }, {
+      ...tasteSnapshot,
+      items: [...tasteSnapshot.items, {
+        ...snapshot.items[0],
+        id: 'other-shoe',
+        shortLabel: 'S010'
+      }]
+    });
+    expect(candidate.sharesTwoCoreWith).toEqual(['Saved T004 with INVALID_LABEL']);
+    expect(JSON.stringify({ summary, candidate })).not.toContain(privateSavedId);
+    expect(JSON.stringify({ summary, candidate })).not.toContain(topId);
+    expect(JSON.stringify({ summary, candidate })).not.toContain(bottomId);
+    expect(JSON.stringify({ summary, candidate })).not.toContain(removedId);
+  });
+
   it('emits two-core overlap names as critic context without long item ids', () => {
     const contextSnapshot = {
       ...snapshot,

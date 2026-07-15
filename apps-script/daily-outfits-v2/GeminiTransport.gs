@@ -70,8 +70,31 @@ function fetchGeminiWithRetryV2_(request, stage) {
   throw new Error(stage + ' model retry loop exited unexpectedly');
 }
 
+function geminiBatchContextV2_(call, index) {
+  var context = call && call.context;
+  return typeof context === 'string' && /^[A-Za-z0-9._-]+$/.test(context) ? context : String(index);
+}
+
 function geminiBatchStageV2_(stage, call, index) {
-  return stage + '[' + (call.context || index) + ']';
+  return stage + '[' + geminiBatchContextV2_(call, index) + ']';
+}
+
+function geminiBatchTransportStageV2_(stage, calls, indexes) {
+  return stage + '[' + indexes.map(function(index) {
+    return geminiBatchContextV2_(calls[index], index);
+  }).join(',') + ']';
+}
+
+function fetchGeminiBatchWithTransportRetryV2_(requests, stage) {
+  for (var attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return UrlFetchApp.fetchAll(requests);
+    } catch (_error) {
+      if (attempt >= 2) throw new Error(stage + ' model batch transport failed after one retry');
+      Utilities.sleep(4000);
+    }
+  }
+  throw new Error(stage + ' model batch transport retry loop exited unexpectedly');
 }
 
 function callGeminiV2_(stage, parts, schema, temperature) {
@@ -84,7 +107,11 @@ function callGeminiBatchV2_(stage, calls) {
   var requests = calls.map(function(call) { return geminiRequestV2_(model, call.parts, call.schema, call.temperature); });
   var results = new Array(calls.length);
   var failures = [];
-  UrlFetchApp.fetchAll(requests).forEach(function(response, index) {
+  var initialIndexes = requests.map(function(_request, index) { return index; });
+  fetchGeminiBatchWithTransportRetryV2_(
+    requests,
+    geminiBatchTransportStageV2_(stage, calls, initialIndexes)
+  ).forEach(function(response, index) {
     try {
       results[index] = parseGeminiResponseV2_(response, geminiBatchStageV2_(stage, calls[index], index));
     } catch (error) {
@@ -97,7 +124,11 @@ function callGeminiBatchV2_(stage, calls) {
   if (retryable.length) {
     var delay = retryable.some(function(failure) { return failure.error.status === 429; }) ? 20000 : 4000;
     Utilities.sleep(delay);
-    var retryResponses = UrlFetchApp.fetchAll(retryable.map(function(failure) { return requests[failure.index]; }));
+    var retryIndexes = retryable.map(function(failure) { return failure.index; });
+    var retryResponses = fetchGeminiBatchWithTransportRetryV2_(
+      retryIndexes.map(function(index) { return requests[index]; }),
+      geminiBatchTransportStageV2_(stage, calls, retryIndexes)
+    );
     retryResponses.forEach(function(response, retryIndex) {
       var originalIndex = retryable[retryIndex].index;
       try {

@@ -58,13 +58,12 @@ function buildTasteSummaryV2_(snapshot) {
   return tasteEvidenceV2_(snapshot).map(function(outfit) {
     var currentItems = outfit.itemIds.map(function(id) { return items[id]; }).filter(Boolean);
     return {
-      id: outfit.id,
-      name: outfit.name,
+      name: typeof outfit.name === 'string' ? historyTextForModelV2_(outfit.name, snapshot) : null,
       source: outfit.source,
       weight: outfit.weight,
       itemLabels: currentItems.map(function(item) { return item.shortLabel; }),
       coreItemLabels: outfit.coreItemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }).filter(Boolean),
-      note: outfit.note,
+      note: typeof outfit.note === 'string' ? historyTextForModelV2_(outfit.note, snapshot) : null,
       pieces: currentItems.map(function(item) {
         return item.shortLabel + ' ' + item.brand + ' ' + item.name + ' (' + item.slot + ', ' + item.color + ')';
       })

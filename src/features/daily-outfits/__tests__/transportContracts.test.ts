@@ -53,6 +53,82 @@ describe('Gemini transport retry policy', () => {
     expect(sleep).toHaveBeenCalledWith(20000);
   });
 
+  it('retries an initial batch transport exception exactly once after four seconds', () => {
+    const fetchAll = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('socket leaked-secret'); })
+      .mockReturnValueOnce([ok({ id: 'easy' }), ok({ id: 'polished' }), ok({ id: 'expressive' })]);
+    const sleep = vi.fn();
+    const api = transport(vi.fn(), fetchAll, sleep);
+    const calls = ['easy', 'polished-casual', 'expressive'].map(context => ({ context, parts: [], schema: {}, temperature: 0.9 }));
+
+    expect(api.callGeminiBatchV2_('planner', calls)).toEqual([{ id: 'easy' }, { id: 'polished' }, { id: 'expressive' }]);
+    expect(fetchAll).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(4000);
+  });
+
+  it('sanitizes and contextualizes an initial batch transport failure after one retry', () => {
+    const fetchAll = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('first leaked-secret'); })
+      .mockImplementationOnce(() => { throw new Error('second leaked-secret'); });
+    const sleep = vi.fn();
+    const api = transport(vi.fn(), fetchAll, sleep);
+    const calls = ['easy', 'polished-casual', 'expressive'].map(context => ({ context, parts: [], schema: {}, temperature: 0.9 }));
+
+    let thrown: unknown;
+    try {
+      api.callGeminiBatchV2_('planner', calls);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(String(thrown)).toContain('planner[easy,polished-casual,expressive] model batch transport failed after one retry');
+    expect(String(thrown)).not.toContain('leaked-secret');
+    expect(fetchAll).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(4000);
+  });
+
+  it('retries a follow-up batch transport exception exactly once after four seconds', () => {
+    const fetchAll = vi.fn()
+      .mockReturnValueOnce([ok({ id: 'easy' }), failure(503, 'busy'), ok({ id: 'expressive' })])
+      .mockImplementationOnce(() => { throw new Error('socket leaked-secret'); })
+      .mockReturnValueOnce([ok({ id: 'polished' })]);
+    const sleep = vi.fn();
+    const api = transport(vi.fn(), fetchAll, sleep);
+    const calls = ['easy', 'polished-casual', 'expressive'].map(context => ({ context, parts: [], schema: {}, temperature: 0.9 }));
+
+    expect(api.callGeminiBatchV2_('planner', calls)).toEqual([{ id: 'easy' }, { id: 'polished' }, { id: 'expressive' }]);
+    expect(fetchAll).toHaveBeenCalledTimes(3);
+    expect(fetchAll.mock.calls[1][0]).toHaveLength(1);
+    expect(fetchAll.mock.calls[2][0]).toHaveLength(1);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenNthCalledWith(1, 4000);
+    expect(sleep).toHaveBeenNthCalledWith(2, 4000);
+  });
+
+  it('sanitizes and contextualizes a follow-up batch transport failure after one retry', () => {
+    const fetchAll = vi.fn()
+      .mockReturnValueOnce([ok({ id: 'easy' }), failure(503, 'busy'), ok({ id: 'expressive' })])
+      .mockImplementationOnce(() => { throw new Error('first leaked-secret'); })
+      .mockImplementationOnce(() => { throw new Error('second leaked-secret'); });
+    const sleep = vi.fn();
+    const api = transport(vi.fn(), fetchAll, sleep);
+    const calls = ['easy', 'polished-casual', 'expressive'].map(context => ({ context, parts: [], schema: {}, temperature: 0.9 }));
+
+    let thrown: unknown;
+    try {
+      api.callGeminiBatchV2_('planner', calls);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(String(thrown)).toContain('planner[polished-casual] model batch transport failed after one retry');
+    expect(String(thrown)).not.toContain('leaked-secret');
+    expect(fetchAll).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenNthCalledWith(1, 4000);
+    expect(sleep).toHaveBeenNthCalledWith(2, 4000);
+  });
+
   it('does not retry a non-429 4xx and names the archetype', () => {
     const fetchAll = vi.fn().mockReturnValueOnce([ok({ id: 'easy' }), failure(400, 'bad request'), ok({ id: 'expressive' })]);
     const api = transport(vi.fn(), fetchAll, vi.fn());
