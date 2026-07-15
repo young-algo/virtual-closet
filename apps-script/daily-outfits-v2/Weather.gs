@@ -8,6 +8,19 @@ function weatherCodePhraseV2_(code) {
   return 'stormy';
 }
 
+function modelWeatherViewV2_(weather) {
+  var keys = [
+    'morningFeelsLikeF', 'middayFeelsLikeF', 'eveningFeelsLikeF', 'minFeelsLikeF', 'maxFeelsLikeF',
+    'highTemperatureF', 'lowTemperatureF', 'maxRainProbability', 'totalPrecipitationInches',
+    'maxWindMph', 'maxGustMph', 'averageHumidity', 'rainExpected', 'windy', 'largeTemperatureSwing',
+    'layerGuidance', 'plainEnglishSummary', 'weatherPhrase', 'localDate', 'locationLabel'
+  ];
+  return keys.reduce(function(view, key) {
+    if (Object.prototype.hasOwnProperty.call(weather, key)) view[key] = weather[key];
+    return view;
+  }, {});
+}
+
 function fetchDailyWeatherV2() {
   var config = applySnapshotSettingsV2_(getDailyConfigV2_(), loadSnapshotV2_());
   var params = {

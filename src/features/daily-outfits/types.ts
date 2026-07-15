@@ -123,6 +123,7 @@ export interface DailyWeatherProfileV2 {
   largeTemperatureSwing: boolean;
   layerGuidance: 'none' | 'optional' | 'recommended' | 'required';
   plainEnglishSummary: string;
+  weatherPhrase: string;
   fetchedAt: number;
 }
 

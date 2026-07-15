@@ -37,11 +37,18 @@ function savedOutfitNearCopyV2_(itemIds, snapshot) {
 function buildTasteSummaryV2_(snapshot) {
   var items = itemMapV2_(snapshot);
   return savedTasteSignaturesV2_(snapshot).map(function(outfit) {
-    return Object.assign({}, outfit, {
+    return {
+      id: outfit.id,
+      name: outfit.name,
+      source: outfit.source,
+      weight: outfit.weight,
+      itemLabels: outfit.itemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }),
+      coreItemLabels: outfit.coreItemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }),
+      note: outfit.note,
       pieces: outfit.itemIds.map(function(id) { return items[id]; }).filter(Boolean).map(function(item) {
-        return item.id + ': ' + item.brand + ' ' + item.name + ' (' + item.slot + ', ' + item.color + ')';
+        return item.shortLabel + ' ' + item.brand + ' ' + item.name + ' (' + item.slot + ', ' + item.color + ')';
       })
-    });
+    };
   }).filter(function(example) { return example.pieces.length >= 2; }).slice(-12);
 }
 
