@@ -445,6 +445,45 @@ describe('model-facing history boundary', () => {
     expect(JSON.stringify(model)).not.toContain(currentPrefixId);
     expect(JSON.stringify(model)).not.toContain(currentLegacyId);
   });
+
+  it('replaces non-family current ids only at complete token boundaries', () => {
+    const historyTextForModelV2_ = evaluateAppsScript<(
+      value: string,
+      snapshotValue: HistorySnapshot
+    ) => string>(['ItemIndex.gs'], 'historyTextForModelV2_', { console });
+    const currentLegacyId = 'closet-legacy-tee';
+    const regexLegacyId = 'closet.legacy+(tee)?';
+    const boundarySnapshot = structuredClone(snapshot);
+    boundarySnapshot.items.push(
+      { ...boundarySnapshot.items[0], id: currentLegacyId, shortLabel: 'T006' },
+      { ...boundarySnapshot.items[0], id: regexLegacyId, shortLabel: 'T007' }
+    );
+    const source = [
+      `suffix ${currentLegacyId}s`,
+      `prefix x${currentLegacyId}`,
+      `numeric-prefix 7${currentLegacyId}`,
+      `numeric-suffix ${currentLegacyId}7`,
+      `underscore-prefix _${currentLegacyId}`,
+      `underscore-suffix ${currentLegacyId}_archived`,
+      `hyphen-prefix -${currentLegacyId}`,
+      `hyphen-suffix ${currentLegacyId}-archived`,
+      `isolated (${currentLegacyId}),`,
+      `regex-special [${regexLegacyId}]`
+    ].join('; ');
+
+    expect(historyTextForModelV2_(source, boundarySnapshot)).toBe([
+      `suffix ${currentLegacyId}s`,
+      `prefix x${currentLegacyId}`,
+      `numeric-prefix 7${currentLegacyId}`,
+      `numeric-suffix ${currentLegacyId}7`,
+      `underscore-prefix _${currentLegacyId}`,
+      `underscore-suffix ${currentLegacyId}_archived`,
+      `hyphen-prefix -${currentLegacyId}`,
+      `hyphen-suffix ${currentLegacyId}-archived`,
+      'isolated (T006),',
+      'regex-special [T007]'
+    ].join('; '));
+  });
 });
 
 describe('history prompt contracts', () => {

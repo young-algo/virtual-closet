@@ -48,7 +48,11 @@ function historyTextForModelV2_(value, snapshot) {
     return String(right.id || '').length - String(left.id || '').length;
   }).forEach(function(item) {
     if (typeof item.id === 'string' && item.id && !/^(?:user|item)_[A-Za-z0-9_-]+$/.test(item.id)) {
-      sanitized = sanitized.split(item.id).join(item.shortLabel || 'INVALID_LABEL');
+      var escapedId = item.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var completeToken = new RegExp('(^|[^A-Za-z0-9_-])' + escapedId + '(?=$|[^A-Za-z0-9_-])', 'g');
+      sanitized = sanitized.replace(completeToken, function(match, prefix) {
+        return prefix + (item.shortLabel || 'INVALID_LABEL');
+      });
     }
   });
   return sanitized;
