@@ -38,15 +38,20 @@ function historyGuidanceV2_() {
 }
 
 function historyTextForModelV2_(value, snapshot) {
-  var sanitized = value;
-  (snapshot && snapshot.items || []).slice().sort(function(left, right) {
+  var items = snapshot && snapshot.items || [];
+  var itemsById = itemMapV2_(snapshot);
+  var sanitized = value.replace(/(^|[^A-Za-z0-9_-])((?:user|item)_[A-Za-z0-9_-]+)/g, function(match, prefix, id) {
+    var item = Object.prototype.hasOwnProperty.call(itemsById, id) ? itemsById[id] : null;
+    return prefix + (item && item.shortLabel || 'INVALID_LABEL');
+  });
+  items.slice().sort(function(left, right) {
     return String(right.id || '').length - String(left.id || '').length;
   }).forEach(function(item) {
-    if (typeof item.id === 'string' && item.id) {
+    if (typeof item.id === 'string' && item.id && !/^(?:user|item)_[A-Za-z0-9_-]+$/.test(item.id)) {
       sanitized = sanitized.split(item.id).join(item.shortLabel || 'INVALID_LABEL');
     }
   });
-  return sanitized.replace(/\b(?:user|item)_[A-Za-z0-9_-]+\b/g, 'INVALID_LABEL');
+  return sanitized;
 }
 
 function modelProfileViewV2_(profile) {

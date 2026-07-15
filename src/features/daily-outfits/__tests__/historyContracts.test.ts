@@ -396,6 +396,55 @@ describe('model-facing history boundary', () => {
     expect(JSON.stringify(model)).not.toContain(staleId);
     expect(JSON.stringify(model)).not.toContain(staleItemId);
   });
+
+  it('sanitizes complete id tokens before replacing exact current ids', () => {
+    const modelFacingHistoryV2_ = evaluateAppsScript<(
+      history: Record<string, unknown>,
+      snapshotValue: HistorySnapshot
+    ) => Record<string, any>>(['ItemIndex.gs'], 'modelFacingHistoryV2_', { console });
+    const currentPrefixId = 'item_nike_acg';
+    const stalePrefixId = `${currentPrefixId}_archived`;
+    const currentLegacyId = 'closet-legacy-tee';
+    const collisionSnapshot = structuredClone(snapshot);
+    collisionSnapshot.items.push(
+      { ...collisionSnapshot.items[0], id: currentPrefixId, shortLabel: 'T005' },
+      { ...collisionSnapshot.items[0], id: currentLegacyId, shortLabel: 'T006' }
+    );
+    const collisionText = `Keep prose with ${stalePrefixId}, ${currentPrefixId}, and ${currentLegacyId}.`;
+    const context = {
+      exactOutfitsPrevious14Days: [{
+        localDate: collisionText,
+        archetype: collisionText,
+        itemIds: [currentPrefixId, bottomId]
+      }],
+      itemUsagePrevious7Days: {},
+      feedback: [{
+        localDate: collisionText,
+        value: 'liked',
+        note: collisionText,
+        outfitName: collisionText,
+        archetype: collisionText
+      }]
+    };
+
+    const model = modelFacingHistoryV2_(context, collisionSnapshot);
+    const sanitizedText = 'Keep prose with INVALID_LABEL, T005, and T006.';
+
+    expect(model.exactOutfitsPrevious14Days[0]).toEqual(expect.objectContaining({
+      localDate: sanitizedText,
+      archetype: sanitizedText,
+      itemIds: ['T005', 'B001']
+    }));
+    expect(model.feedback[0]).toEqual(expect.objectContaining({
+      localDate: sanitizedText,
+      note: sanitizedText,
+      outfitName: sanitizedText,
+      archetype: sanitizedText
+    }));
+    expect(JSON.stringify(model)).not.toContain(stalePrefixId);
+    expect(JSON.stringify(model)).not.toContain(currentPrefixId);
+    expect(JSON.stringify(model)).not.toContain(currentLegacyId);
+  });
 });
 
 describe('history prompt contracts', () => {
