@@ -39,15 +39,15 @@ function historyGuidanceV2_() {
 
 function historyTextForModelV2_(value, snapshot) {
   var items = snapshot && snapshot.items || [];
-  var itemsById = itemMapV2_(snapshot);
-  var sanitized = value.replace(/(^|[^A-Za-z0-9_-])((?:user|item)_[A-Za-z0-9_-]+)/g, function(match, prefix, id) {
-    var item = Object.prototype.hasOwnProperty.call(itemsById, id) ? itemsById[id] : null;
-    return prefix + (item && item.shortLabel || 'INVALID_LABEL');
-  });
+  var arbitraryCurrentIds = items.reduce(function(ids, item) {
+    if (typeof item.id === 'string' && item.id && !/^(?:user|item)_[A-Za-z0-9_-]+$/.test(item.id)) ids.push(item.id);
+    return ids;
+  }, []);
+  var sanitized = value;
   items.slice().sort(function(left, right) {
     return String(right.id || '').length - String(left.id || '').length;
   }).forEach(function(item) {
-    if (typeof item.id === 'string' && item.id && !/^(?:user|item)_[A-Za-z0-9_-]+$/.test(item.id)) {
+    if (typeof item.id === 'string' && item.id) {
       var escapedId = item.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       var completeToken = new RegExp('(^|[^A-Za-z0-9_-])' + escapedId + '(?=$|[^A-Za-z0-9_-])', 'g');
       sanitized = sanitized.replace(completeToken, function(match, prefix) {
@@ -55,7 +55,15 @@ function historyTextForModelV2_(value, snapshot) {
       });
     }
   });
-  return sanitized;
+  return sanitized.replace(/(^|[^A-Za-z0-9_-])((?:user|item)_[A-Za-z0-9_-]+)/g, function(match, prefix, id, offset, source) {
+    var idStart = offset + prefix.length;
+    var idEnd = idStart + id.length;
+    var insideArbitraryCurrentId = arbitraryCurrentIds.some(function(currentId) {
+      var currentIdStart = source.lastIndexOf(currentId, idStart);
+      return currentIdStart !== -1 && currentIdStart + currentId.length >= idEnd;
+    });
+    return insideArbitraryCurrentId ? match : prefix + 'INVALID_LABEL';
+  });
 }
 
 function modelProfileViewV2_(profile) {

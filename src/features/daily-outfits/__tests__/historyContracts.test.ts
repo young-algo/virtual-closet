@@ -484,6 +484,45 @@ describe('model-facing history boundary', () => {
       'regex-special [T007]'
     ].join('; '));
   });
+
+  it('prioritizes boundary-exact arbitrary current ids before family-token scrubbing', () => {
+    const historyTextForModelV2_ = evaluateAppsScript<(
+      value: string,
+      snapshotValue: HistorySnapshot
+    ) => string>(['ItemIndex.gs'], 'historyTextForModelV2_', { console });
+    const embeddedItemId = 'item_legacy.part';
+    const longerEmbeddedItemId = `${embeddedItemId}+v2`;
+    const embeddedUserId = 'prefix.user_live+v2';
+    const currentFamilyId = 'item_nike_acg';
+    const boundarySnapshot = structuredClone(snapshot);
+    boundarySnapshot.items.push(
+      { ...boundarySnapshot.items[0], id: embeddedItemId, shortLabel: 'T008' },
+      { ...boundarySnapshot.items[0], id: longerEmbeddedItemId, shortLabel: 'T009' },
+      { ...boundarySnapshot.items[0], id: embeddedUserId, shortLabel: 'T010' },
+      { ...boundarySnapshot.items[0], id: currentFamilyId, shortLabel: 'T011' }
+    );
+    const source = [
+      `isolated ${embeddedItemId}`,
+      `longest [${longerEmbeddedItemId}]`,
+      `punctuation (${embeddedUserId}),`,
+      `item-prefix x${embeddedItemId}`,
+      `item-suffix ${embeddedItemId}x`,
+      `user-prefix x${embeddedUserId}`,
+      `user-suffix ${embeddedUserId}x`,
+      `stale ${currentFamilyId}_archived`
+    ].join('; ');
+
+    expect(historyTextForModelV2_(source, boundarySnapshot)).toBe([
+      'isolated T008',
+      'longest [T009]',
+      'punctuation (T010),',
+      `item-prefix x${embeddedItemId}`,
+      `item-suffix ${embeddedItemId}x`,
+      `user-prefix x${embeddedUserId}`,
+      `user-suffix ${embeddedUserId}x`,
+      'stale INVALID_LABEL'
+    ].join('; '));
+  });
 });
 
 describe('history prompt contracts', () => {
