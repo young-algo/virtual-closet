@@ -65,7 +65,10 @@ function buildTasteSummaryV2_(snapshot) {
       coreItemLabels: outfit.coreItemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }).filter(Boolean),
       note: typeof outfit.note === 'string' ? historyTextForModelV2_(outfit.note, snapshot) : null,
       pieces: currentItems.map(function(item) {
-        return item.shortLabel + ' ' + item.brand + ' ' + item.name + ' (' + item.slot + ', ' + item.color + ')';
+        return historyTextForModelV2_(
+          item.shortLabel + ' ' + item.brand + ' ' + item.name + ' (' + item.slot + ', ' + item.color + ')',
+          snapshot
+        );
       })
     };
   }).filter(function(example) { return example.pieces.length >= 2; }).slice(-12);

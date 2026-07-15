@@ -37,10 +37,14 @@ function historyGuidanceV2_() {
   ].join('\n');
 }
 
+function supportedWardrobeIdTokenV2_(value) {
+  return /^(?:(?:user|item)_[A-Za-z0-9_-]+|sneaker_[A-Za-z0-9]+-[A-Za-z0-9-]+|img_[0-9]+)$/.test(value);
+}
+
 function historyTextForModelV2_(value, snapshot) {
   var items = snapshot && snapshot.items || [];
   var arbitraryCurrentIds = items.reduce(function(ids, item) {
-    if (typeof item.id === 'string' && item.id && !/^(?:user|item)_[A-Za-z0-9_-]+$/.test(item.id)) ids.push(item.id);
+    if (typeof item.id === 'string' && item.id && !supportedWardrobeIdTokenV2_(item.id)) ids.push(item.id);
     return ids;
   }, []);
   var sanitized = value;
@@ -55,7 +59,7 @@ function historyTextForModelV2_(value, snapshot) {
       });
     }
   });
-  return sanitized.replace(/(^|[^A-Za-z0-9_-])((?:user|item)_[A-Za-z0-9_-]+)/g, function(match, prefix, id, offset, source) {
+  return sanitized.replace(/(^|[^A-Za-z0-9_-])((?:(?:user|item)_[A-Za-z0-9_-]+|sneaker_[A-Za-z0-9]+-[A-Za-z0-9-]+|img_[0-9]+))(?=$|[^A-Za-z0-9_-])/g, function(match, prefix, id, offset, source) {
     var idStart = offset + prefix.length;
     var idEnd = idStart + id.length;
     var insideArbitraryCurrentId = arbitraryCurrentIds.some(function(currentId) {

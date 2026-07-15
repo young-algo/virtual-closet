@@ -582,6 +582,25 @@ describe('model boundary views', () => {
     ]);
   });
 
+  it('sanitizes current wardrobe ids embedded in every composed taste piece metadata field', () => {
+    const metadataSnapshot = {
+      ...snapshot,
+      items: snapshot.items.map(item => item.id === topId ? {
+        ...item,
+        brand: `ACG ${bottomId}`,
+        name: `Camp ${sneakerId}`,
+        color: `${topId} cream`
+      } : item)
+    };
+
+    const summary = api.buildTasteSummaryV2_(metadataSnapshot)[0];
+
+    expect(summary.pieces).toContain('T004 ACG B002 Camp S009 (top, T004 cream)');
+    expect(JSON.stringify(summary.pieces)).not.toContain(topId);
+    expect(JSON.stringify(summary.pieces)).not.toContain(bottomId);
+    expect(JSON.stringify(summary.pieces)).not.toContain(sneakerId);
+  });
+
   it('omits saved outfit ids and sanitizes saved names and notes at every model boundary', () => {
     const privateSavedId = 'saved-private-identifier';
     const removedId = 'user_closet_1783863199999';
@@ -623,6 +642,58 @@ describe('model boundary views', () => {
     expect(JSON.stringify({ summary, candidate })).not.toContain(topId);
     expect(JSON.stringify({ summary, candidate })).not.toContain(bottomId);
     expect(JSON.stringify({ summary, candidate })).not.toContain(removedId);
+  });
+
+  it('scrubs stale sneaker and image ids without corrupting prose or current arbitrary ids', () => {
+    const staleSneakerId = 'sneaker_ZZ9999-404';
+    const staleImageId = 'img_9999';
+    const arbitraryCurrentId = 'legacy.sneaker_QQ0001-101+img_0246';
+    const safeProse = 'sneaker_rotation and img_reference stay readable';
+    const tasteSnapshot = {
+      ...snapshot,
+      items: [...snapshot.items, {
+        ...snapshot.items[1],
+        id: arbitraryCurrentId,
+        shortLabel: 'T099'
+      }],
+      tasteExamples: [{
+        id: 'saved-stale-supported-ids',
+        name: `Saved ${staleSneakerId} and ${staleImageId}; current ${arbitraryCurrentId}; ${safeProse}`,
+        note: `Archive ${staleImageId} and ${staleSneakerId}; current ${arbitraryCurrentId}; ${safeProse}`,
+        itemIds: [topId, bottomId, sneakerId],
+        source: 'manual',
+        createdAt: 1
+      }]
+    };
+
+    const summary = api.buildTasteSummaryV2_(tasteSnapshot)[0];
+    const candidate = api.modelFacingCandidateV2_({
+      candidateId: 'candidate',
+      topId,
+      bottomId,
+      shoeId: 'other-shoe',
+      itemIds: [topId, bottomId, 'other-shoe']
+    }, {
+      ...tasteSnapshot,
+      items: [...tasteSnapshot.items, {
+        ...snapshot.items[0],
+        id: 'other-shoe',
+        shortLabel: 'S010'
+      }]
+    });
+
+    expect(summary).toEqual(expect.objectContaining({
+      name: `Saved INVALID_LABEL and INVALID_LABEL; current T099; ${safeProse}`,
+      note: `Archive INVALID_LABEL and INVALID_LABEL; current T099; ${safeProse}`
+    }));
+    expect(candidate.sharesTwoCoreWith).toEqual([
+      `Saved INVALID_LABEL and INVALID_LABEL; current T099; ${safeProse}`
+    ]);
+    const serialized = JSON.stringify({ summary, candidate });
+    expect(serialized).not.toContain(staleSneakerId);
+    expect(serialized).not.toContain(staleImageId);
+    expect(serialized).not.toContain(arbitraryCurrentId);
+    expect(serialized).toContain(safeProse);
   });
 
   it('emits two-core overlap names as critic context without long item ids', () => {
