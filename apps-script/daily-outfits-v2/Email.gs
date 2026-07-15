@@ -41,7 +41,7 @@ function renderEncoreEmailV2_(bundle, snapshot, plain, inlineImages) {
     '<h2 style="margin:8px 0 18px;font:400 28px Arial,sans-serif;color:#111">' + escapeHtmlV2_(bundle.encore.name) + '</h2>' +
     '<table role="presentation" cellpadding="0" cellspacing="4" style="width:100%;table-layout:fixed"><tr>' + images + '</tr></table>' +
     '<p style="margin:20px 0 8px;font:400 15px/1.6 Arial,sans-serif;color:#222">One of yours, back in rotation for today\'s weather.</p>' +
-    '<p style="margin:0;font:400 12px/1.7 monospace;color:#777">' + pieces.map(function(item) { return escapeHtmlV2_(item.slot.toUpperCase() + ' — ' + item.name); }).join('<br>') + '</p>' +
+    '<p style="margin:0;font:400 12px/1.7 monospace;color:#665d49">' + pieces.map(function(item) { return escapeHtmlV2_(item.slot.toUpperCase() + ' — ' + item.name); }).join('<br>') + '</p>' +
     '</section>';
 }
 

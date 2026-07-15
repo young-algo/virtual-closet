@@ -722,10 +722,25 @@ function assertUnambiguousDailySendStateV2_(properties, currentLocalDate) {
   return { marker: marker, lastSentDate: lastSentDate };
 }
 
+function validSentBundleForReconciliationV2_(pending, snapshot, sentDate) {
+  if (!validOwnDailyRecordV2_(snapshot) ||
+      !ownDailyJobKeyV2_(snapshot, 'generatedAt') || typeof snapshot.generatedAt !== 'number' ||
+      !Number.isFinite(snapshot.generatedAt) || snapshot.generatedAt < 0 ||
+      !validOwnDailyObjectV2_(pending, 'bundle') ||
+      !ownDailyJobKeyV2_(pending.bundle, 'snapshotGeneratedAt') ||
+      typeof pending.bundle.snapshotGeneratedAt !== 'number' ||
+      !Number.isFinite(pending.bundle.snapshotGeneratedAt) || pending.bundle.snapshotGeneratedAt < 0 ||
+      pending.bundle.snapshotGeneratedAt > snapshot.generatedAt) return false;
+  var validationSnapshot = Object.assign({}, snapshot, {
+    generatedAt: pending.bundle.snapshotGeneratedAt
+  });
+  return validFullBundleReadyV2_(pending, validationSnapshot, sentDate);
+}
+
 function reconcilePersistedSentBundleV2_(sentDate, snapshot) {
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignoredPending) {}
-  if (!validFullBundleReadyV2_(pending, snapshot, sentDate)) {
+  if (!validSentBundleForReconciliationV2_(pending, snapshot, sentDate)) {
     throw new Error('Resolved sent date ' + sentDate + ' has no matching persisted bundle to reconcile');
   }
   var state = null;

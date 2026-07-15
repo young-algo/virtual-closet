@@ -248,7 +248,113 @@ const snapshotFixture = (pending: ReturnType<typeof pendingFixture>) => {
 
 const runtimeFiles = ['ItemIndex.gs', 'Taste.gs', 'Selection.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'];
 
+const runResolvedRecovery = (
+  pending: ReturnType<typeof pendingFixture>,
+  snapshot: ReturnType<typeof snapshotFixture>,
+) => {
+  const values: Record<string, string> = {
+    SEND_IN_PROGRESS_DATE_V2: '2026-07-14',
+    LAST_SENT_DATE_V2: '2026-07-14',
+  };
+  const events: string[] = [];
+  let history: Array<Record<string, unknown>> = [];
+  const properties = {
+    getProperty: (key: string) => values[key] ?? null,
+    setProperty: (key: string, value: string) => {
+      events.push(`set:${key}:${value}`);
+      values[key] = value;
+    },
+    deleteProperty: (key: string) => {
+      events.push(`delete:${key}`);
+      delete values[key];
+    },
+  };
+  const reconcile = evaluateAppsScript<(
+    sentDate: string,
+    snapshotValue: ReturnType<typeof snapshotFixture>,
+  ) => Record<string, unknown>>(
+    runtimeFiles,
+    'reconcilePersistedSentBundleV2_',
+    {
+      DAILY_V2: daily,
+      getDailyPropertiesV2_: () => properties,
+      loadPendingV2_: () => structuredClone(pending),
+      loadHistoryV2_: () => structuredClone(history),
+      saveHistoryV2_: (next: Array<Record<string, unknown>>) => {
+        events.push('history');
+        history = structuredClone(next);
+      },
+      MailApp: { sendEmail: () => events.push('mail') },
+    },
+  );
+  let result: Record<string, unknown> | undefined;
+  let error: Error | null = null;
+  try {
+    result = reconcile('2026-07-14', snapshot);
+  } catch (caught) {
+    error = caught as Error;
+  }
+  return { error, events, history, result, values };
+};
+
 describe('resolved send recovery', () => {
+  it('reconciles a valid marker-date bundle after a harmless snapshot resync', () => {
+    const pending = pendingFixture('2026-07-14', true);
+    const snapshot = snapshotFixture(pending);
+    snapshot.generatedAt = 75;
+
+    const recovered = runResolvedRecovery(pending, snapshot);
+
+    expect(recovered.error).toBeNull();
+    expect(recovered.result).toMatchObject({
+      reconciled: true,
+      localDate: '2026-07-14',
+      bundle: pending.bundle,
+    });
+    expect(recovered.events).not.toContain('mail');
+    expect(recovered.history).toEqual([expect.objectContaining({
+      localDate: '2026-07-14',
+      recommendations: pending.bundle.recommendations,
+      encore: pending.bundle.encore,
+    })]);
+    expect(recovered.values).toMatchObject({
+      LAST_SENT_DATE_V2: '2026-07-14',
+      LAST_ENCORE_DATE_V2: '2026-07-14',
+    });
+    expect(recovered.values).not.toHaveProperty('SEND_IN_PROGRESS_DATE_V2');
+    expect(recovered.events.indexOf('delete:SEND_IN_PROGRESS_DATE_V2'))
+      .toBeGreaterThan(recovered.events.indexOf('history'));
+  });
+
+  it('keeps the marker when the current wardrobe changed or the persisted bundle was tampered', () => {
+    const pending = pendingFixture('2026-07-14', true);
+    const changedSnapshot = snapshotFixture(pending);
+    changedSnapshot.generatedAt = 75;
+    changedSnapshot.wardrobeFingerprint = 'wardrobe-v4';
+
+    const changed = runResolvedRecovery(pending, changedSnapshot);
+
+    expect(changed.error?.message)
+      .toBe('Resolved sent date 2026-07-14 has no matching persisted bundle to reconcile');
+    expect(changed.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-14');
+    expect(changed.events).not.toContain('history');
+    expect(changed.events).not.toContain('mail');
+
+    const tamperedPending = structuredClone(pending);
+    const tamperedRecommendations = tamperedPending.bundle.recommendations as Array<{ itemIds: string[] }>;
+    tamperedRecommendations[0].itemIds[0] = 'tampered-item';
+    const currentSnapshot = snapshotFixture(tamperedPending);
+    currentSnapshot.generatedAt = 75;
+
+    const tampered = runResolvedRecovery(tamperedPending, currentSnapshot);
+
+    expect(tampered.error?.message)
+      .toBe('Resolved sent date 2026-07-14 has no matching persisted bundle to reconcile');
+    expect(tampered.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-14');
+    expect(tampered.events).not.toContain('history');
+    expect(tampered.events).not.toContain('mail');
+  });
+
   it('reconciles a prior-date marker through real Scheduler and public-send helpers without mailing', () => {
     const run = (endpoint: 'scheduler' | 'public', laterEncoreDate = false) => {
       const pending = pendingFixture('2026-07-14', true);

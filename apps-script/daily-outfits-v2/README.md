@@ -28,8 +28,8 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 
 ## Profile enrichment before policy-v3 rollout
 
-1. Run `node scripts/enrich_daily_profiles.mjs --dry-run` with `GEMINI_API_KEY` in the environment.
-2. Run `node scripts/enrich_daily_profiles.mjs`, review every `src/data/closet.json` and `src/data/sneakers.json` profile against its image, and commit the reviewed manifests.
+1. From the repository root, run `node scripts/enrich_daily_profiles.mjs --dry-run` with `GEMINI_API_KEY` in the environment.
+2. From the repository root, run `node scripts/enrich_daily_profiles.mjs`, review every `src/data/closet.json` and `src/data/sneakers.json` profile against its image, and commit the reviewed manifests.
 3. In **Wardrobe → Daily email**, run **Build visual inventory**, **Sync now**, then **Validate server snapshot**. Profile data participates in `wardrobeFingerprint`, so the sync intentionally invalidates stale pending/job state.
 
 ## Policy-v3 shadow rollout
@@ -50,16 +50,16 @@ For each morning, record critic floor clustering, `selection.path`, eligible cou
 
 ## Ambiguous-send recovery
 
-If `SEND_IN_PROGRESS_DATE_V2` remains set and does not match `LAST_SENT_DATE_V2`, the scheduler and manual real-send entry point fail closed because Apps Script cannot prove whether Gmail accepted the message. A marker that does match `LAST_SENT_DATE_V2` is never discarded merely because the calendar advanced: before any new send, the script must load the persisted bundle for that exact marker date, repair sent history and Encore cadence idempotently, and only then clear the marker. If that marker-date bundle is absent or invalid, the marker remains set and all real sends stay blocked. Inspect the mailbox for the marker date before changing either property:
+If `SEND_IN_PROGRESS_DATE_V2` remains set and does not match `LAST_SENT_DATE_V2`, the scheduler and manual real-send entry point fail closed because Apps Script cannot prove whether Gmail accepted the message. A marker that does match `LAST_SENT_DATE_V2` is never discarded merely because the calendar advanced: before any new send, the script must load the persisted bundle for that exact marker date, repair sent history and Encore cadence idempotently, and only then clear the marker. A newer snapshot generation timestamp alone does not block reconciliation when the current wardrobe fingerprint, contents, persisted selection, and final policy still validate; a changed fingerprint or an invalid or tampered bundle remains blocked. If that marker-date bundle is absent or invalid, the marker remains set and all real sends stay blocked. Inspect the mailbox for the marker date before changing either property:
 
-- If the email was delivered, set `LAST_SENT_DATE_V2` to the exact `SEND_IN_PROGRESS_DATE_V2` date, then rerun the scheduler or **Send now**. The script reconciles the persisted marker-date bundle into history and Encore cadence without sending again; it preserves any newer job state or later Encore date, then clears the marker only after reconciliation succeeds.
+- If the email was delivered, set `LAST_SENT_DATE_V2` to the exact `SEND_IN_PROGRESS_DATE_V2` date, then rerun the scheduler or run `sendDailyBundleNowV2()` from the Apps Script editor. The script reconciles the persisted marker-date bundle into history and Encore cadence without sending again; it preserves any newer job state or later Encore date, then clears the marker only after reconciliation succeeds.
 - If the email was definitely not delivered, delete `SEND_IN_PROGRESS_DATE_V2`, then rerun. The script may perform a new real send.
 
 Do not delete an unresolved marker merely because it is from a prior day; stale unresolved markers also fail closed until the mailbox check establishes which recovery path is safe.
 
 ## Diagnostics
 
-- `getDailyOutfitDiagnosticsV2()` reports configuration presence, snapshot status, job state, and last sent date without exposing secrets.
+- `getDailyOutfitDiagnosticsV2()` returns redacted snapshot validation, current valid job and selection projections, stage attempt counts, model-configuration booleans, snapshot age, and the last sent date.
 - `validateStoredSnapshotV2()` verifies every item, label, slot, thumbnail, and atlas membership.
 - `resetDailyJobStateV2()` restarts today's staged job without clearing history or snapshot data.
 - `removeDailyOutfitTriggers()` removes only this feature's scheduler triggers.

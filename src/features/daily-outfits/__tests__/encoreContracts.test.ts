@@ -455,6 +455,7 @@ describe('Encore email rendering', () => {
     expect(rendered.html).toContain('Saved &lt;One&gt; &amp; &quot;Two&quot;');
     expect(rendered.html).toContain('ACG &lt;Tee&gt;');
     expect(rendered.html).toContain('Mocha &amp; Cream');
+    expect(rendered.html).toContain('color:#665d49">TOP — ACG &lt;Tee&gt;');
     expect(rendered.plain).toContain('Saved <One> & "Two"');
     expect(rendered.plain).toContain("One of yours, back in rotation for today's weather.");
     expect(Object.keys(rendered.inlineImages)).toEqual(['encoreitem0', 'encoreitem1', 'encoreitem2']);
