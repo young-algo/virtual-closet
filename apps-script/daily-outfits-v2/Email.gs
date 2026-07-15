@@ -52,6 +52,7 @@ function renderDailyEmailV2_(bundle, snapshot, testMode) {
 }
 
 function sendDailyBundleNowV2_(bundle, snapshot, testMode) {
+  if (!validCurrentBundlePayloadV2_(bundle)) throw new Error('No current-policy bundle is ready');
   var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
   if (!testMode && getDailyPropertiesV2_().getProperty('LAST_SENT_DATE_V2') === bundle.localDate) throw new Error('A daily outfit email was already sent for ' + bundle.localDate);
   if (bundle.wardrobeFingerprint !== snapshot.wardrobeFingerprint) throw new Error('Bundle wardrobe fingerprint no longer matches the snapshot');
@@ -69,8 +70,14 @@ function sendDailyBundleNowV2_(bundle, snapshot, testMode) {
 
 function sendDailyBundleNowV2() {
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-  var pending = loadPendingV2_();
-  if (!pending || !pending.bundle) throw new Error('No quality-gated bundle is ready');
+  var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+  var currentLocalDate = localDateV2_(new Date(), config.timezone);
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignored) {}
+  if (!pending || !ownDailyJobKeyV2_(pending, 'bundle') ||
+      !validCurrentBundleV2_(pending, pending.bundle, currentLocalDate)) {
+    throw new Error('No quality-gated bundle is ready');
+  }
   sendDailyBundleNowV2_(pending.bundle, snapshot, false);
   getDailyPropertiesV2_().setProperty('LAST_SENT_DATE_V2', pending.bundle.localDate);
   recordSentBundleV2_(pending.bundle, snapshot);
@@ -79,8 +86,14 @@ function sendDailyBundleNowV2() {
 
 function sendDailyTestEmailV2() {
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-  var pending = loadPendingV2_();
-  if (!pending || !pending.bundle) throw new Error('Generate a quality-gated test bundle first');
+  var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+  var currentLocalDate = localDateV2_(new Date(), config.timezone);
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignored) {}
+  if (!pending || !ownDailyJobKeyV2_(pending, 'bundle') ||
+      !validCurrentBundleV2_(pending, pending.bundle, currentLocalDate)) {
+    throw new Error('Generate a quality-gated test bundle first');
+  }
   sendDailyBundleNowV2_(pending.bundle, snapshot, true);
 }
 

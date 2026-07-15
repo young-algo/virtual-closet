@@ -53,8 +53,17 @@ function generateDailyBundleStepV2() {
     mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
     var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
     var localDate = localDateV2_(new Date(), config.timezone);
-    var pending = loadPendingV2_();
-    if (!pending || pending.workflow !== 'manual-v2' || pending.qualityPolicyVersion !== DAILY_V2.QUALITY_POLICY_VERSION || pending.localDate !== localDate || pending.wardrobeFingerprint !== snapshot.wardrobeFingerprint) {
+    var pending = null;
+    try { pending = loadPendingV2_(); } catch (_ignored) {}
+    var manualStages = ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready'];
+    var currentManualPending = validCurrentPendingV2_(pending, localDate, snapshot.wardrobeFingerprint) &&
+      Object.prototype.hasOwnProperty.call(pending, 'workflow') && pending.workflow === 'manual-v2' &&
+      Object.prototype.hasOwnProperty.call(pending, 'manualStage') && manualStages.indexOf(pending.manualStage) >= 0;
+    if (currentManualPending && pending.manualStage === 'bundle-ready' &&
+        (!Object.prototype.hasOwnProperty.call(pending, 'bundle') || !validCurrentBundleV2_(pending, pending.bundle))) {
+      currentManualPending = false;
+    }
+    if (!currentManualPending) {
       pending = {
         workflow: 'manual-v2',
         qualityPolicyVersion: DAILY_V2.QUALITY_POLICY_VERSION,
@@ -83,6 +92,8 @@ function generateDailyBundleStepV2() {
       pending.selection = selected.selection;
       pending.manualStage = 'selection-ready';
     } else if (pending.manualStage === 'selection-ready') {
+      assertDeterministicSelectionReadyV2_(pending);
+      assertPersistedSelectionContextV2_(pending);
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
@@ -102,7 +113,28 @@ function generateDailyBundleStepV2() {
 }
 
 function advanceDailyJobV2_(state, snapshot, startedAt) {
-  var pending = loadPendingV2_();
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignored) {}
+  if (state.stage !== 'idle') {
+    var currentResume = state && typeof state === 'object' && !Array.isArray(state) &&
+      Object.prototype.hasOwnProperty.call(state, 'stage') && DAILY_JOB_STAGES_V2_.indexOf(state.stage) >= 0 &&
+      Object.prototype.hasOwnProperty.call(state, 'qualityPolicyVersion') &&
+      state.qualityPolicyVersion === DAILY_V2.QUALITY_POLICY_VERSION &&
+      Object.prototype.hasOwnProperty.call(state, 'localDate') &&
+      typeof state.localDate === 'string' && state.localDate.length > 0 &&
+      Object.prototype.hasOwnProperty.call(state, 'wardrobeFingerprint') &&
+      state.wardrobeFingerprint === snapshot.wardrobeFingerprint &&
+      validCurrentPendingV2_(pending, state.localDate, state.wardrobeFingerprint);
+    if (currentResume && state.stage === 'bundle-ready') {
+      currentResume = Object.prototype.hasOwnProperty.call(pending, 'bundle') &&
+        validCurrentBundleV2_(pending, pending.bundle);
+    }
+    if (!currentResume) {
+      state = newJobStateV2_(state.localDate, snapshot.wardrobeFingerprint);
+      pending = null;
+      saveJobStateV2_(state);
+    }
+  }
   var enoughTime = function() { return Date.now() - startedAt < 5 * 60 * 1000 - DAILY_V2.MIN_EXECUTION_REMAINING_MS; };
   while (enoughTime()) {
     incrementAttemptV2_(state, state.stage);
@@ -128,6 +160,8 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
       pending.updatedAt = Date.now();
       state.stage = 'selection-ready';
     } else if (state.stage === 'selection-ready') {
+      assertDeterministicSelectionReadyV2_(pending);
+      assertPersistedSelectionContextV2_(pending);
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
@@ -180,7 +214,10 @@ function runDailyOutfitScheduler() {
     var advanced = advanceDailyJobV2_(state, snapshot, startedAt);
     state = advanced.state;
     if (state.stage === 'bundle-ready' && currentMinutes >= deliveryMinutes && !getBooleanPropertyV2_('SHADOW_MODE', false)) {
-      if (!advanced.pending || !advanced.pending.bundle) throw new Error('Bundle-ready state has no persisted bundle');
+      if (!advanced.pending || !Object.prototype.hasOwnProperty.call(advanced.pending, 'bundle') ||
+          !validCurrentBundleV2_(advanced.pending, advanced.pending.bundle, localDate)) {
+        throw new Error('Bundle-ready state has no current persisted bundle');
+      }
       sendDailyBundleNowV2_(advanced.pending.bundle, snapshot, false);
       getDailyPropertiesV2_().setProperty('LAST_SENT_DATE_V2', localDate);
       recordSentBundleV2_(advanced.pending.bundle, snapshot);

@@ -70,8 +70,10 @@ function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
 }
 
 function runCuratorV2() {
-  var pending = loadPendingV2_();
-  if (!pending || !pending.selectedCandidates || !pending.critic) throw new Error('Deterministic selection must be ready');
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignored) {}
+  assertDeterministicSelectionReadyV2_(pending);
+  assertPersistedSelectionContextV2_(pending);
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
   pending.curated = curated;
