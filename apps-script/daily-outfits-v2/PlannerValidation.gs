@@ -3,12 +3,12 @@ function validatePlannerResponseV2_(response, archetype, snapshot) {
   if (!response || response.archetype !== archetype) errors.push('response archetype must be ' + archetype);
   if (!response || !Array.isArray(response.candidates) || response.candidates.length !== 5) return errors.concat(['exactly five candidates are required']);
   var items = itemMapV2_(snapshot);
-  var candidateIds = {};
-  var combinations = {};
+  var candidateIds = Object.create(null);
+  var combinations = Object.create(null);
   var coreSelections = [];
   response.candidates.forEach(function(candidate, index) {
     var path = 'candidate[' + index + ']';
-    if (!candidate.candidateId || candidateIds[candidate.candidateId]) errors.push(path + ' has a missing or duplicate candidateId');
+    if (!candidate.candidateId || Object.prototype.hasOwnProperty.call(candidateIds, candidate.candidateId)) errors.push(path + ' has a missing or duplicate candidateId');
     candidateIds[candidate.candidateId] = true;
     if (candidate.archetype !== archetype) errors.push(path + ' has the wrong archetype');
     var slots = [['topId', 'top'], ['bottomId', 'bottom'], ['shoeId', 'shoes']];
@@ -24,8 +24,8 @@ function validatePlannerResponseV2_(response, archetype, snapshot) {
     if (!candidate.name || !candidate.styleSummary || !candidate.weatherSummary) errors.push(path + ' is missing customer-facing summary text');
     if (!candidate.colorStrategy || candidate.colorStrategy.length < 30 || candidate.colorStrategy.length > 280) errors.push(path + '.colorStrategy must name a specific cross-item visual relationship');
     if (!Array.isArray(candidate.potentialRisks)) errors.push(path + '.potentialRisks must be an array');
-    var key = expected.slice().sort().join('|');
-    if (combinations[key]) errors.push(path + ' exactly duplicates another candidate');
+    var key = JSON.stringify(expected.slice().sort());
+    if (Object.prototype.hasOwnProperty.call(combinations, key)) errors.push(path + ' exactly duplicates another candidate');
     combinations[key] = true;
     var coreIds = [candidate.topId, candidate.bottomId, candidate.shoeId];
     coreSelections.forEach(function(previous, previousIndex) {

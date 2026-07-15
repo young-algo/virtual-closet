@@ -52,7 +52,10 @@ function scoreMapV2_(critic) {
 
 function exactHistoryKeysV2_(history) {
   var keys = Object.create(null);
-  (history.exactOutfitsPrevious14Days || []).forEach(function(entry) { keys[entry.itemIds.slice().sort().join('|')] = true; });
+  (history.exactOutfitsPrevious14Days || []).forEach(function(entry) {
+    var key = canonicalSelectionIdListV2_(entry && entry.itemIds);
+    if (key !== null) keys[key] = true;
+  });
   return keys;
 }
 
@@ -99,7 +102,10 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     var candidate = selectedCandidates[index];
     if (!candidate || rec.candidateId !== candidate.candidateId) errors.push(path + ' changed or reordered the selected candidateId');
     if (!candidate || rec.archetype !== candidate.archetype) errors.push(path + ' changed the selected archetype');
-    if (!candidate || JSON.stringify(rec.itemIds) !== JSON.stringify(candidate.itemIds)) errors.push(path + ' changed or reordered the selected itemIds');
+    if (!candidate || canonicalSelectionIdListV2_(rec.itemIds) === null ||
+        canonicalSelectionIdListV2_(rec.itemIds) !== canonicalSelectionIdListV2_(candidate.itemIds)) {
+      errors.push(path + ' changed the selected itemIds');
+    }
     if (ownFinalValidationKeyV2_(seenCandidate, rec.candidateId)) errors.push(path + ' duplicates a final candidate');
     seenCandidate[rec.candidateId] = true;
     if (DAILY_V2.ARCHETYPES.indexOf(rec.archetype) < 0 || ownFinalValidationKeyV2_(seenArchetype, rec.archetype)) errors.push(path + ' has a missing or duplicate archetype');
@@ -123,13 +129,19 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     var layer = selected.find(function(item) { return item && item.slot === 'layer'; });
     if (layer) layerUse[layer.id] = (ownFinalValidationKeyV2_(layerUse, layer.id) ? layerUse[layer.id] : 0) + 1;
     if (top && bottom) {
-      var story = [top.profile.primaryColorFamily, bottom.profile.primaryColorFamily, top.profile.silhouette, bottom.profile.silhouette].join('|');
+      var story = JSON.stringify([
+        top.profile.primaryColorFamily,
+        bottom.profile.primaryColorFamily,
+        top.profile.silhouette,
+        bottom.profile.silhouette
+      ]);
       if (ownFinalValidationKeyV2_(diversityStories, story)) errors.push('final recommendations need materially different color or silhouette stories');
       diversityStories[story] = true;
     }
     var savedExactCopy = savedOutfitExactCopyV2_(rec.itemIds || [], snapshot);
     if (savedExactCopy) errors.push(path + ' exactly copies manual saved outfit "' + savedExactCopy.name + '"');
-    if (ownFinalValidationKeyV2_(historyKeys, (rec.itemIds || []).slice().sort().join('|'))) errors.push(path + ' exactly repeats a prior-14-day outfit');
+    var historyKey = canonicalSelectionIdListV2_(rec.itemIds || []);
+    if (historyKey !== null && ownFinalValidationKeyV2_(historyKeys, historyKey)) errors.push(path + ' exactly repeats a prior-14-day outfit');
     var cooldown = new Set(history.cooldownItemIds || []);
     if (candidate && (cooldown.has(candidate.topId) || cooldown.has(candidate.bottomId))) {
       errors.push(path + ' violates the yesterday top/bottom cooldown');
@@ -148,13 +160,14 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     errors = errors.concat(weatherSafetyErrorsV2_(rec, itemMap, weather, snapshot).map(function(error) { return path + ': ' + error; }));
   });
   DAILY_V2.ARCHETYPES.forEach(function(archetype) { if (!ownFinalValidationKeyV2_(seenArchetype, archetype)) errors.push('missing archetype: ' + archetype); });
-  var weatherSafeShoes = snapshot.items.filter(function(item) { return item.slot === 'shoes' && (!weather.rainExpected || item.profile.rainSafety !== 'poor'); });
-  var allowReuse = snapshot.settings && snapshot.settings.allowShoeReuseWhenNecessary;
-  if (Object.keys(shoes).length < 3 && weatherSafeShoes.length >= 3) errors.push('shoes must be unique when at least three weather-safe options exist');
-  if (Object.keys(shoes).length < 3 && weatherSafeShoes.length < 3 && !allowReuse) errors.push('shoe reuse is disabled even when the weather-safe inventory is small');
-  var credibleLayers = snapshot.items.filter(function(item) { return item.slot === 'layer' && item.profile.available && !item.profile.excludedFromDaily; });
+  if (Object.keys(shoes).length < 3 && usableWeatherSafeShoeCountV2_(snapshot, weather) >= 3) {
+    errors.push('shoes must be unique when at least three weather-safe options exist');
+  }
   Object.keys(layerUse).forEach(function(id) {
-    if (layerUse[id] > 1 && (weather.layerGuidance !== 'required' || credibleLayers.length >= 2)) errors.push('a layer may repeat only when weather requires it and alternatives are too limited');
+    if (layerUse[id] > 1 &&
+        (weather.layerGuidance !== 'required' || credibleLayerCountV2_(snapshot) >= 2)) {
+      errors.push('a layer may repeat only when weather requires it and alternatives are too limited');
+    }
   });
   for (var i = 0; i < curated.recommendations.length; i += 1) {
     for (var j = i + 1; j < curated.recommendations.length; j += 1) {

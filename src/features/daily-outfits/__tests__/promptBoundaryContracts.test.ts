@@ -1825,7 +1825,7 @@ describe('prompt and response label boundary', () => {
       selectedCandidates: object[],
       critic: object
     ) => unknown>(
-      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'FinalValidation.gs', 'Repair.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Selection.gs', 'FinalValidation.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },

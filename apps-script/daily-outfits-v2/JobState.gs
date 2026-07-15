@@ -197,28 +197,18 @@ function validPersistedPlannerCandidateV2_(candidate, archetype) {
     Number.isFinite(candidate.plannerConfidence) && candidate.plannerConfidence >= 0 && candidate.plannerConfidence <= 1;
 }
 
-function persistedCandidateNearCopiesSavedOutfitV2_(candidate, snapshot) {
-  var inventory = selectionInventoryIndexV2_(snapshot);
-  if (!inventory) return true;
-  var coreIds = [candidate.topId, candidate.bottomId, candidate.shoeId];
-  var examples = snapshot && Array.isArray(snapshot.tasteExamples) ? snapshot.tasteExamples : [];
-  return examples.some(function(outfit) {
-    if (!outfit || typeof outfit !== 'object' || Array.isArray(outfit) || outfit.seedStylist === false ||
-        !Array.isArray(outfit.itemIds)) return false;
-    var savedCore = Object.create(null);
-    outfit.itemIds.forEach(function(id) {
-      var item = typeof id === 'string' && ownDailyJobKeyV2_(inventory, id) ? inventory[id] : null;
-      if (item && ['top', 'bottom', 'shoes'].indexOf(item.slot) >= 0) savedCore[id] = true;
-    });
-    return coreIds.filter(function(id) { return ownDailyJobKeyV2_(savedCore, id); }).length >= 2;
-  });
+function persistedCandidateCopiesSavedOutfitV2_(candidate, snapshot) {
+  return Boolean(savedOutfitExactCopyV2_(
+    [candidate.topId, candidate.bottomId, candidate.shoeId],
+    snapshot
+  ));
 }
 
 function validPersistedPlannerCandidateQualityV2_(candidate, archetype, snapshot) {
   return validPersistedPlannerCandidateV2_(candidate, archetype) &&
     candidate.colorStrategy.length >= 30 && candidate.colorStrategy.length <= 280 &&
     selectionCandidateInventoryV2_(candidate, snapshot) !== null &&
-    !persistedCandidateNearCopiesSavedOutfitV2_(candidate, snapshot);
+    !persistedCandidateCopiesSavedOutfitV2_(candidate, snapshot);
 }
 
 function validPersistedCandidateGroupQualityV2_(candidates, archetype, snapshot) {
@@ -326,15 +316,15 @@ function persistedSelectionCandidatesV2_(pending, plannerCandidates, snapshot) {
   var combinations = Object.create(null);
   for (var index = 0; index < pending.candidates.length; index += 1) {
     var candidate = pending.candidates[index];
-    var combination = JSON.stringify(candidate.itemIds.slice().sort());
-    if (ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
+    var combination = canonicalSelectionIdListV2_(candidate.itemIds);
+    if (combination === null || ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
         ownDailyJobKeyV2_(combinations, combination)) return null;
     candidateById[candidate.candidateId] = candidate;
     combinations[combination] = true;
   }
   for (var plannerIndex = 0; plannerIndex < plannerCandidates.length; plannerIndex += 1) {
     var plannerCandidate = plannerCandidates[plannerIndex];
-    if (!exactPersistedDailyValueV2_(pending.candidates[plannerIndex], plannerCandidate)) return null;
+    if (!exactPersistedCandidateV2_(pending.candidates[plannerIndex], plannerCandidate)) return null;
   }
   return pending.candidates;
 }
@@ -380,6 +370,33 @@ function exactPersistedSelectionMapV2_(persisted, recomputed) {
   return true;
 }
 
+function exactPersistedCandidateV2_(left, right) {
+  if (!validOwnDailyRecordV2_(left) || !validOwnDailyRecordV2_(right)) return false;
+  var leftKeys = Object.keys(left).sort();
+  var rightKeys = Object.keys(right).sort();
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (var index = 0; index < leftKeys.length; index += 1) {
+    var key = leftKeys[index];
+    if (key !== rightKeys[index]) return false;
+    if (key === 'itemIds') {
+      var leftIds = canonicalSelectionIdListV2_(left.itemIds);
+      var rightIds = canonicalSelectionIdListV2_(right.itemIds);
+      if (leftIds === null || leftIds !== rightIds) return false;
+    } else if (!exactPersistedDailyValueV2_(left[key], right[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function exactPersistedCandidateArrayV2_(left, right) {
+  if (!validOwnDailyArrayV2_(left) || !validOwnDailyArrayV2_(right) || left.length !== right.length) return false;
+  for (var index = 0; index < left.length; index += 1) {
+    if (!exactPersistedCandidateV2_(left[index], right[index])) return false;
+  }
+  return true;
+}
+
 function validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandidates, snapshot) {
   if (!validPersistedSelectionSummaryV2_(pending.selection) ||
       typeof selectFinalistsV2_ !== 'function' || typeof selectFinalSetV2_ !== 'function' ||
@@ -417,7 +434,7 @@ function validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandid
         pending.selection.feasibleSetCount === finalSet.feasibleSetCount &&
         exactPersistedSelectionMapV2_(pending.selection.eligibleCountByArchetype, finalists.eligibleCountByArchetype) &&
         exactPersistedSelectionMapV2_(pending.selection.compositeById, finalists.compositeById) &&
-        exactPersistedDailyValueV2_(pending.selectedCandidates, finalSet.selectedCandidates);
+        exactPersistedCandidateArrayV2_(pending.selectedCandidates, finalSet.selectedCandidates);
     }
     if (attempt >= rounds.length) return false;
     var requestedArchetype = finalSet.needsReplan;
@@ -514,16 +531,15 @@ function validPersistedSelectionCandidateV2_(candidate) {
       (typeof candidate.layerId !== 'string' || !candidate.layerId)) return false;
   var expected = [candidate.topId, candidate.bottomId, candidate.shoeId];
   if (candidate.layerId) expected.push(candidate.layerId);
-  if (candidate.itemIds.length !== expected.length || candidate.itemIds.some(function(id, index) {
-    return !ownDailyJobKeyV2_(candidate.itemIds, index) || typeof id !== 'string' || !id || id !== expected[index];
-  })) return false;
+  if (candidate.itemIds.length !== expected.length) return false;
   var seenItems = Object.create(null);
   for (var index = 0; index < candidate.itemIds.length; index += 1) {
     var id = candidate.itemIds[index];
     if (!ownDailyJobKeyV2_(candidate.itemIds, index) || typeof id !== 'string' || !id ||
-        id !== expected[index] || ownDailyJobKeyV2_(seenItems, id)) return false;
+        ownDailyJobKeyV2_(seenItems, id)) return false;
     seenItems[id] = true;
   }
+  if (canonicalSelectionIdListV2_(candidate.itemIds) !== canonicalSelectionIdListV2_(expected)) return false;
   if (typeof validSelectionCandidateV2_ === 'function' && !validSelectionCandidateV2_(candidate)) return false;
   return true;
 }
@@ -575,7 +591,7 @@ function assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, wardro
     var candidate = pending.selectedCandidates[candidateIndex];
     if (!validPersistedPlannerCandidateV2_(candidate, DAILY_V2.ARCHETYPES[candidateIndex]) ||
         !ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
-        !exactPersistedDailyValueV2_(candidate, candidateById[candidate.candidateId])) {
+        !exactPersistedCandidateV2_(candidate, candidateById[candidate.candidateId])) {
       throw new Error('Deterministic selection must be ready');
     }
   }
@@ -599,10 +615,9 @@ function validPersistedRecommendationV2_(recommendation, selectedCandidate) {
   if (recommendation.candidateId !== selectedCandidate.candidateId ||
       recommendation.archetype !== selectedCandidate.archetype ||
       recommendation.itemIds.length !== selectedCandidate.itemIds.length) return false;
-  for (var index = 0; index < recommendation.itemIds.length; index += 1) {
-    if (recommendation.itemIds[index] !== selectedCandidate.itemIds[index]) return false;
-  }
-  return true;
+  var recommendationIds = canonicalSelectionIdListV2_(recommendation.itemIds);
+  return recommendationIds !== null &&
+    recommendationIds === canonicalSelectionIdListV2_(selectedCandidate.itemIds);
 }
 
 function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {

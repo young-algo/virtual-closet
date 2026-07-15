@@ -26,7 +26,7 @@ const evaluateAppsScript = <T>(
 };
 
 const plannerValidator = new Function(`
-  function itemMapV2_(snapshot) { var map = {}; snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
+  function itemMapV2_(snapshot) { var map = Object.create(null); snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
   ${apps('Taste.gs')}
   ${apps('PlannerValidation.gs')}
   return validatePlannerResponseV2_;
@@ -49,9 +49,24 @@ const criticApi = new Function(`
 const criticValidator = criticApi.validate;
 
 const finalValidator = new Function(`
-  var DAILY_V2 = { ARCHETYPES: ['easy','polished-casual','expressive'], REQUIRED_SLOTS: ['top','bottom','shoes'] };
+  var DAILY_V2 = {
+    ARCHETYPES: ['easy','polished-casual','expressive'],
+    REQUIRED_SLOTS: ['top','bottom','shoes'],
+    COMPOSITE_WEIGHTS: ${JSON.stringify({
+      colorIntent: 0.20,
+      palette: 0.15,
+      weather: 0.12,
+      archetypeFit: 0.10,
+      visualInterest: 0.10,
+      wearability: 0.10,
+      freshness: 0.10,
+      silhouette: 0.08,
+      formality: 0.05,
+    })}
+  };
   function itemMapV2_(snapshot) { var map = Object.create(null); snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
   ${apps('Taste.gs')}
+  ${apps('Selection.gs')}
   ${apps('FinalValidation.gs')}
   return validateFinalBundleV2_;
 `)() as (
@@ -257,7 +272,15 @@ const persistedSnapshotFixture = (pending: {
   wardrobeFingerprint: string;
   candidates: ReturnType<typeof persistedPlannerCandidateFixture>[];
 }) => {
-  const itemById = new Map<string, Record<string, unknown>>();
+  type SnapshotItem = {
+    id: string;
+    slot: string;
+    category: string;
+    name: string;
+    thumbnailDataUrl: string;
+    profile: Record<string, unknown>;
+  };
+  const itemById = new Map<string, SnapshotItem>();
   pending.candidates.forEach((candidate, index) => {
     const archetypeIndex = dailyArchetypes.indexOf(candidate.archetype);
     const storyIndex = archetypeIndex * 20 + index;
@@ -302,12 +325,30 @@ const persistedSnapshotFixture = (pending: {
     wardrobeFingerprint: pending.wardrobeFingerprint,
     generatedAt: 50,
     settings: {},
-    tasteExamples: [],
+    tasteExamples: [] as Array<{
+      id: string;
+      name: string;
+      itemIds: string[];
+      createdAt: number;
+      source?: string;
+    }>,
     items: Array.from(itemById.values()),
   };
 };
 
 const sendableSnapshotFixture = () => persistedSnapshotFixture(sendablePendingFixture());
+
+const finalPolicyFixture = () => {
+  const pending = sendablePendingFixture();
+  return {
+    curated: { recommendations: structuredClone(pending.bundle.recommendations) },
+    snapshot: sendableSnapshotFixture(),
+    weather: structuredClone(pending.weather),
+    history: structuredClone(pending.history),
+    selected: structuredClone(pending.selectedCandidates),
+    critic: structuredClone(pending.critic),
+  };
+};
 
 type MetadataDimension = 'policy' | 'date' | 'fingerprint';
 
@@ -385,6 +426,27 @@ const deterministicSelectionGuard = evaluateAppsScript<(
     savedOutfitExactCopyV2_: () => null,
     weatherSafetyErrorsV2_: () => [],
   },
+);
+
+const policyConsistentSelectionGuard = evaluateAppsScript<(
+  pending: unknown,
+  expectedLocalDate: string,
+  wardrobeFingerprint: string,
+  snapshot: unknown,
+) => unknown>(
+  ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs', 'JobState.gs'],
+  'assertDeterministicSelectionReadyV2_',
+  { DAILY_V2: dailySelectionRuntime },
+);
+
+const deterministicCandidateSetErrors = evaluateAppsScript<(
+  selected: ReturnType<typeof persistedPlannerCandidateFixture>[],
+  snapshot: ReturnType<typeof persistedSnapshotFixture>,
+  weather: ReturnType<typeof persistedWeatherFixture>,
+) => string[]>(
+  ['Selection.gs'],
+  'candidateSetErrorsV2_',
+  { DAILY_V2: dailySelectionRuntime },
 );
 
 const deterministicSelectionSelectors = evaluateAppsScript<{
@@ -520,6 +582,54 @@ describe('Apps Script contracts', () => {
     const mismatchErrors = plannerValidator(mismatchedIds, 'easy', snapshot).join(' ');
     expect(mismatchErrors).toMatch(/itemIds does not match/);
     expect(mismatchErrors).toMatch(/exactly copies manual saved outfit "Saved Look"/);
+  });
+
+  it('accepts opaque prototype-key candidate and wardrobe ids in planner validation', () => {
+    const response = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
+    response.candidates[0] = {
+      ...response.candidates[0],
+      candidateId: '__proto__',
+      topId: '__proto__',
+      bottomId: 'constructor',
+      shoeId: 'toString',
+      itemIds: ['toString', '__proto__', 'constructor'],
+    };
+    response.candidates[1].candidateId = 'constructor';
+    response.candidates[2].candidateId = 'toString';
+    const opaqueSnapshot = {
+      ...snapshot,
+      items: snapshot.items.concat([
+        { id: '__proto__', slot: 'top', category: 'T-Shirts', profile: { warmth: 2, breathability: 4 } },
+        { id: 'constructor', slot: 'bottom', category: 'Pants', profile: {} },
+        { id: 'toString', slot: 'shoes', category: 'Sneakers', profile: { rainSafety: 'good' } },
+      ]),
+    };
+
+    expect(plannerValidator(response, 'easy', opaqueSnapshot)).toEqual([]);
+  });
+
+  it('does not collapse distinct planner combinations whose opaque ids contain delimiters', () => {
+    const response = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
+    response.candidates[0] = {
+      ...response.candidates[0],
+      topId: 'a', bottomId: 'b|c', shoeId: 'd', itemIds: ['a', 'b|c', 'd'],
+    };
+    response.candidates[1] = {
+      ...response.candidates[1],
+      topId: 'a|b', bottomId: 'c', shoeId: 'd', itemIds: ['d', 'c', 'a|b'],
+    };
+    const delimiterSnapshot = {
+      ...snapshot,
+      items: snapshot.items.concat([
+        { id: 'a', slot: 'top', category: 'T-Shirts', profile: { warmth: 2, breathability: 4 } },
+        { id: 'a|b', slot: 'top', category: 'T-Shirts', profile: { warmth: 2, breathability: 4 } },
+        { id: 'b|c', slot: 'bottom', category: 'Pants', profile: {} },
+        { id: 'c', slot: 'bottom', category: 'Pants', profile: {} },
+        { id: 'd', slot: 'shoes', category: 'Sneakers', profile: { rainSafety: 'good' } },
+      ]),
+    };
+
+    expect(plannerValidator(response, 'easy', delimiterSnapshot)).toEqual([]);
   });
 
   it('still rejects superficial variations within one planner response', () => {
@@ -1530,7 +1640,7 @@ describe('Apps Script contracts', () => {
 
     const reorderedItems = structuredClone(valid);
     reorderedItems.bundle.recommendations[0].itemIds.reverse();
-    invalids.push(reorderedItems);
+    expect(validator(reorderedItems, snapshotValue, '2026-07-15')).toBe(true);
 
     const invalidWeather = structuredClone(valid);
     invalidWeather.weather = { localDate: '2026-07-15' } as typeof invalidWeather.weather;
@@ -1604,7 +1714,7 @@ describe('Apps Script contracts', () => {
     const events: string[] = [];
     const snapshotValue = sendableSnapshotFixture();
     const pendingValue = sendablePendingFixture();
-    pendingValue.bundle.recommendations[0].itemIds.reverse();
+    pendingValue.bundle.recommendations[0].itemIds[0] = 'changed-item-id';
     const send = evaluateAppsScript<(bundle: unknown, snapshot: unknown, testMode: boolean, pending: unknown, localDate: string) => unknown>(
       ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
       'sendDailyBundleNowV2_',
@@ -1759,7 +1869,7 @@ describe('Apps Script contracts', () => {
       ['malformed', pending => {
         delete (pending.bundle.recommendations[1] as Partial<typeof pending.bundle.recommendations[number]>).whyItWorks;
       }],
-      ['changed', pending => { pending.bundle.recommendations[2].itemIds.reverse(); }],
+      ['changed', pending => { pending.bundle.recommendations[2].itemIds[0] = 'changed-item-id'; }],
     ];
     mutations.forEach(([label, mutate]) => {
       const events: string[] = [];
@@ -1971,6 +2081,59 @@ describe('Apps Script contracts', () => {
     });
   });
 
+  it('persists the exact-manual-trio policy without reviving the legacy two-core ban', () => {
+    const pending = currentPendingFixture();
+    const snapshotValue = persistedSnapshotFixture(pending);
+    const selected = pending.selectedCandidates[0];
+    snapshotValue.tasteExamples = [{
+      id: 'transformed-manual',
+      name: 'Transformed manual save',
+      itemIds: [selected.topId, selected.bottomId, pending.selectedCandidates[1].shoeId],
+      createdAt: 1,
+    }];
+
+    expect(() => policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).not.toThrow();
+
+    const exactSnapshot = structuredClone(snapshotValue);
+    exactSnapshot.tasteExamples = [{
+      id: 'exact-manual',
+      name: 'Exact manual save',
+      itemIds: selected.itemIds.slice(),
+      createdAt: 1,
+    }];
+    expect(() => policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      exactSnapshot,
+    )).toThrowError('Deterministic selection must be ready');
+  });
+
+  it('accepts set-equal candidate item ids across planner, selection, and persisted winner representations', () => {
+    const pending = currentPendingFixture();
+    const candidateId = pending.selectedCandidates[0].candidateId;
+    const plannerCandidate = pending.planners[0].candidates.find(value => value.candidateId === candidateId);
+    const universeCandidate = pending.candidates.find(value => value.candidateId === candidateId);
+    if (!plannerCandidate || !universeCandidate) throw new Error('fixture candidate graph is disconnected');
+    const [topId, bottomId, shoeId] = plannerCandidate.itemIds;
+    plannerCandidate.itemIds = [shoeId, topId, bottomId];
+    universeCandidate.itemIds = [bottomId, shoeId, topId];
+    pending.selectedCandidates[0].itemIds = [shoeId, bottomId, topId];
+    const snapshotValue = persistedSnapshotFixture(pending);
+
+    expect(() => policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).not.toThrow();
+  });
+
   it('guards persisted selections structurally while supporting opaque prototype-key ids and valid replans', () => {
     const guard = deterministicSelectionGuard;
     const valid = currentPendingFixture();
@@ -2011,10 +2174,6 @@ describe('Apps Script contracts', () => {
     const duplicateArchetype = structuredClone(valid);
     duplicateArchetype.selectedCandidates[1].archetype = duplicateArchetype.selectedCandidates[0].archetype;
     invalids.push(duplicateArchetype);
-
-    const reorderedItems = structuredClone(valid);
-    reorderedItems.selectedCandidates[0].itemIds.reverse();
-    invalids.push(reorderedItems);
 
     const emptyCritic = structuredClone(valid);
     emptyCritic.critic = {} as typeof emptyCritic.critic;
@@ -3040,6 +3199,119 @@ describe('Apps Script contracts', () => {
     expect(() => criticValidator({ scores: [null] }, [candidates[0]])).not.toThrow();
   });
 
+  it('uses the deterministic usable-shoe threshold and permits necessary reuse without a legacy setting', () => {
+    const fixture = finalPolicyFixture();
+    const sharedShoeId = fixture.selected[0].shoeId;
+    const unavailableShoeId = fixture.selected[1].shoeId;
+    const thirdSelectedShoeId = fixture.selected[2].shoeId;
+    fixture.selected[1].shoeId = sharedShoeId;
+    fixture.selected[1].itemIds = fixture.selected[1].itemIds.map(id => id === unavailableShoeId ? sharedShoeId : id);
+    fixture.curated.recommendations[1].itemIds = fixture.curated.recommendations[1].itemIds
+      .map(id => id === unavailableShoeId ? sharedShoeId : id);
+    const retainedShoes = new Set([sharedShoeId, unavailableShoeId, thirdSelectedShoeId]);
+    fixture.snapshot.items = fixture.snapshot.items.filter(item => item.slot !== 'shoes' || retainedShoes.has(item.id));
+    const unavailable = fixture.snapshot.items.find(item => item.id === unavailableShoeId);
+    if (!unavailable) throw new Error('fixture unavailable shoe is missing');
+    unavailable.profile = { ...unavailable.profile, available: false };
+
+    expect(deterministicCandidateSetErrors(fixture.selected, fixture.snapshot, fixture.weather)).toEqual([]);
+    expect(finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+    )).toEqual([]);
+  });
+
+  it('uses the deterministic credible-layer predicate for required-weather layer reuse', () => {
+    const fixture = finalPolicyFixture();
+    const repeatedLayerId = 'credible-layer';
+    [0, 1].forEach(index => {
+      (fixture.selected[index] as typeof fixture.selected[number] & { layerId?: string }).layerId = repeatedLayerId;
+      fixture.selected[index].itemIds.push(repeatedLayerId);
+      fixture.curated.recommendations[index].itemIds.push(repeatedLayerId);
+    });
+    fixture.snapshot.items.push(
+      {
+        id: repeatedLayerId,
+        slot: 'layer',
+        category: 'Jackets',
+        profile: { warmth: 2, available: true, excludedFromDaily: false },
+      } as unknown as typeof fixture.snapshot.items[number],
+      {
+        id: 'incomplete-layer',
+        slot: 'layer',
+        category: 'Jackets',
+        profile: { available: true, excludedFromDaily: false },
+      } as unknown as typeof fixture.snapshot.items[number],
+    );
+    fixture.weather.layerGuidance = 'required';
+
+    expect(deterministicCandidateSetErrors(fixture.selected, fixture.snapshot, fixture.weather)).toEqual([]);
+    expect(finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+    )).toEqual([]);
+  });
+
+  it('keeps final exact-history identity injective for opaque ids containing delimiters', () => {
+    const fixture = finalPolicyFixture();
+    const sorted = fixture.selected[0].itemIds.slice().sort();
+    fixture.history.exactOutfitsPrevious14Days = [{
+      localDate: '2026-07-14',
+      archetype: 'easy',
+      itemIds: [`${sorted[0]}|${sorted[1]}`, sorted[2]],
+    }];
+
+    expect(finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+    )).toEqual([]);
+
+    fixture.history.exactOutfitsPrevious14Days[0].itemIds = fixture.selected[0].itemIds.slice().reverse();
+    expect(finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+    ).join(' ')).toMatch(/exactly repeats a prior-14-day outfit/);
+  });
+
+  it('keeps final diversity-story identity aligned with deterministic selection for delimiter values', () => {
+    const fixture = finalPolicyFixture();
+    const firstTop = fixture.snapshot.items.find(item => item.id === fixture.selected[0].topId);
+    const firstBottom = fixture.snapshot.items.find(item => item.id === fixture.selected[0].bottomId);
+    const secondTop = fixture.snapshot.items.find(item => item.id === fixture.selected[1].topId);
+    const secondBottom = fixture.snapshot.items.find(item => item.id === fixture.selected[1].bottomId);
+    if (!firstTop || !firstBottom || !secondTop || !secondBottom) throw new Error('fixture story items are missing');
+    firstTop.profile = { ...firstTop.profile, primaryColorFamily: 'a', silhouette: 'd' };
+    firstBottom.profile = { ...firstBottom.profile, primaryColorFamily: 'b|c', silhouette: 'e' };
+    secondTop.profile = { ...secondTop.profile, primaryColorFamily: 'a|b', silhouette: 'd' };
+    secondBottom.profile = { ...secondBottom.profile, primaryColorFamily: 'c', silhouette: 'e' };
+
+    expect(deterministicCandidateSetErrors(fixture.selected, fixture.snapshot, fixture.weather)).toEqual([]);
+    expect(finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+    )).toEqual([]);
+  });
+
   it('enforces byte-exact opaque selected ids, true uniqueness, score integrity, and the top-bottom cooldown', () => {
     const archetypes = ['easy', 'polished-casual', 'expressive'];
     const opaqueIds = ['__proto__', 'constructor', 'toString'];
@@ -3156,8 +3428,7 @@ describe('Apps Script contracts', () => {
 
     const reordered = structuredClone(curated);
     reordered.recommendations[0].itemIds.reverse();
-    expect(finalValidator(reordered, finalSnapshot, weather, history, selected, critic).join(' '))
-      .toMatch(/changed or reordered the selected itemIds/);
+    expect(finalValidator(reordered, finalSnapshot, weather, history, selected, critic)).toEqual([]);
 
     const swapped = structuredClone(curated);
     [swapped.recommendations[0], swapped.recommendations[1]] = [swapped.recommendations[1], swapped.recommendations[0]];
