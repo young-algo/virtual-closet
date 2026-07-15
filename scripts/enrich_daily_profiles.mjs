@@ -271,6 +271,12 @@ const removeArtifact = async (fileSystem, file) => {
 const transactionArtifactPath = (file, transactionId, suffix) =>
   path.join(path.dirname(file), `.${path.basename(file)}.${transactionId}.${suffix}`);
 
+const awaitPreparationWrites = async writes => {
+  const results = await Promise.allSettled(writes);
+  const failure = results.find(result => result.status === 'rejected');
+  if (failure) throw failure.reason;
+};
+
 export const writeManifestsTransaction = async (
   manifests,
   { fileSystem = DEFAULT_FILE_SYSTEM, transactionId = randomUUID() } = {}
@@ -300,10 +306,10 @@ export const writeManifestsTransaction = async (
   };
 
   try {
-    await Promise.all(prepared.map(entry =>
+    await awaitPreparationWrites(prepared.map(entry =>
       fileSystem.writeFile(entry.temporary, entry.contents, { flag: 'wx' })
     ));
-    await Promise.all(prepared.map(entry =>
+    await awaitPreparationWrites(prepared.map(entry =>
       fileSystem.writeFile(entry.backup, entry.original, { flag: 'wx' })
     ));
     backupsReady = true;

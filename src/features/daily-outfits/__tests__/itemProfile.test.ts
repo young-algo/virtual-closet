@@ -325,6 +325,83 @@ describe('daily profile enrichment script helpers', () => {
     }
   });
 
+  it.each(['tmp', 'backup'] as const)(
+    'waits for every %s preparation write before cleaning failed transactions',
+    async failingSuffix => {
+      const directory = await mkdtemp(path.join(os.tmpdir(), `daily-profiles-${failingSuffix}-race-`));
+      const firstFile = path.join(directory, 'closet.json');
+      const secondFile = path.join(directory, 'sneakers.json');
+      const firstOriginal = '[{"id":"closet-original"}]\n';
+      const secondOriginal = '[{"id":"sneaker-original"}]\n';
+      const transactionId = `${failingSuffix}-race-test`;
+      const failingArtifact = path.join(directory, `.closet.json.${transactionId}.${failingSuffix}`);
+      const delayedArtifact = path.join(directory, `.sneakers.json.${transactionId}.${failingSuffix}`);
+      const writeManifestsTransaction = enrichmentScript.writeManifestsTransaction;
+      let signalCleanupStarted: () => void = () => undefined;
+      const cleanupStarted = new Promise<void>(resolve => {
+        signalCleanupStarted = resolve;
+      });
+      let signalDelayedWriteFinished: () => void = () => undefined;
+      const delayedWriteFinished = new Promise<void>(resolve => {
+        signalDelayedWriteFinished = resolve;
+      });
+
+      try {
+        await Promise.all([
+          writeFile(firstFile, firstOriginal),
+          writeFile(secondFile, secondOriginal)
+        ]);
+        expect(writeManifestsTransaction).toBeTypeOf('function');
+        if (typeof writeManifestsTransaction !== 'function') return;
+
+        const injectedFileSystem = {
+          readFile,
+          rename,
+          unlink: async (file: string) => {
+            try {
+              await unlink(file);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+            }
+            if (file === delayedArtifact) signalCleanupStarted();
+          },
+          writeFile: async (...args: Parameters<typeof writeFile>) => {
+            const [file] = args;
+            if (String(file) === failingArtifact) {
+              throw new Error(`injected ${failingSuffix} preparation failure`);
+            }
+            if (String(file) === delayedArtifact) {
+              await Promise.race([
+                cleanupStarted,
+                new Promise<void>(resolve => setTimeout(resolve, 25))
+              ]);
+              await writeFile(...args);
+              signalDelayedWriteFinished();
+              return;
+            }
+            await writeFile(...args);
+          }
+        };
+
+        await expect(writeManifestsTransaction([
+          { file: firstFile, items: [{ id: 'closet-updated' }] },
+          { file: secondFile, items: [{ id: 'sneaker-updated' }] }
+        ], {
+          fileSystem: injectedFileSystem,
+          transactionId
+        })).rejects.toThrow(`injected ${failingSuffix} preparation failure`);
+        await delayedWriteFinished;
+
+        expect(await readFile(firstFile, 'utf8')).toBe(firstOriginal);
+        expect(await readFile(secondFile, 'utf8')).toBe(secondOriginal);
+        expect((await readdir(directory)).sort()).toEqual(['closet.json', 'sneakers.json']);
+      } finally {
+        signalCleanupStarted();
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
+  );
+
   it('replaces both manifests with deterministic JSON and removes transaction artifacts', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'daily-profiles-success-'));
     const firstFile = path.join(directory, 'closet.json');
