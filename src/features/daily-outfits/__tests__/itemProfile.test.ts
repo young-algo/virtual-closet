@@ -1,9 +1,21 @@
+import { mkdtemp, readFile, readdir, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { categoryDefaultProfile, fillManifestDailyProfiles } from '../itemProfile';
 import type { DailyRecommendationProfileV2, DailySourceItem } from '../types';
 // The enrichment utility is intentionally plain ESM so it can run directly with Node.
 // @ts-expect-error TypeScript does not generate declarations for standalone .mjs scripts.
-import { imagePathsFor, mergeDailyProfile, resolvePublicImagePath, sanitizeStructuredProfile, shouldRetryStatus, shouldWriteManifests } from '../../../../scripts/enrich_daily_profiles.mjs';
+import * as enrichmentScript from '../../../../scripts/enrich_daily_profiles.mjs';
+
+const {
+  imagePathsFor,
+  mergeDailyProfile,
+  resolvePublicImagePath,
+  sanitizeStructuredProfile,
+  shouldRetryStatus,
+  shouldWriteManifests
+} = enrichmentScript;
 
 const item = (
   dailyProfile?: DailySourceItem['dailyProfile'],
@@ -195,6 +207,149 @@ describe('daily profile enrichment script helpers', () => {
     expect(shouldRetryStatus(503, 2)).toBe(true);
     expect(shouldRetryStatus(503, 3)).toBe(false);
     expect(shouldRetryStatus(400, 1)).toBe(false);
+  });
+
+  it('keeps the Gemini API key out of the request URL and sends it only in a header', async () => {
+    const secret = 'secret-key-that-must-not-leak';
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const callGemini = enrichmentScript.callGemini;
+
+    expect(callGemini).toBeTypeOf('function');
+    if (typeof callGemini !== 'function') return;
+
+    await callGemini([{ text: 'profile this item' }], secret, {
+      fetchImpl: async (url: string | URL | Request, init?: RequestInit) => {
+        requests.push({ url: String(url), init: init ?? {} });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: JSON.stringify(inferredProfile()) }] } }]
+          })
+        };
+      },
+      sleepImpl: async () => undefined
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url).not.toContain(secret);
+    expect(requests[0].url).not.toContain('?key=');
+    expect(requests[0].init.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      'x-goog-api-key': secret
+    });
+  });
+
+  it('cancels a retryable response body before sleeping and retrying', async () => {
+    const events: string[] = [];
+    let requestCount = 0;
+    const callGemini = enrichmentScript.callGemini;
+
+    expect(callGemini).toBeTypeOf('function');
+    if (typeof callGemini !== 'function') return;
+
+    await callGemini([{ text: 'profile this item' }], 'header-only-key', {
+      fetchImpl: async () => {
+        requestCount += 1;
+        events.push(`fetch-${requestCount}`);
+        if (requestCount === 1) {
+          return {
+            ok: false,
+            status: 429,
+            body: {
+              cancel: async () => {
+                events.push('cancel-body');
+              }
+            }
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: JSON.stringify(inferredProfile()) }] } }]
+          })
+        };
+      },
+      sleepImpl: async (milliseconds: number) => {
+        events.push(`sleep-${milliseconds}`);
+      }
+    });
+
+    expect(events).toEqual(['fetch-1', 'cancel-body', 'sleep-2000', 'fetch-2']);
+  });
+
+  it('restores both original manifests when the second replacement fails', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'daily-profiles-rollback-'));
+    const firstFile = path.join(directory, 'closet.json');
+    const secondFile = path.join(directory, 'sneakers.json');
+    const firstOriginal = '[{"id":"closet-original"}]\n';
+    const secondOriginal = '[{"id":"sneaker-original"}]\n';
+    const writeManifestsTransaction = enrichmentScript.writeManifestsTransaction;
+
+    try {
+      await Promise.all([
+        writeFile(firstFile, firstOriginal),
+        writeFile(secondFile, secondOriginal)
+      ]);
+      expect(writeManifestsTransaction).toBeTypeOf('function');
+      if (typeof writeManifestsTransaction !== 'function') return;
+
+      let replacements = 0;
+      const injectedFileSystem = {
+        readFile,
+        writeFile,
+        unlink,
+        rename: async (source: string, destination: string) => {
+          if (source.endsWith('.tmp') && (destination === firstFile || destination === secondFile)) {
+            replacements += 1;
+            if (replacements === 2) throw new Error('injected second replacement failure');
+          }
+          await rename(source, destination);
+        }
+      };
+
+      await expect(writeManifestsTransaction([
+        { file: firstFile, items: [{ id: 'closet-updated' }] },
+        { file: secondFile, items: [{ id: 'sneaker-updated' }] }
+      ], {
+        fileSystem: injectedFileSystem,
+        transactionId: 'rollback-test'
+      })).rejects.toThrow('injected second replacement failure');
+
+      expect(await readFile(firstFile, 'utf8')).toBe(firstOriginal);
+      expect(await readFile(secondFile, 'utf8')).toBe(secondOriginal);
+      expect((await readdir(directory)).sort()).toEqual(['closet.json', 'sneakers.json']);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('replaces both manifests with deterministic JSON and removes transaction artifacts', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'daily-profiles-success-'));
+    const firstFile = path.join(directory, 'closet.json');
+    const secondFile = path.join(directory, 'sneakers.json');
+    const writeManifestsTransaction = enrichmentScript.writeManifestsTransaction;
+
+    try {
+      await Promise.all([
+        writeFile(firstFile, 'closet original bytes\n'),
+        writeFile(secondFile, 'sneaker original bytes\n')
+      ]);
+      expect(writeManifestsTransaction).toBeTypeOf('function');
+      if (typeof writeManifestsTransaction !== 'function') return;
+
+      await writeManifestsTransaction([
+        { file: firstFile, items: [{ id: 'closet-updated' }] },
+        { file: secondFile, items: [{ id: 'sneaker-updated' }] }
+      ], { transactionId: 'success-test' });
+
+      expect(await readFile(firstFile, 'utf8')).toBe('[\n  {\n    "id": "closet-updated"\n  }\n]\n');
+      expect(await readFile(secondFile, 'utf8')).toBe('[\n  {\n    "id": "sneaker-updated"\n  }\n]\n');
+      expect((await readdir(directory)).sort()).toEqual(['closet.json', 'sneakers.json']);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('writes only a successful non-dry-run batch with changes', () => {

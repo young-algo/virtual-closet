@@ -6,7 +6,8 @@
 // The script deliberately makes one sequential structured-output request per
 // item. It writes neither manifest if any target fails validation or enrichment.
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -194,8 +195,24 @@ export const shouldRetryStatus = (status, attempt) =>
 
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
-const callGemini = async (parts, apiKey) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+const discardResponseBody = async response => {
+  try {
+    if (typeof response.body?.cancel === 'function') {
+      await response.body.cancel();
+      return;
+    }
+    if (typeof response.arrayBuffer === 'function') await response.arrayBuffer();
+  } catch {
+    // The request is already known to be retryable; disposal is best-effort.
+  }
+};
+
+export const callGemini = async (
+  parts,
+  apiKey,
+  { fetchImpl = fetch, sleepImpl = sleep } = {}
+) => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
   const body = JSON.stringify({
     contents: [{ parts }],
     generationConfig: {
@@ -205,9 +222,12 @@ const callGemini = async (parts, apiKey) => {
   });
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
       body
     });
     if (response.ok) {
@@ -217,7 +237,8 @@ const callGemini = async (parts, apiKey) => {
       return JSON.parse(text);
     }
     if (shouldRetryStatus(response.status, attempt)) {
-      await sleep(2000 * attempt);
+      await discardResponseBody(response);
+      await sleepImpl(2000 * attempt);
       continue;
     }
     let detail = `HTTP ${response.status}`;
@@ -236,6 +257,84 @@ const needsEnrichment = (item, force) =>
 
 export const shouldWriteManifests = ({ dryRun, failed, enriched }) =>
   !dryRun && failed === 0 && enriched > 0;
+
+const DEFAULT_FILE_SYSTEM = { readFile, writeFile, rename, unlink };
+
+const removeArtifact = async (fileSystem, file) => {
+  try {
+    await fileSystem.unlink(file);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+};
+
+const transactionArtifactPath = (file, transactionId, suffix) =>
+  path.join(path.dirname(file), `.${path.basename(file)}.${transactionId}.${suffix}`);
+
+export const writeManifestsTransaction = async (
+  manifests,
+  { fileSystem = DEFAULT_FILE_SYSTEM, transactionId = randomUUID() } = {}
+) => {
+  const safeTransactionId = String(transactionId).replace(/[^a-z0-9_-]/gi, '-').slice(0, 80);
+  if (!safeTransactionId) throw new Error('Manifest transaction id is invalid');
+
+  // Stringify every manifest before creating any artifact, so render failures
+  // cannot leave a partially prepared transaction on disk.
+  const rendered = manifests.map(({ file, items }) => ({
+    file,
+    contents: `${JSON.stringify(items, null, 2)}\n`
+  }));
+  const prepared = await Promise.all(rendered.map(async entry => ({
+    ...entry,
+    original: await fileSystem.readFile(entry.file),
+    temporary: transactionArtifactPath(entry.file, safeTransactionId, 'tmp'),
+    backup: transactionArtifactPath(entry.file, safeTransactionId, 'backup')
+  })));
+  const artifacts = prepared.flatMap(entry => [entry.temporary, entry.backup]);
+  let backupsReady = false;
+
+  const cleanup = async () => {
+    const results = await Promise.allSettled(artifacts.map(file => removeArtifact(fileSystem, file)));
+    const failures = results.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (failures.length > 0) throw new AggregateError(failures, 'Failed to clean manifest transaction artifacts');
+  };
+
+  try {
+    await Promise.all(prepared.map(entry =>
+      fileSystem.writeFile(entry.temporary, entry.contents, { flag: 'wx' })
+    ));
+    await Promise.all(prepared.map(entry =>
+      fileSystem.writeFile(entry.backup, entry.original, { flag: 'wx' })
+    ));
+    backupsReady = true;
+
+    for (const entry of prepared) await fileSystem.rename(entry.temporary, entry.file);
+    await cleanup();
+  } catch (error) {
+    const rollbackFailures = [];
+    if (backupsReady) {
+      for (const entry of prepared) {
+        try {
+          await fileSystem.rename(entry.backup, entry.file);
+        } catch (rollbackError) {
+          rollbackFailures.push(rollbackError);
+        }
+      }
+    }
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      rollbackFailures.push(cleanupError);
+    }
+    if (rollbackFailures.length > 0) {
+      throw new AggregateError(
+        [error, ...rollbackFailures],
+        `Manifest transaction failed and rollback was incomplete: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    throw error;
+  }
+};
 
 const loadManifests = async () => Promise.all(MANIFESTS.map(async file => {
   const items = JSON.parse(await readFile(file, 'utf8'));
@@ -277,9 +376,7 @@ const main = async () => {
   }
 
   if (shouldWriteManifests({ dryRun, failed, enriched })) {
-    await Promise.all(manifests.map(manifest =>
-      writeFile(manifest.file, `${JSON.stringify(manifest.items, null, 2)}\n`)
-    ));
+    await writeManifestsTransaction(manifests);
   }
   if (failed > 0) process.exitCode = 1;
   console.log(`Done: ${enriched} enriched, ${failed} failed${dryRun ? ', nothing written' : ''}.`);
