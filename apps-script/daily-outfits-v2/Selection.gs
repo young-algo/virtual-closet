@@ -396,7 +396,7 @@ function candidateSetErrorsV2_(set, snapshot, weather) {
   return Array.from(new Set(errors));
 }
 
-function normalizeFinalistPoolsV2_(pools, scoreIndex) {
+function normalizeFinalistPoolsV2_(pools, scoreIndex, snapshot) {
   var groups = DAILY_V2.ARCHETYPES.map(function(archetype) {
     var values = pools && pools[archetype];
     return Array.isArray(values) ? values : [];
@@ -405,7 +405,8 @@ function normalizeFinalistPoolsV2_(pools, scoreIndex) {
   return DAILY_V2.ARCHETYPES.reduce(function(result, archetype, index) {
     result[archetype] = groups[index].filter(function(candidate) {
       return validSelectionCandidateV2_(candidate) && candidate.archetype === archetype &&
-        counts[candidate.candidateId] === 1 && ownSelectionKeyV2_(scoreIndex.byId, candidate.candidateId);
+        counts[candidate.candidateId] === 1 && ownSelectionKeyV2_(scoreIndex.byId, candidate.candidateId) &&
+        selectionCandidateInventoryV2_(candidate, snapshot) !== null;
     });
     return result;
   }, Object.create(null));
@@ -457,7 +458,7 @@ function rankCandidateSetsV2_(sets, scores) {
 
 function selectFinalSetV2_(finalistPools, scores, snapshot, weather) {
   var scoreIndex = selectionScoreIndexV2_(scores);
-  var pools = normalizeFinalistPoolsV2_(finalistPools || {}, scoreIndex);
+  var pools = normalizeFinalistPoolsV2_(finalistPools || {}, scoreIndex, snapshot);
   for (var size = 2; size <= 3; size += 1) {
     var feasible = enumerateCandidateSetsV2_(pools, size).filter(function(set) {
       return candidateSetErrorsV2_(set, snapshot, weather).length === 0;

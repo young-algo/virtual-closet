@@ -611,6 +611,46 @@ describe('final set constraints, widening, and rank order', () => {
     expect(new Set(result.selectedCandidates?.map(value => value.shoeId)).size).toBe(3);
   });
 
+  it('removes inventory-invalid finalists before taking the top two', () => {
+    const pools = {
+      easy: [
+        makeCandidate('e-missing', 'easy', 'unknown-top', 'b4', 's4'),
+        makeCandidate('e-wrong-slot', 'easy', 's4', 'b5', 's5'),
+        makeCandidate('e-valid', 'easy', 't1', 'b1', 's1')
+      ],
+      'polished-casual': [makeCandidate('p1', 'polished-casual', 't2', 'b2', 's2')],
+      expressive: [makeCandidate('x1', 'expressive', 't3', 'b3', 's3')]
+    };
+
+    expect(finalSet(pools, scoresForPools(pools))).toEqual(expect.objectContaining({
+      path: 'top2',
+      selectedCandidates: expect.arrayContaining([
+        expect.objectContaining({ candidateId: 'e-valid' })
+      ])
+    }));
+  });
+
+  it('does not let inventory-invalid finalists hide the archetype that needs replanning', () => {
+    const pools = {
+      easy: [
+        makeCandidate('e-missing', 'easy', 'unknown-top', 'b4', 's4'),
+        makeCandidate('e-wrong-slot', 'easy', 's4', 'b5', 's5'),
+        makeCandidate('e-valid', 'easy', 't1', 'b1', 's1')
+      ],
+      'polished-casual': [makeCandidate('p1', 'polished-casual', 't2', 'b2', 's1')],
+      expressive: [
+        makeCandidate('x1', 'expressive', 't3', 'b3', 's2'),
+        makeCandidate('x2', 'expressive', 't4', 'b4', 's2')
+      ]
+    };
+
+    expect(finalSet(pools, scoresForPools(pools))).toEqual(expect.objectContaining({
+      selectedCandidates: null,
+      needsReplan: 'easy',
+      feasibleSetCount: 0
+    }));
+  });
+
   it('returns a deterministic needsReplan instead of throwing at a true dead end', () => {
     const pools = {
       easy: [makeCandidate('e1', 'easy', 't1', 'b1', 's1'), makeCandidate('e2', 'easy', 't2', 'b2', 's1')],
