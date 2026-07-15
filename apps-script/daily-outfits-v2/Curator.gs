@@ -7,10 +7,9 @@ var FINAL_RECOMMENDATION_SCHEMA_V2 = {
     itemIds: { type: 'ARRAY', items: { type: 'STRING' }, minItems: 3, maxItems: 4 },
     colorHook: { type: 'STRING' },
     whyItWorks: { type: 'STRING' },
-    weatherNote: { type: 'STRING' },
-    criticSummary: { type: 'STRING' }
+    weatherNote: { type: 'STRING' }
   },
-  required: ['candidateId', 'archetype', 'name', 'itemIds', 'colorHook', 'whyItWorks', 'weatherNote', 'criticSummary']
+  required: ['candidateId', 'archetype', 'name', 'itemIds', 'colorHook', 'whyItWorks', 'weatherNote']
 };
 
 var CURATOR_SCHEMA_V2 = {

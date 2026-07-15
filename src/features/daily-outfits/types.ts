@@ -134,7 +134,6 @@ export interface DailyFinalRecommendationV2 {
   colorHook: string;
   whyItWorks: string;
   weatherNote: string;
-  criticSummary: string;
 }
 
 export interface DailyBundleV2 {

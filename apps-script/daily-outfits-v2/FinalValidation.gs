@@ -20,8 +20,11 @@ function weatherSafetyErrorsV2_(recommendation, itemMap, weather, snapshot) {
   if (bottom && bottom.category === 'Shorts' && weather.middayFeelsLikeF < 48) errors.push('shorts are unsafe below a 48°F adjusted midday apparent temperature');
   if (!layer && Math.min(weather.morningFeelsLikeF, weather.eveningFeelsLikeF) < 40 && top && top.profile.warmth <= 2) errors.push('a layer is required for a cold morning or evening');
   if (layer && layer.profile.warmth === 5 && weather.middayFeelsLikeF > 82) errors.push('warmth-5 outerwear is unsafe above 82°F');
+  if (layer && layer.profile.warmth === 4 && weather.middayFeelsLikeF > 85) errors.push('a warmth-4 layer is unsafe above 85°F');
+  if (top && top.profile.warmth >= 4 && weather.middayFeelsLikeF > 85) errors.push('a warmth-4 top is unsafe above 85°F');
+  if (top && top.profile.warmth === 3 && weather.middayFeelsLikeF > 92) errors.push('a warmth-3 top is unsafe above 92°F');
   if (top && layer && top.profile.breathability <= 2 && layer.profile.warmth >= 4 && weather.middayFeelsLikeF > 80) errors.push('the top and layer combination is not breathable enough');
-  if (shoes && shoes.profile.rainSafety === 'poor' && weather.maxRainProbability >= 60 && weather.totalPrecipitationInches >= 0.01) {
+  if (shoes && shoes.profile.rainSafety === 'poor' && weather.rainExpected) {
     var safer = snapshot.items.filter(function(item) { return item.slot === 'shoes' && item.profile.rainSafety !== 'poor'; });
     if (safer.length) errors.push('rain-unsafe shoes selected while safer shoes are available');
   }

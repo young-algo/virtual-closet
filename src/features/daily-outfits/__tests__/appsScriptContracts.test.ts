@@ -65,13 +65,20 @@ describe('Apps Script contracts', () => {
     expect(plannerValidator(superficial, 'easy', snapshot).join(' ')).toMatch(/one-core-item variation/);
   });
 
-  it('enforces cold, hot, and rain guardrails after model generation', () => {
-    const byId = Object.fromEntries(snapshot.items.map(entry => [entry.id, entry]));
-    const baseWeather = { morningFeelsLikeF: 55, eveningFeelsLikeF: 55, middayFeelsLikeF: 65, maxRainProbability: 0, totalPrecipitationInches: 0 };
-    expect(weatherSafety({ itemIds: ['top', 'shorts', 'shoe'] }, byId, { ...baseWeather, middayFeelsLikeF: 42 }, snapshot).join(' ')).toMatch(/shorts/);
-    expect(weatherSafety({ itemIds: ['top', 'bottom', 'shoe'] }, byId, { ...baseWeather, morningFeelsLikeF: 28 }, snapshot).join(' ')).toMatch(/layer/);
-    expect(weatherSafety({ itemIds: ['top', 'bottom', 'shoe', 'layer'] }, byId, { ...baseWeather, middayFeelsLikeF: 88 }, snapshot).join(' ')).toMatch(/outerwear/);
-    expect(weatherSafety({ itemIds: ['top', 'bottom', 'shoe'] }, byId, { ...baseWeather, maxRainProbability: 70, totalPrecipitationInches: 0.3 }, snapshot).join(' ')).toMatch(/rain-unsafe/);
+  it('enforces rain and hot-weather comfort bands at their exact boundaries', () => {
+    const byId = Object.fromEntries(snapshot.items.concat([
+      { id: 'top-w3', slot: 'top', category: 'Long Sleeves', profile: { warmth: 3, breathability: 3 } },
+      { id: 'top-w4', slot: 'top', category: 'Long Sleeves', profile: { warmth: 4, breathability: 3 } },
+      { id: 'layer-w4', slot: 'layer', category: 'Jackets', profile: { warmth: 4, breathability: 3 } }
+    ]).map(entry => [entry.id, entry]));
+    const weather = { morningFeelsLikeF: 55, eveningFeelsLikeF: 55, middayFeelsLikeF: 85, rainExpected: false };
+    expect(weatherSafety({ itemIds: ['top', 'bottom', 'shoe'] }, byId, { ...weather, rainExpected: true }, snapshot).join(' ')).toMatch(/rain-unsafe/);
+    expect(weatherSafety({ itemIds: ['top', 'bottom', 'safe-shoe', 'layer-w4'] }, byId, weather, snapshot)).toEqual([]);
+    expect(weatherSafety({ itemIds: ['top', 'bottom', 'safe-shoe', 'layer-w4'] }, byId, { ...weather, middayFeelsLikeF: 85.1 }, snapshot).join(' ')).toMatch(/warmth-4 layer/);
+    expect(weatherSafety({ itemIds: ['top-w4', 'bottom', 'safe-shoe'] }, byId, weather, snapshot)).toEqual([]);
+    expect(weatherSafety({ itemIds: ['top-w4', 'bottom', 'safe-shoe'] }, byId, { ...weather, middayFeelsLikeF: 85.1 }, snapshot).join(' ')).toMatch(/warmth-4 top/);
+    expect(weatherSafety({ itemIds: ['top-w3', 'bottom', 'safe-shoe'] }, byId, { ...weather, middayFeelsLikeF: 92 }, snapshot)).toEqual([]);
+    expect(weatherSafety({ itemIds: ['top-w3', 'bottom', 'safe-shoe'] }, byId, { ...weather, middayFeelsLikeF: 92.1 }, snapshot).join(' ')).toMatch(/warmth-3 top/);
   });
 
   it('contains the lock, staged resume, and send-after-success duplicate protections', () => {
