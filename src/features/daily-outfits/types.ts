@@ -138,12 +138,20 @@ export interface DailyFinalRecommendationV2 {
   weatherNote: string;
 }
 
+export interface DailyEncoreV2 {
+  outfitId: string;
+  name: string;
+  itemIds: string[];
+  candidateId: string;
+}
+
 export interface DailyBundleV2 {
   version: 2;
   qualityPolicyVersion: number;
   localDate: string;
   weather: DailyWeatherProfileV2;
   recommendations: [DailyFinalRecommendationV2, DailyFinalRecommendationV2, DailyFinalRecommendationV2];
+  encore?: DailyEncoreV2;
   generatedAt: number;
   snapshotGeneratedAt: number;
   wardrobeFingerprint: string;

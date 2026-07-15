@@ -26,7 +26,7 @@ function generationBundlePipelineV2_(snapshot, weather) {
     selectedCandidates: selected.selectedCandidates,
     selection: selected.selection,
     curated: curated,
-    bundle: buildBundleV2_(curated, snapshot, weather)
+    bundle: buildBundleV2_(curated, snapshot, weather, history)
   };
 }
 
@@ -101,7 +101,7 @@ function generateDailyBundleStepV2() {
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather);
+      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather, pending.history);
       pending.manualStage = 'bundle-ready';
     }
     pending.updatedAt = Date.now();
@@ -165,7 +165,7 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
       if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather);
+      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather, pending.history);
       pending.updatedAt = Date.now();
       state.stage = 'bundle-ready';
       state.bundleFileId = savePendingV2_(pending);

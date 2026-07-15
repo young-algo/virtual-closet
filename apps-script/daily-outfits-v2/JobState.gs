@@ -624,6 +624,8 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
         !validOwnDailyObjectV2_(bundle, 'weather') ||
         !validPersistedWeatherV2_(bundle.weather, bundle.localDate) ||
         JSON.stringify(bundle.weather) !== JSON.stringify(pending.weather)) return false;
+    if (ownDailyJobKeyV2_(bundle, 'encore') &&
+        (typeof validPersistedEncoreV2_ !== 'function' || !validPersistedEncoreV2_(bundle.encore, snapshot, bundle.weather))) return false;
     assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, snapshot.wardrobeFingerprint, snapshot);
     if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection) ||
         !ownDailyJobKeyV2_(bundle, 'recommendations') ||
@@ -666,8 +668,8 @@ function incrementAttemptV2_(state, stage) {
   return state;
 }
 
-function buildBundleV2_(curated, snapshot, weather) {
-  return {
+function buildBundleV2_(curated, snapshot, weather, history) {
+  var bundle = {
     version: 2,
     qualityPolicyVersion: DAILY_V2.QUALITY_POLICY_VERSION,
     localDate: weather.localDate,
@@ -678,6 +680,11 @@ function buildBundleV2_(curated, snapshot, weather) {
     wardrobeFingerprint: snapshot.wardrobeFingerprint,
     modelRunId: newRunIdV2_()
   };
+  var encore = typeof selectEncoreForBundleV2_ === 'function'
+    ? selectEncoreForBundleV2_(snapshot, weather, history)
+    : null;
+  if (encore) bundle.encore = encore;
+  return bundle;
 }
 
 function recordSentBundleV2_(bundle, snapshot) {
@@ -689,6 +696,7 @@ function recordSentBundleV2_(bundle, snapshot) {
     generatedAt: bundle.generatedAt,
     sentAt: Date.now(),
     recommendations: bundle.recommendations,
+    encore: bundle.encore || null,
     feedback: existing ? (existing.feedback || []) : []
   };
   history = history.filter(function(entry) { return entry.localDate !== bundle.localDate; });
@@ -696,6 +704,7 @@ function recordSentBundleV2_(bundle, snapshot) {
   history.sort(function(a, b) { return a.localDate.localeCompare(b.localDate); });
   var maxDays = snapshot.settings && snapshot.settings.maxDailyHistoryDays ? snapshot.settings.maxDailyHistoryDays : 30;
   saveHistoryV2_(history.slice(-maxDays));
+  if (bundle.encore) getDailyPropertiesV2_().setProperty('LAST_ENCORE_DATE_V2', bundle.localDate);
 }
 
 function resetDailyJobStateV2() {
