@@ -122,6 +122,20 @@ function validateCriticResponseSafelyV2_(response, candidates) {
   return validateCriticResponseV2_(response, candidates);
 }
 
+function normalizeCriticResponseOrderV2_(response, candidates) {
+  var scoreById = Object.create(null);
+  response.scores.forEach(function(score) {
+    scoreById[score.candidateId] = score;
+  });
+  response.scores = candidates.map(function(candidate) {
+    if (!Object.prototype.hasOwnProperty.call(scoreById, candidate.candidateId)) {
+      throw new Error('Critic response normalization lost candidate ' + candidate.candidateId);
+    }
+    return scoreById[candidate.candidateId];
+  });
+  return response;
+}
+
 function repairCriticResponseV2_(snapshot, weather, history, candidates, invalidResponse, errors) {
   var prompt = [
     'Repair this multimodal critic score response without changing any candidate contents. Re-evaluate only where necessary.',
@@ -162,7 +176,10 @@ function runCriticCandidatesV2_(snapshot, weather, history, candidates) {
   ].join('\n\n');
   var response = callGeminiV2_('critic', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.3);
   var errors = validateCriticResponseSafelyV2_(response, candidates);
-  return errors.length ? repairCriticResponseV2_(snapshot, weather, history, candidates, response, errors) : response;
+  var validResponse = errors.length
+    ? repairCriticResponseV2_(snapshot, weather, history, candidates, response, errors)
+    : response;
+  return normalizeCriticResponseOrderV2_(validResponse, candidates);
 }
 
 function runCriticV2_(snapshot, weather, history, plannerResponses) {

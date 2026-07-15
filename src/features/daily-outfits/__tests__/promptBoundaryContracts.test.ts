@@ -180,6 +180,25 @@ const validCriticResponse = () => {
   };
 };
 
+type CriticScore = ReturnType<typeof criticScore>;
+
+const criticCandidateRunner = (callGeminiV2_: (stage: string) => unknown) => evaluateAppsScript<(
+  snapshot: object,
+  weather: object,
+  history: object,
+  candidates: object[]
+) => { scores: CriticScore[] }>(
+  ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+  'runCriticCandidatesV2_',
+  {
+    DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+    console,
+    modelWeatherViewV2_: () => ({}),
+    buildTasteSummaryV2_: () => [],
+    callGeminiV2_
+  }
+);
+
 const api = evaluateAppsScript<{
   modelWeatherViewV2_: (weather: object) => Record<string, unknown>;
   modelProfileViewV2_: (profile: object) => Record<string, unknown>;
@@ -1021,6 +1040,157 @@ describe('prompt and response label boundary', () => {
     expect(source.match(/criticScoreAnchorsV2_\(\)/g)).toHaveLength(3);
     expect(source).toContain('weather: 10 = ideal across the whole 6:00–23:00 window');
     expect(source).toContain('wearability: 9–10 = zero-friction for an ordinary day');
+  });
+
+  it('returns a shuffled valid direct critic response in supplied candidate order without rewriting scores', () => {
+    const candidates = criticCandidates();
+    const orderedScores = candidates.map((candidate, index) => ({
+      ...criticScore(candidate.candidateId),
+      ...(index === 0 ? {
+        weather: 2,
+        palette: 3,
+        colorIntent: 1,
+        disqualified: true,
+        criticalDefects: ['Unsafe across the forecast window.'],
+        reservations: ['The palette is unresolved.']
+      } : {})
+    }));
+    const shuffledResponse = { scores: orderedScores.slice().reverse() };
+    const stages: string[] = [];
+    const runCriticCandidates = criticCandidateRunner((stage: string) => {
+      stages.push(stage);
+      return shuffledResponse;
+    });
+
+    const result = runCriticCandidates(richSnapshot, richWeather, richHistory, candidates);
+
+    expect(stages).toEqual(['critic']);
+    expect(result.scores.map(score => score.candidateId)).toEqual(candidates.map(candidate => candidate.candidateId));
+    result.scores.forEach((score, index) => expect(score).toBe(orderedScores[index]));
+  });
+
+  it('normalizes valid direct critic scores for opaque prototype-key candidate ids', () => {
+    const opaqueIds = ['__proto__', 'constructor', 'toString'];
+    const candidates = opaqueIds.map(candidateId => ({ ...internalCandidate(), candidateId }));
+    const orderedScores = opaqueIds.map(candidateId => criticScore(candidateId));
+    const runCriticCandidates = criticCandidateRunner(() => ({ scores: orderedScores.slice().reverse() }));
+
+    const result = runCriticCandidates(richSnapshot, richWeather, richHistory, candidates);
+
+    expect(result.scores.map(score => score.candidateId)).toEqual(opaqueIds);
+    result.scores.forEach((score, index) => expect(score).toBe(orderedScores[index]));
+  });
+
+  it.each([
+    ['missing', (scores: CriticScore[]) => scores.slice(1)],
+    ['duplicate', (scores: CriticScore[]) => [scores[0], scores[0], ...scores.slice(2)]],
+    ['unknown', (scores: CriticScore[]) => [{ ...scores[0], candidateId: 'unknown-candidate' }, ...scores.slice(1)]]
+  ])('repairs a %s critic score set once and returns the shuffled repair in candidate order', (_case, invalidScores) => {
+    const candidates = criticCandidates();
+    const orderedScores = candidates.map(candidate => criticScore(candidate.candidateId));
+    const stages: string[] = [];
+    const runCriticCandidates = criticCandidateRunner((stage: string) => {
+      stages.push(stage);
+      return stage === 'critic'
+        ? { scores: invalidScores(orderedScores) }
+        : { scores: orderedScores.slice().reverse() };
+    });
+
+    const result = runCriticCandidates(richSnapshot, richWeather, richHistory, candidates);
+
+    expect(stages).toEqual(['critic', 'repair']);
+    expect(result.scores.map(score => score.candidateId)).toEqual(candidates.map(candidate => candidate.candidateId));
+    result.scores.forEach((score, index) => expect(score).toBe(orderedScores[index]));
+  });
+
+  it('keeps a shuffled targeted critic batch aligned with candidate append order for persisted replay', () => {
+    const archetypes = ['easy', 'polished-casual', 'expressive'];
+    const candidate = (candidateId: string, archetype: string, itemIndex: number) => ({
+      candidateId,
+      archetype,
+      topId: `target-top-${itemIndex}`,
+      bottomId: `target-bottom-${itemIndex}`,
+      shoeId: `target-shoe-${itemIndex}`,
+      itemIds: [`target-top-${itemIndex}`, `target-bottom-${itemIndex}`, `target-shoe-${itemIndex}`]
+    });
+    const initial = archetypes.flatMap((archetype, groupIndex) =>
+      Array.from({ length: 5 }, (_, index) => candidate(
+        `${archetype}-${index}`,
+        archetype,
+        groupIndex * 5 + index
+      ))
+    );
+    const additions = Array.from({ length: 5 }, (_, index) => candidate(
+      `easy-replan-${index}`,
+      'easy',
+      15 + index
+    ));
+    const item = (id: string, slot: string) => ({
+      id,
+      slot,
+      profile: {
+        primaryColorFamily: id,
+        silhouette: 'regular',
+        warmth: 1,
+        breathability: 4,
+        rainSafety: 'good',
+        available: true,
+        excludedFromDaily: false
+      }
+    });
+    const selectionSnapshot = {
+      settings: {},
+      tasteExamples: [],
+      items: Array.from({ length: 20 }, (_, index) => [
+        item(`target-top-${index}`, 'top'),
+        item(`target-bottom-${index}`, 'bottom'),
+        item(`target-shoe-${index}`, 'shoes')
+      ]).flat()
+    };
+    const initialScores = initial.map(value => ({
+      ...criticScore(value.candidateId),
+      ...(value.archetype === 'easy' ? { weather: 2, disqualified: true } : {})
+    }));
+    const additionScores = additions.map(value => criticScore(value.candidateId));
+    const runSelection = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => { candidates: Array<{ candidateId: string }>; critic: { scores: CriticScore[] } }>(
+      ['Config.gs', 'Critic.gs', 'Selection.gs'],
+      'runSelectionV2_',
+      {
+        console,
+        archetypeBriefV2_: () => 'brief',
+        modelWeatherViewV2_: () => ({}),
+        modelFacingHistoryV2_: () => ({}),
+        historyGuidanceV2_: () => '',
+        buildTasteSummaryV2_: () => [],
+        modelFacingCandidatesV2_: (values: object[]) => values,
+        candidateImagePartsV2_: () => [],
+        replanArchetypeV2_: () => ({ archetype: 'easy', candidates: additions }),
+        savedOutfitNearCopyV2_: () => null,
+        weatherSafetyErrorsV2_: () => [],
+        callGeminiV2_: () => ({ scores: additionScores.slice().reverse() })
+      }
+    );
+
+    const result = runSelection(
+      selectionSnapshot,
+      { rainExpected: false, layerGuidance: 'none' },
+      { exactOutfitsPrevious14Days: [], cooldownItemIds: [] },
+      archetypes.map(archetype => ({
+        archetype,
+        candidates: initial.filter(value => value.archetype === archetype)
+      })),
+      { scores: initialScores }
+    );
+    const persistedCandidateOrder = result.candidates.map(value => value.candidateId);
+
+    expect(result.critic.scores.map(score => score.candidateId)).toEqual(persistedCandidateOrder);
+    expect(persistedCandidateOrder).toEqual(initial.concat(additions).map(value => value.candidateId));
   });
 
   it.each([
