@@ -793,6 +793,80 @@ describe('prompt and response label boundary', () => {
       .forEach(id => expect(prompt).not.toContain(id));
   });
 
+  it('sanitizes and type-filters every model-facing profile field in the planner item index', () => {
+    const staleUserId = 'user_closet_1777777777777';
+    const staleItemId = 'item_archived_1777777777776';
+    const staleSneakerId = 'sneaker_YY8888-303';
+    const staleImageId = 'img_8888';
+    const profileSnapshot = {
+      ...richSnapshot,
+      items: richSnapshot.items.map(item => item.id === topId ? {
+        ...item,
+        profile: {
+          warmth: 3,
+          breathability: 4,
+          rainSafety: `good ${topId} ${staleUserId}`,
+          windProtection: 2,
+          formality: 1,
+          silhouette: `regular ${bottomId} ${staleItemId}`,
+          patternIntensity: 5,
+          primaryColorFamily: `warm brown ${sneakerId} ${staleSneakerId}`,
+          secondaryColorFamily: `soft cream ${topId} ${staleImageId}`,
+          accentColors: [
+            `black ${topId} ${staleUserId}`,
+            `rust ${bottomId} ${staleItemId}`,
+            `cream ${sneakerId} ${staleSneakerId}`,
+            `white ${topId} ${staleImageId}`,
+            42,
+            null,
+            { color: 'private malformed entry' }
+          ],
+          privateNote: 'never expose this'
+        }
+      } : item)
+    };
+    const plannerParts = evaluateAppsScript<(
+      archetype: string,
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => Array<{ text?: string }>>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'plannerPartsV2_',
+      { DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] }, console }
+    );
+
+    const indexItem = api.compactItemIndexV2_(profileSnapshot).find(item => item.label === 'T004');
+    expect(indexItem?.profile).toEqual({
+      warmth: 3,
+      breathability: 4,
+      rainSafety: 'good T004 INVALID_LABEL',
+      windProtection: 2,
+      formality: 1,
+      silhouette: 'regular B002 INVALID_LABEL',
+      patternIntensity: 5,
+      primaryColorFamily: 'warm brown S009 INVALID_LABEL',
+      secondaryColorFamily: 'soft cream T004 INVALID_LABEL',
+      accentColors: [
+        'black T004 INVALID_LABEL',
+        'rust B002 INVALID_LABEL',
+        'cream S009 INVALID_LABEL',
+        'white T004 INVALID_LABEL'
+      ]
+    });
+
+    const prompt = plannerParts('easy', profileSnapshot, richWeather, richHistory)[0].text || '';
+    expect(prompt).toContain('COMPLETE ITEM INDEX:');
+    expect(prompt).toContain('good T004 INVALID_LABEL');
+    expect(prompt).toContain('regular B002 INVALID_LABEL');
+    expect(prompt).toContain('warm brown S009 INVALID_LABEL');
+    expect(prompt).toContain('soft cream T004 INVALID_LABEL');
+    expect(prompt).toContain('"warmth":3');
+    expect(prompt).not.toContain('private malformed entry');
+    [topId, bottomId, sneakerId, staleUserId, staleItemId, staleSneakerId, staleImageId]
+      .forEach(id => expect(prompt).not.toContain(id));
+  });
+
   it('resolves batch and standalone planner responses before deterministic validation', () => {
     const validated: Array<Record<string, unknown>> = [];
     const planner = evaluateAppsScript<{
@@ -1733,6 +1807,63 @@ describe('prompt and response label boundary', () => {
       [topId, staleUserId, staleItemId, staleSneakerId, staleImageId]
         .forEach(id => expect(prompt).not.toContain(id));
     });
+  });
+
+  it('sanitizes item metadata in candidate image captions sent to final repair', () => {
+    const staleUserId = 'user_closet_1666666666666';
+    const staleItemId = 'item_archived_1666666666665';
+    const staleSneakerId = 'sneaker_XX7777-202';
+    const staleImageId = 'img_7777';
+    const safeProse = 'sneaker_rotation and img_reference stay readable';
+    const captionSnapshot = {
+      ...richSnapshot,
+      items: richSnapshot.items.map(item => item.id === topId ? {
+        ...item,
+        brand: `SafeBrand ${topId} ${staleUserId}`,
+        name: `Camp Name ${bottomId} ${staleItemId}`,
+        color: `warm cream ${sneakerId} ${staleSneakerId}`,
+        description: `safe caption prose ${topId} ${staleImageId}; ${safeProse}`
+      } : item)
+    };
+    let captured = '';
+    const repairFinal = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object,
+      selectedCandidates: object[],
+      critic: object
+    ) => object>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        validateFinalBundleV2_: () => [],
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          captured = parts.map(part => part.text || '').join('\n');
+          return { recommendations: [] };
+        }
+      }
+    );
+
+    repairFinal(
+      { recommendations: [] },
+      ['customer-facing copy needs repair'],
+      captionSnapshot,
+      richWeather,
+      richHistory,
+      [internalCandidate()],
+      { scores: [] }
+    );
+
+    expect(captured).toContain('ITEM T004 | slot=top');
+    expect(captured).toContain('SafeBrand T004 INVALID_LABEL Camp Name B002 INVALID_LABEL');
+    expect(captured).toContain('listed colors=warm cream S009 INVALID_LABEL');
+    expect(captured).toContain(`description=safe caption prose T004 INVALID_LABEL; ${safeProse}`);
+    [topId, bottomId, sneakerId, staleUserId, staleItemId, staleSneakerId, staleImageId]
+      .forEach(id => expect(captured).not.toContain(id));
   });
 
   it('uses only the immutable selected set and its compact scores, then resolves curator output immediately', () => {

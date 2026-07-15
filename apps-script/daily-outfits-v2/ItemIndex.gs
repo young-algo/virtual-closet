@@ -70,10 +70,20 @@ function historyTextForModelV2_(value, snapshot) {
   });
 }
 
-function modelProfileViewV2_(profile) {
+function modelProfileViewV2_(profile, snapshot) {
   var keys = ['warmth', 'breathability', 'rainSafety', 'windProtection', 'formality', 'silhouette', 'patternIntensity', 'primaryColorFamily', 'secondaryColorFamily', 'accentColors'];
+  var numberKeys = ['warmth', 'breathability', 'windProtection', 'formality', 'patternIntensity'];
+  var stringKeys = ['rainSafety', 'silhouette', 'primaryColorFamily', 'secondaryColorFamily'];
   return keys.reduce(function(view, key) {
-    if (profile && Object.prototype.hasOwnProperty.call(profile, key)) view[key] = profile[key];
+    if (!profile || !Object.prototype.hasOwnProperty.call(profile, key)) return view;
+    var value = profile[key];
+    if (numberKeys.indexOf(key) !== -1 && typeof value === 'number') view[key] = value;
+    if (stringKeys.indexOf(key) !== -1 && typeof value === 'string') view[key] = historyTextForModelV2_(value, snapshot);
+    if (key === 'accentColors' && Array.isArray(value)) {
+      view[key] = value.filter(function(color) { return typeof color === 'string'; }).map(function(color) {
+        return historyTextForModelV2_(color, snapshot);
+      });
+    }
     return view;
   }, {});
 }
@@ -89,7 +99,7 @@ function compactItemIndexV2_(snapshot) {
       color: typeof item.color === 'string' ? historyTextForModelV2_(item.color, snapshot) : item.color,
       description: typeof item.description === 'string' ? historyTextForModelV2_(item.description, snapshot) : item.description,
       styleCode: typeof item.styleCode === 'string' ? historyTextForModelV2_(item.styleCode, snapshot) : null,
-      profile: modelProfileViewV2_(item.profile)
+      profile: modelProfileViewV2_(item.profile, snapshot)
     };
   });
 }
@@ -250,7 +260,8 @@ function candidateImagePartsV2_(snapshot, candidates) {
   Object.keys(memberships).sort().forEach(function(id) {
     var item = items[id];
     if (!item) throw new Error('Candidate image references a missing wardrobe item');
-    parts.push({ text: 'ITEM ' + item.shortLabel + ' | slot=' + item.slot + ' | ' + item.brand + ' ' + item.name + ' | listed colors=' + item.color + ' | description=' + item.description + ' | candidates=' + memberships[id].join(',') });
+    var caption = 'ITEM ' + item.shortLabel + ' | slot=' + item.slot + ' | ' + item.brand + ' ' + item.name + ' | listed colors=' + item.color + ' | description=' + item.description + ' | candidates=' + memberships[id].join(',');
+    parts.push({ text: historyTextForModelV2_(caption, snapshot) });
     parts.push(inlineImagePartV2_(item.thumbnailDataUrl));
   });
   return parts;
