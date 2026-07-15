@@ -1,0 +1,532 @@
+import { describe, expect, it } from 'vitest';
+import { evaluateAppsScript } from './appsScriptTestHarness';
+
+const archetypes = ['easy', 'polished-casual', 'expressive'];
+const weights = {
+  colorIntent: 0.20,
+  palette: 0.15,
+  weather: 0.12,
+  archetypeFit: 0.10,
+  visualInterest: 0.10,
+  wearability: 0.10,
+  freshness: 0.10,
+  silhouette: 0.08,
+  formality: 0.05,
+};
+const allNineComposite = Object.values(weights).reduce((total, weight) => total + 9 * weight, 0);
+const daily = {
+  QUALITY_POLICY_VERSION: 3,
+  ARCHETYPES: archetypes,
+  COMPOSITE_WEIGHTS: weights,
+  GENERATION_CUTOFF_HOUR: 8,
+  MIN_EXECUTION_REMAINING_MS: 45_000,
+};
+const utilities = {
+  newBlob: (bytes: unknown, mimeType: string, name: string) => ({ bytes, mimeType, name }),
+  base64Decode: (value: string) => Uint8Array.from(Buffer.from(value, 'base64')),
+  formatDate: () => 'Wednesday, July 15',
+};
+
+const plannerCandidate = (archetype: string, index: number) => ({
+  candidateId: `${archetype}-candidate-${index}`,
+  archetype,
+  topId: `${archetype}-top-${index}`,
+  bottomId: `${archetype}-bottom-${index}`,
+  shoeId: `${archetype}-shoe-${index}`,
+  itemIds: [`${archetype}-top-${index}`, `${archetype}-bottom-${index}`, `${archetype}-shoe-${index}`],
+  name: `${archetype} look ${index}`,
+  styleSummary: 'The proportions and formality form one deliberate, wearable look.',
+  colorStrategy: 'The blue top detail repeats in the blue shoe trim to create a deliberate bridge.',
+  weatherSummary: 'Comfortable across the complete forecast window.',
+  potentialRisks: [] as string[],
+  plannerConfidence: 0.9,
+});
+
+const plannersFixture = () => archetypes.map(archetype => ({
+  archetype,
+  candidates: Array.from({ length: 5 }, (_, index) => plannerCandidate(archetype, index)),
+}));
+
+const criticFixture = (planners = plannersFixture()) => ({
+  scores: planners.flatMap(response => response.candidates).map(({ candidateId }) => ({
+    candidateId,
+    weather: 9,
+    palette: 9,
+    colorIntent: 9,
+    silhouette: 9,
+    formality: 9,
+    visualInterest: 9,
+    wearability: 9,
+    freshness: 9,
+    archetypeFit: 9,
+    disqualified: false,
+    criticalDefects: [] as string[],
+    reservations: [] as string[],
+  })),
+});
+
+const selectionFixture = () => {
+  const planners = plannersFixture();
+  const candidates = planners.flatMap(response => response.candidates).map(value => structuredClone(value));
+  return {
+    candidates,
+    critic: criticFixture(planners),
+    selectedCandidates: archetypes.map((_, index) => structuredClone(candidates[index * 5])),
+    selection: {
+      path: 'top2',
+      eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
+      compositeById: Object.fromEntries(candidates.map(({ candidateId }) => [candidateId, allNineComposite])),
+      feasibleSetCount: 8,
+      replannedArchetypes: [] as string[],
+    },
+  };
+};
+
+const weatherFixture = (localDate: string) => ({
+  localDate,
+  locationLabel: 'Brooklyn',
+  timezone: 'UTC',
+  hourly: [{
+    localHour: 12,
+    temperatureF: 70,
+    feelsLikeF: 70,
+    precipitationProbability: 0,
+    precipitationInches: 0,
+    humidity: 50,
+    windMph: 5,
+    gustMph: 8,
+    weatherCode: 0,
+  }],
+  morningFeelsLikeF: 60,
+  middayFeelsLikeF: 70,
+  eveningFeelsLikeF: 62,
+  minFeelsLikeF: 58,
+  maxFeelsLikeF: 72,
+  highTemperatureF: 72,
+  lowTemperatureF: 56,
+  maxRainProbability: 0,
+  totalPrecipitationInches: 0,
+  maxWindMph: 5,
+  maxGustMph: 8,
+  averageHumidity: 50,
+  rainExpected: false,
+  windy: false,
+  largeTemperatureSwing: false,
+  layerGuidance: 'none',
+  plainEnglishSummary: 'Light, breathable pieces should carry the day.',
+  weatherPhrase: 'clear',
+  fetchedAt: 100,
+});
+
+const historyContextFixture = () => ({
+  exactOutfitsPrevious14Days: [] as Array<{ localDate: string; itemIds: string[]; archetype: string }>,
+  itemUsagePrevious7Days: {} as Record<string, number>,
+  feedback: [] as Array<{ localDate: string; value: string; outfitName: string; archetype: string; items: string[] }>,
+  itemFeedbackSignals: {} as Record<string, { wore: number; liked: number; disliked: number }>,
+  cooldownItemLabels: [] as string[],
+  cooldownItemIds: [] as string[],
+  wornItemIds: [] as string[],
+});
+
+const pendingFixture = (localDate: string, withEncore: boolean) => {
+  const planners = plannersFixture();
+  const selected = selectionFixture();
+  const weather = weatherFixture(localDate);
+  const recommendations = selected.selectedCandidates.map(candidate => ({
+    candidateId: candidate.candidateId,
+    archetype: candidate.archetype,
+    name: `${candidate.archetype} daily look`,
+    itemIds: candidate.itemIds.slice(),
+    colorHook: 'The exact blue trim on the top repeats in the shoes for a deliberate bridge.',
+    whyItWorks: 'The proportions, formality, and palette align across all three selected pieces.',
+    weatherNote: 'Breathable and comfortable across the complete forecast window.',
+  }));
+  const pending = {
+    qualityPolicyVersion: 3,
+    localDate,
+    wardrobeFingerprint: 'wardrobe-v3',
+    weather,
+    history: historyContextFixture(),
+    planners,
+    ...selected,
+    bundle: {
+      version: 2,
+      qualityPolicyVersion: 3,
+      localDate,
+      weather: structuredClone(weather),
+      recommendations,
+      generatedAt: 200,
+      snapshotGeneratedAt: 50,
+      wardrobeFingerprint: 'wardrobe-v3',
+      modelRunId: 'run-id',
+    } as Record<string, unknown>,
+  };
+  if (withEncore) {
+    pending.bundle.encore = {
+      outfitId: 'saved-older',
+      candidateId: 'encore:saved-older',
+      name: 'Saved older look',
+      itemIds: ['encore-top', 'encore-bottom', 'encore-shoe'],
+    };
+  }
+  return pending;
+};
+
+const snapshotFixture = (pending: ReturnType<typeof pendingFixture>) => {
+  const itemById = new Map<string, Record<string, unknown>>();
+  pending.candidates.forEach((candidate, index) => {
+    const storyIndex = archetypes.indexOf(candidate.archetype) * 20 + index;
+    itemById.set(candidate.topId, {
+      id: candidate.topId,
+      slot: 'top',
+      category: 'T-Shirts',
+      name: `Top ${index}`,
+      thumbnailDataUrl: 'data:image/png;base64,AA==',
+      profile: {
+        primaryColorFamily: `top-color-${storyIndex}`,
+        silhouette: `top-shape-${storyIndex}`,
+        warmth: 1,
+        breathability: 4,
+        available: true,
+        excludedFromDaily: false,
+      },
+    });
+    itemById.set(candidate.bottomId, {
+      id: candidate.bottomId,
+      slot: 'bottom',
+      category: 'Pants',
+      name: `Bottom ${index}`,
+      thumbnailDataUrl: 'data:image/png;base64,AA==',
+      profile: {
+        primaryColorFamily: `bottom-color-${storyIndex}`,
+        silhouette: `bottom-shape-${storyIndex}`,
+        available: true,
+        excludedFromDaily: false,
+      },
+    });
+    itemById.set(candidate.shoeId, {
+      id: candidate.shoeId,
+      slot: 'shoes',
+      category: 'Sneakers',
+      name: `Shoe ${index}`,
+      thumbnailDataUrl: 'data:image/png;base64,AA==',
+      profile: { rainSafety: 'good', available: true, excludedFromDaily: false },
+    });
+  });
+  const encore = pending.bundle.encore as { outfitId: string; name: string; itemIds: string[] } | undefined;
+  if (encore) {
+    itemById.set('encore-top', {
+      id: 'encore-top', slot: 'top', category: 'T-Shirts', name: 'Encore top',
+      thumbnailDataUrl: 'data:image/png;base64,AA==',
+      profile: { warmth: 1, breathability: 4, available: true, excludedFromDaily: false },
+    });
+    itemById.set('encore-bottom', {
+      id: 'encore-bottom', slot: 'bottom', category: 'Pants', name: 'Encore bottom',
+      thumbnailDataUrl: 'data:image/png;base64,AA==',
+      profile: { available: true, excludedFromDaily: false },
+    });
+    itemById.set('encore-shoe', {
+      id: 'encore-shoe', slot: 'shoes', category: 'Sneakers', name: 'Encore shoe',
+      thumbnailDataUrl: 'data:image/png;base64,AA==',
+      profile: { rainSafety: 'good', available: true, excludedFromDaily: false },
+    });
+  }
+  return {
+    wardrobeFingerprint: pending.wardrobeFingerprint,
+    generatedAt: 50,
+    settings: {},
+    tasteExamples: encore ? [{
+      id: encore.outfitId,
+      name: encore.name,
+      itemIds: encore.itemIds.slice(),
+      createdAt: 1,
+      source: 'manual',
+    }] : [],
+    items: Array.from(itemById.values()),
+  };
+};
+
+const runtimeFiles = ['ItemIndex.gs', 'Taste.gs', 'Selection.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'];
+
+describe('resolved send recovery', () => {
+  it('reconciles a prior-date marker through real Scheduler and public-send helpers without mailing', () => {
+    const run = (endpoint: 'scheduler' | 'public', laterEncoreDate = false) => {
+      const pending = pendingFixture('2026-07-14', true);
+      const snapshot = snapshotFixture(pending);
+      const currentState = {
+        stage: 'idle',
+        qualityPolicyVersion: 3,
+        localDate: '2026-07-15',
+        wardrobeFingerprint: snapshot.wardrobeFingerprint,
+        attemptCounts: {},
+      };
+      let state = structuredClone(currentState);
+      let history: Array<Record<string, unknown>> = [{
+        localDate: '2026-07-14',
+        weatherKey: 'old',
+        generatedAt: 1,
+        sentAt: 123,
+        recommendations: [],
+        encore: null,
+        feedback: [{ candidateId: 'easy-candidate-0', value: 'liked' }],
+      }];
+      const values: Record<string, string> = {
+        SEND_IN_PROGRESS_DATE_V2: '2026-07-14',
+        LAST_SENT_DATE_V2: '2026-07-14',
+        ...(laterEncoreDate ? { LAST_ENCORE_DATE_V2: '2026-07-15' } : {}),
+      };
+      const events: string[] = [];
+      const properties = {
+        getProperty: (key: string) => values[key] ?? null,
+        setProperty: (key: string, value: string) => {
+          events.push(`set:${key}:${value}`);
+          values[key] = value;
+        },
+        deleteProperty: (key: string) => {
+          events.push(`delete:${key}`);
+          delete values[key];
+        },
+      };
+      const scope = {
+        DAILY_V2: daily,
+        LockService: { getScriptLock: () => ({
+          tryLock: () => { events.push('lock:try'); return true; },
+          releaseLock: () => events.push('lock:release'),
+        }) },
+        assertFreshSnapshotV2_: () => snapshot,
+        loadSnapshotV2_: () => snapshot,
+        applySnapshotSettingsV2_: () => ({
+          recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC',
+          deliveryHour: 6, deliveryMinute: 45, generationLeadMinutes: 75,
+        }),
+        getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+        localDateV2_: () => '2026-07-15',
+        localMinutesV2_: () => 300,
+        getDailyPropertiesV2_: () => properties,
+        getBooleanPropertyV2_: () => false,
+        loadPendingV2_: () => { events.push('load-pending'); return structuredClone(pending); },
+        loadJobStateV2_: () => { events.push('load-state'); return structuredClone(state); },
+        saveJobStateV2_: (next: typeof state) => { events.push(`state:${next.localDate}:${next.stage}`); state = structuredClone(next); },
+        loadHistoryV2_: () => structuredClone(history),
+        saveHistoryV2_: (next: Array<Record<string, unknown>>) => { events.push('history'); history = structuredClone(next); },
+        Utilities: utilities,
+        MailApp: { sendEmail: () => events.push('mail') },
+        sendDailyBundleNowV2_: () => events.push('mail'),
+        sendOperationalAlertV2_: () => undefined,
+        console: { error: () => undefined },
+      };
+      const result = endpoint === 'scheduler'
+        ? evaluateAppsScript<() => Record<string, unknown>>(
+          [...runtimeFiles, 'Scheduler.gs'],
+          'runDailyOutfitScheduler',
+          scope,
+        )()
+        : evaluateAppsScript<() => Record<string, unknown>>(
+          [...runtimeFiles, 'Email.gs'],
+          'sendDailyBundleNowV2',
+          scope,
+        )();
+      return { currentState, events, history, pending, result, state, values };
+    };
+
+    const scheduled = run('scheduler');
+    expect(scheduled.result).toEqual({
+      ok: true,
+      reconciled: true,
+      localDate: '2026-07-14',
+      stage: 'idle',
+    });
+    expect(scheduled.events).not.toContain('mail');
+    expect(scheduled.events.indexOf('delete:SEND_IN_PROGRESS_DATE_V2'))
+      .toBeGreaterThan(scheduled.events.indexOf('history'));
+    expect(scheduled.values).toMatchObject({
+      LAST_SENT_DATE_V2: '2026-07-14',
+      LAST_ENCORE_DATE_V2: '2026-07-14',
+    });
+    expect(scheduled.values).not.toHaveProperty('SEND_IN_PROGRESS_DATE_V2');
+    expect(scheduled.state).toEqual(scheduled.currentState);
+    expect(scheduled.events.some(event => event.startsWith('state:'))).toBe(false);
+    expect(scheduled.history).toEqual([expect.objectContaining({
+      localDate: '2026-07-14',
+      sentAt: 123,
+      recommendations: scheduled.pending.bundle.recommendations,
+      encore: scheduled.pending.bundle.encore,
+      feedback: [{ candidateId: 'easy-candidate-0', value: 'liked' }],
+    })]);
+
+    const manual = run('public', true);
+    expect(manual.result).toMatchObject({
+      reconciled: true,
+      localDate: '2026-07-14',
+      bundle: manual.pending.bundle,
+      state: manual.currentState,
+    });
+    expect(manual.events).not.toContain('mail');
+    expect(manual.values.LAST_ENCORE_DATE_V2).toBe('2026-07-15');
+    expect(manual.values).not.toHaveProperty('SEND_IN_PROGRESS_DATE_V2');
+    expect(manual.state).toEqual(manual.currentState);
+    expect(manual.events.at(-1)).toBe('lock:release');
+  });
+
+  it('locks the full exported real-send flow and releases after success, failure, or a busy lock', () => {
+    const run = (lockAvailable: boolean, mailFails = false) => {
+      const pending = pendingFixture('2026-07-15', false);
+      const snapshot = snapshotFixture(pending);
+      const values: Record<string, string> = {};
+      const events: string[] = [];
+      const send = evaluateAppsScript<() => unknown>(
+        [...runtimeFiles, 'Email.gs'],
+        'sendDailyBundleNowV2',
+        {
+          DAILY_V2: daily,
+          LockService: { getScriptLock: () => ({
+            tryLock: () => { events.push('lock:try'); return lockAvailable; },
+            releaseLock: () => events.push('lock:release'),
+          }) },
+          loadSnapshotV2_: () => snapshot,
+          assertFreshSnapshotV2_: () => snapshot,
+          loadPendingV2_: () => pending,
+          loadJobStateV2_: () => null,
+          saveJobStateV2_: () => events.push('state'),
+          getDailyPropertiesV2_: () => ({
+            getProperty: (key: string) => values[key] ?? null,
+            setProperty: (key: string, value: string) => { events.push(`set:${key}`); values[key] = value; },
+            deleteProperty: (key: string) => { events.push(`delete:${key}`); delete values[key]; },
+          }),
+          getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+          applySnapshotSettingsV2_: (value: unknown) => value,
+          localDateV2_: () => '2026-07-15',
+          Utilities: utilities,
+          MailApp: { sendEmail: () => { events.push('mail'); if (mailFails) throw new Error('mail failed'); } },
+          loadHistoryV2_: () => [],
+          saveHistoryV2_: () => events.push('history'),
+        },
+      );
+      return { events, send };
+    };
+
+    const busy = run(false);
+    expect(busy.send).toThrowError('Another daily outfit job is already running');
+    expect(busy.events).toEqual(['lock:try']);
+
+    const success = run(true);
+    expect(success.send).not.toThrow();
+    expect(success.events.at(-1)).toBe('lock:release');
+    expect(success.events).toContain('mail');
+
+    const failure = run(true, true);
+    expect(failure.send).toThrowError('mail failed');
+    expect(failure.events.at(-1)).toBe('lock:release');
+    expect(failure.events.filter(event => event === 'mail')).toHaveLength(1);
+  });
+
+  it('retains a resolved marker and fails closed when marker-date recovery is missing or invalid', () => {
+    const run = (endpoint: 'scheduler' | 'public', pending: ReturnType<typeof pendingFixture> | null) => {
+      const currentPending = pendingFixture('2026-07-15', false);
+      const snapshot = snapshotFixture(currentPending);
+      const values: Record<string, string> = {
+        SEND_IN_PROGRESS_DATE_V2: '2026-07-14',
+        LAST_SENT_DATE_V2: '2026-07-14',
+      };
+      const events: string[] = [];
+      const properties = {
+        getProperty: (key: string) => values[key] ?? null,
+        setProperty: (key: string, value: string) => { events.push(`set:${key}`); values[key] = value; },
+        deleteProperty: (key: string) => { events.push(`delete:${key}`); delete values[key]; },
+      };
+      const scope = {
+        DAILY_V2: daily,
+        LockService: { getScriptLock: () => ({
+          tryLock: () => { events.push('lock:try'); return true; },
+          releaseLock: () => events.push('lock:release'),
+        }) },
+        assertFreshSnapshotV2_: () => snapshot,
+        loadSnapshotV2_: () => snapshot,
+        applySnapshotSettingsV2_: () => ({
+          recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC',
+          deliveryHour: 6, deliveryMinute: 45, generationLeadMinutes: 75,
+        }),
+        getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+        localDateV2_: () => '2026-07-15',
+        localMinutesV2_: () => 300,
+        getDailyPropertiesV2_: () => properties,
+        getBooleanPropertyV2_: () => false,
+        loadPendingV2_: () => pending,
+        loadJobStateV2_: () => null,
+        saveJobStateV2_: () => events.push('state'),
+        loadHistoryV2_: () => [],
+        saveHistoryV2_: () => events.push('history'),
+        Utilities: utilities,
+        MailApp: { sendEmail: () => events.push('mail') },
+        sendDailyBundleNowV2_: () => events.push('mail'),
+        sendOperationalAlertV2_: () => undefined,
+        console: { error: () => undefined },
+      };
+      let result: unknown;
+      let error: Error | null = null;
+      try {
+        result = endpoint === 'scheduler'
+          ? evaluateAppsScript<() => unknown>([...runtimeFiles, 'Scheduler.gs'], 'runDailyOutfitScheduler', scope)()
+          : evaluateAppsScript<() => unknown>([...runtimeFiles, 'Email.gs'], 'sendDailyBundleNowV2', scope)();
+      } catch (caught) {
+        error = caught as Error;
+      }
+      return { error, events, result, values };
+    };
+
+    const scheduled = run('scheduler', pendingFixture('2026-07-15', false));
+    expect(scheduled.result).toMatchObject({
+      ok: false,
+      error: 'Resolved sent date 2026-07-14 has no matching persisted bundle to reconcile',
+    });
+    expect(scheduled.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-14');
+    expect(scheduled.events).not.toContain('mail');
+
+    const manual = run('public', null);
+    expect(manual.error?.message)
+      .toBe('Resolved sent date 2026-07-14 has no matching persisted bundle to reconcile');
+    expect(manual.values.SEND_IN_PROGRESS_DATE_V2).toBe('2026-07-14');
+    expect(manual.events).not.toContain('mail');
+    expect(manual.events.at(-1)).toBe('lock:release');
+  });
+
+  it('does not let the internal sender replace a different resolved marker', () => {
+    const pending = pendingFixture('2026-07-15', false);
+    const snapshot = snapshotFixture(pending);
+    const values: Record<string, string> = {
+      SEND_IN_PROGRESS_DATE_V2: '2026-07-14',
+      LAST_SENT_DATE_V2: '2026-07-14',
+    };
+    const events: string[] = [];
+    const send = evaluateAppsScript<(
+      bundle: unknown,
+      snapshotValue: unknown,
+      testMode: boolean,
+      pendingValue: unknown,
+      expectedLocalDate: string,
+    ) => void>(
+      [...runtimeFiles, 'Email.gs'],
+      'sendDailyBundleNowV2_',
+      {
+        DAILY_V2: daily,
+        getDailyPropertiesV2_: () => ({
+          getProperty: (key: string) => values[key] ?? null,
+          setProperty: (key: string, value: string) => { events.push(`set:${key}:${value}`); values[key] = value; },
+          deleteProperty: (key: string) => { events.push(`delete:${key}`); delete values[key]; },
+        }),
+        getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+        applySnapshotSettingsV2_: (value: unknown) => value,
+        Utilities: utilities,
+        MailApp: { sendEmail: () => events.push('mail') },
+      },
+    );
+
+    expect(() => send(pending.bundle, snapshot, false, pending, '2026-07-15'))
+      .toThrowError('Resolved daily email send state for 2026-07-14 must be reconciled before sending 2026-07-15');
+    expect(values).toEqual({
+      SEND_IN_PROGRESS_DATE_V2: '2026-07-14',
+      LAST_SENT_DATE_V2: '2026-07-14',
+    });
+    expect(events).toEqual([]);
+  });
+});

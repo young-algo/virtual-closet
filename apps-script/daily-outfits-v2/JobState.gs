@@ -719,28 +719,52 @@ function assertUnambiguousDailySendStateV2_(properties, currentLocalDate) {
   if (marker && (!validDailySendPropertyDateV2_(marker) || marker !== lastSentDate)) {
     throw new Error('Ambiguous daily email send state for ' + marker + ': inspect the mailbox before retrying');
   }
-  if (marker && marker === lastSentDate && marker !== currentLocalDate) {
-    properties.deleteProperty('SEND_IN_PROGRESS_DATE_V2');
-    marker = null;
-  }
   return { marker: marker, lastSentDate: lastSentDate };
+}
+
+function reconcilePersistedSentBundleV2_(sentDate, snapshot) {
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignoredPending) {}
+  if (!validFullBundleReadyV2_(pending, snapshot, sentDate)) {
+    throw new Error('Resolved sent date ' + sentDate + ' has no matching persisted bundle to reconcile');
+  }
+  var state = null;
+  try {
+    if (typeof loadJobStateV2_ === 'function') state = loadJobStateV2_();
+  } catch (_ignoredState) {}
+  var repairedState = finalizeSentBundleV2_(pending.bundle, snapshot, state);
+  return {
+    reconciled: true,
+    localDate: sentDate,
+    bundle: pending.bundle,
+    state: repairedState
+  };
 }
 
 function finalizeSentBundleV2_(bundle, snapshot, state) {
   var properties = getDailyPropertiesV2_();
+  var marker = properties.getProperty('SEND_IN_PROGRESS_DATE_V2');
+  if (marker && marker !== bundle.localDate) {
+    throw new Error('Resolved daily email send state for ' + marker + ' must be reconciled before finalizing ' + bundle.localDate);
+  }
   if (properties.getProperty('LAST_SENT_DATE_V2') !== bundle.localDate) {
     properties.setProperty('LAST_SENT_DATE_V2', bundle.localDate);
   }
   recordSentBundleV2_(bundle, snapshot);
   var repairedState = state;
   if (typeof saveJobStateV2_ === 'function') {
-    if (!validScheduledJobStateV2_(repairedState, bundle.localDate, bundle.wardrobeFingerprint)) {
-      repairedState = newJobStateV2_(bundle.localDate, bundle.wardrobeFingerprint);
+    var validNewerState = repairedState && validDailySendPropertyDateV2_(repairedState.localDate) &&
+      repairedState.localDate > bundle.localDate &&
+      validScheduledJobStateV2_(repairedState, repairedState.localDate, repairedState.wardrobeFingerprint);
+    if (!validNewerState) {
+      if (!validScheduledJobStateV2_(repairedState, bundle.localDate, bundle.wardrobeFingerprint)) {
+        repairedState = newJobStateV2_(bundle.localDate, bundle.wardrobeFingerprint);
+      }
+      repairedState.stage = 'sent';
+      repairedState.updatedAt = Date.now();
+      repairedState.lastError = null;
+      saveJobStateV2_(repairedState);
     }
-    repairedState.stage = 'sent';
-    repairedState.updatedAt = Date.now();
-    repairedState.lastError = null;
-    saveJobStateV2_(repairedState);
   }
   if (typeof properties.deleteProperty === 'function') {
     properties.deleteProperty('SEND_IN_PROGRESS_DATE_V2');
@@ -767,7 +791,18 @@ function recordSentBundleV2_(bundle, snapshot) {
   history.sort(function(a, b) { return a.localDate.localeCompare(b.localDate); });
   var maxDays = snapshot.settings && snapshot.settings.maxDailyHistoryDays ? snapshot.settings.maxDailyHistoryDays : 30;
   saveHistoryV2_(history.slice(-maxDays));
-  if (bundle.encore) getDailyPropertiesV2_().setProperty('LAST_ENCORE_DATE_V2', bundle.localDate);
+  if (bundle.encore) {
+    var properties = getDailyPropertiesV2_();
+    var lastEncoreDate = typeof properties.getProperty === 'function'
+      ? properties.getProperty('LAST_ENCORE_DATE_V2')
+      : null;
+    if (lastEncoreDate && !validDailySendPropertyDateV2_(lastEncoreDate)) {
+      throw new Error('Invalid LAST_ENCORE_DATE_V2; Encore cadence is uncertain');
+    }
+    if (!lastEncoreDate || lastEncoreDate < bundle.localDate) {
+      properties.setProperty('LAST_ENCORE_DATE_V2', bundle.localDate);
+    }
+  }
 }
 
 function resetDailyJobStateV2() {

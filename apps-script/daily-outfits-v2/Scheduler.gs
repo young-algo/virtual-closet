@@ -203,15 +203,14 @@ function runDailyOutfitScheduler() {
     if (config.enabled === false) return { ok: true, skipped: 'daily-email-disabled' };
     var properties = getDailyPropertiesV2_();
     var sendState = assertUnambiguousDailySendStateV2_(properties, localDate);
-    if (sendState.lastSentDate === localDate) {
-      try { state = loadJobStateV2_(); } catch (_ignoredSentState) { state = null; }
-      var sentPending = null;
-      try { sentPending = loadPendingV2_(); } catch (_ignoredSentPending) {}
-      if (!validFullBundleReadyV2_(sentPending, snapshot, localDate)) {
-        throw new Error('Sent date has no current persisted bundle to reconcile');
+    var resolvedSentDate = sendState.marker || (sendState.lastSentDate === localDate ? localDate : null);
+    if (resolvedSentDate) {
+      var reconciliation = reconcilePersistedSentBundleV2_(resolvedSentDate, snapshot);
+      state = reconciliation.state;
+      if (resolvedSentDate === localDate) {
+        return { ok: true, skipped: 'already-sent', stage: state && state.stage };
       }
-      state = finalizeSentBundleV2_(sentPending.bundle, snapshot, state);
-      return { ok: true, skipped: 'already-sent', stage: state && state.stage };
+      return { ok: true, reconciled: true, localDate: resolvedSentDate, stage: state && state.stage };
     }
     if (currentMinutes < generationStart) return { ok: true, skipped: 'before-generation-window' };
 

@@ -50,9 +50,9 @@ For each morning, record critic floor clustering, `selection.path`, eligible cou
 
 ## Ambiguous-send recovery
 
-If `SEND_IN_PROGRESS_DATE_V2` remains set and does not match `LAST_SENT_DATE_V2`, the scheduler and manual real-send entry point fail closed because Apps Script cannot prove whether Gmail accepted the message. Inspect the mailbox for the marker date before changing either property:
+If `SEND_IN_PROGRESS_DATE_V2` remains set and does not match `LAST_SENT_DATE_V2`, the scheduler and manual real-send entry point fail closed because Apps Script cannot prove whether Gmail accepted the message. A marker that does match `LAST_SENT_DATE_V2` is never discarded merely because the calendar advanced: before any new send, the script must load the persisted bundle for that exact marker date, repair sent history and Encore cadence idempotently, and only then clear the marker. If that marker-date bundle is absent or invalid, the marker remains set and all real sends stay blocked. Inspect the mailbox for the marker date before changing either property:
 
-- If the email was delivered, set `LAST_SENT_DATE_V2` to the exact `SEND_IN_PROGRESS_DATE_V2` date, then rerun the scheduler or **Send now**. The script reconciles the persisted bundle into history, Encore cadence, and sent job state, then clears the marker without sending again.
+- If the email was delivered, set `LAST_SENT_DATE_V2` to the exact `SEND_IN_PROGRESS_DATE_V2` date, then rerun the scheduler or **Send now**. The script reconciles the persisted marker-date bundle into history and Encore cadence without sending again; it preserves any newer job state or later Encore date, then clears the marker only after reconciliation succeeds.
 - If the email was definitely not delivered, delete `SEND_IN_PROGRESS_DATE_V2`, then rerun. The script may perform a new real send.
 
 Do not delete an unresolved marker merely because it is from a prior day; stale unresolved markers also fail closed until the mailbox check establishes which recovery path is safe.

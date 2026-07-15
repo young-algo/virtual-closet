@@ -1373,6 +1373,7 @@ describe('Apps Script contracts', () => {
         'sendDailyBundleNowV2',
         {
           DAILY_V2: dailySelectionRuntime,
+          LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
           loadPendingV2_: () => pending,
@@ -1443,6 +1444,7 @@ describe('Apps Script contracts', () => {
         'sendDailyBundleNowV2',
         {
           DAILY_V2: dailySelectionRuntime,
+          LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
           loadPendingV2_: () => pending,
@@ -1548,6 +1550,10 @@ describe('Apps Script contracts', () => {
           loadPendingV2_: () => { events.push('load-pending'); return pending; },
           validScheduledJobStateV2_: () => true,
           validFullBundleReadyV2_: () => true,
+          reconcilePersistedSentBundleV2_: () => {
+            events.push('load-state', 'load-pending', 'reconcile');
+            return { state: { ...state, stage: 'sent' } };
+          },
           finalizeSentBundleV2_: (_bundle: unknown, _snapshot: unknown, current: typeof state) => {
             events.push('reconcile');
             return { ...current, stage: 'sent' };
@@ -1598,6 +1604,7 @@ describe('Apps Script contracts', () => {
         exported,
         {
           DAILY_V2: dailySelectionRuntime,
+          LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           loadSnapshotV2_: () => baselineSnapshot,
           assertFreshSnapshotV2_: () => baselineSnapshot,
           loadPendingV2_: () => structuredClone(baselinePending),
@@ -1862,6 +1869,7 @@ describe('Apps Script contracts', () => {
       'sendDailyBundleNowV2',
       {
         DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         loadSnapshotV2_: () => snapshotValue,
         assertFreshSnapshotV2_: () => snapshotValue,
         loadPendingV2_: () => pendingValue,

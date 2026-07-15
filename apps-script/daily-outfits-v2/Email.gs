@@ -95,6 +95,9 @@ function sendDailyBundleNowV2_(bundle, snapshot, testMode, pending, expectedLoca
   var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
   var properties = testMode ? null : getDailyPropertiesV2_();
   var sendState = testMode ? null : assertUnambiguousDailySendStateV2_(properties, bundle.localDate);
+  if (!testMode && sendState.marker && sendState.marker !== bundle.localDate) {
+    throw new Error('Resolved daily email send state for ' + sendState.marker + ' must be reconciled before sending ' + bundle.localDate);
+  }
   if (!testMode && sendState.lastSentDate === bundle.localDate) throw new Error('A daily outfit email was already sent for ' + bundle.localDate);
   if (bundle.wardrobeFingerprint !== snapshot.wardrobeFingerprint) throw new Error('Bundle wardrobe fingerprint no longer matches the snapshot');
   var rendered = renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalDate);
@@ -111,27 +114,34 @@ function sendDailyBundleNowV2_(bundle, snapshot, testMode, pending, expectedLoca
 }
 
 function sendDailyBundleNowV2() {
-  var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-  var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
-  var currentLocalDate = localDateV2_(new Date(), config.timezone);
-  var pending = null;
-  try { pending = loadPendingV2_(); } catch (_ignored) {}
-  var properties = getDailyPropertiesV2_();
-  var sendState = assertUnambiguousDailySendStateV2_(properties, currentLocalDate);
-  if (!validFullBundleReadyV2_(pending, snapshot, currentLocalDate)) {
-    throw new Error('No quality-gated bundle is ready');
-  }
-  var state = null;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('Another daily outfit job is already running');
   try {
-    if (typeof loadJobStateV2_ === 'function') state = loadJobStateV2_();
-  } catch (_ignoredState) {}
-  if (sendState.lastSentDate === currentLocalDate) {
+    var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
+    var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
+    var currentLocalDate = localDateV2_(new Date(), config.timezone);
+    var properties = getDailyPropertiesV2_();
+    var sendState = assertUnambiguousDailySendStateV2_(properties, currentLocalDate);
+    var resolvedSentDate = sendState.marker || (sendState.lastSentDate === currentLocalDate ? currentLocalDate : null);
+    if (resolvedSentDate) {
+      var reconciliation = reconcilePersistedSentBundleV2_(resolvedSentDate, snapshot);
+      return resolvedSentDate === currentLocalDate ? reconciliation.bundle : reconciliation;
+    }
+    var pending = null;
+    try { pending = loadPendingV2_(); } catch (_ignored) {}
+    if (!validFullBundleReadyV2_(pending, snapshot, currentLocalDate)) {
+      throw new Error('No quality-gated bundle is ready');
+    }
+    var state = null;
+    try {
+      if (typeof loadJobStateV2_ === 'function') state = loadJobStateV2_();
+    } catch (_ignoredState) {}
+    sendDailyBundleNowV2_(pending.bundle, snapshot, false, pending, currentLocalDate);
     finalizeSentBundleV2_(pending.bundle, snapshot, state);
     return pending.bundle;
+  } finally {
+    lock.releaseLock();
   }
-  sendDailyBundleNowV2_(pending.bundle, snapshot, false, pending, currentLocalDate);
-  finalizeSentBundleV2_(pending.bundle, snapshot, state);
-  return pending.bundle;
 }
 
 function sendDailyTestEmailV2() {
