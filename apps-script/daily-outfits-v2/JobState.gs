@@ -63,6 +63,26 @@ function validOwnDailyMapV2_(value, validator) {
   return true;
 }
 
+function exactPersistedDailyValueV2_(left, right) {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!validOwnDailyArrayV2_(left) || !validOwnDailyArrayV2_(right) || left.length !== right.length) return false;
+    for (var arrayIndex = 0; arrayIndex < left.length; arrayIndex += 1) {
+      if (!exactPersistedDailyValueV2_(left[arrayIndex], right[arrayIndex])) return false;
+    }
+    return true;
+  }
+  if (!validOwnDailyRecordV2_(left) || !validOwnDailyRecordV2_(right)) return false;
+  var leftKeys = Object.keys(left).sort();
+  var rightKeys = Object.keys(right).sort();
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (var keyIndex = 0; keyIndex < leftKeys.length; keyIndex += 1) {
+    var key = leftKeys[keyIndex];
+    if (key !== rightKeys[keyIndex] || !exactPersistedDailyValueV2_(left[key], right[key])) return false;
+  }
+  return true;
+}
+
 function validCurrentPendingV2_(pending, localDate, wardrobeFingerprint) {
   if (!validOwnDailyRecordV2_(pending) ||
       !ownDailyJobKeyV2_(pending, 'qualityPolicyVersion') ||
@@ -185,7 +205,7 @@ function persistedPlannerCandidatesV2_(planners) {
   for (var responseIndex = 0; responseIndex < planners.length; responseIndex += 1) {
     var response = planners[responseIndex];
     if (!validOwnDailyRecordV2_(response) || !ownNonEmptyDailyStringV2_(response, 'archetype') ||
-        DAILY_V2.ARCHETYPES.indexOf(response.archetype) < 0 ||
+        response.archetype !== DAILY_V2.ARCHETYPES[responseIndex] ||
         ownDailyJobKeyV2_(seenArchetypes, response.archetype) || !ownDailyJobKeyV2_(response, 'candidates') ||
         !validOwnDailyArrayV2_(response.candidates, 5)) return null;
     seenArchetypes[response.archetype] = true;
@@ -229,7 +249,11 @@ function validPersistedSelectionSummaryV2_(selection) {
       Object.keys(selection.eligibleCountByArchetype).length !== DAILY_V2.ARCHETYPES.length ||
       !ownDailyJobKeyV2_(selection, 'feasibleSetCount') || !Number.isInteger(selection.feasibleSetCount) ||
       selection.feasibleSetCount <= 0 || !ownDailyJobKeyV2_(selection, 'replannedArchetypes') ||
-      !validOwnDailyArrayV2_(selection.replannedArchetypes)) return false;
+      !validOwnDailyArrayV2_(selection.replannedArchetypes) ||
+      !ownDailyJobKeyV2_(selection, 'compositeById') ||
+      !validOwnDailyMapV2_(selection.compositeById, function(value) {
+        return typeof value === 'number' && Number.isFinite(value);
+      })) return false;
   if (!DAILY_V2.ARCHETYPES.every(function(archetype) {
     var count = selection.eligibleCountByArchetype[archetype];
     return ownDailyJobKeyV2_(selection.eligibleCountByArchetype, archetype) &&
@@ -244,6 +268,51 @@ function validPersistedSelectionSummaryV2_(selection) {
   }
   var expectedReplans = selection.path === 'replan-1' ? 1 : selection.path === 'replan-2' ? 2 : 0;
   return selection.replannedArchetypes.length === expectedReplans;
+}
+
+function persistedSelectionCandidatesV2_(pending, plannerCandidates) {
+  if (!ownDailyJobKeyV2_(pending, 'candidates') ||
+      !validOwnDailyArrayV2_(pending.candidates, undefined, function(candidate) {
+        return validPersistedPlannerCandidateV2_(candidate, candidate && candidate.archetype) &&
+          DAILY_V2.ARCHETYPES.indexOf(candidate.archetype) >= 0;
+      }) || pending.candidates.length === 0) return null;
+  var candidateById = Object.create(null);
+  var combinations = Object.create(null);
+  for (var index = 0; index < pending.candidates.length; index += 1) {
+    var candidate = pending.candidates[index];
+    var combination = JSON.stringify(candidate.itemIds.slice().sort());
+    if (ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
+        ownDailyJobKeyV2_(combinations, combination)) return null;
+    candidateById[candidate.candidateId] = candidate;
+    combinations[combination] = true;
+  }
+  for (var plannerIndex = 0; plannerIndex < plannerCandidates.length; plannerIndex += 1) {
+    var plannerCandidate = plannerCandidates[plannerIndex];
+    if (!ownDailyJobKeyV2_(candidateById, plannerCandidate.candidateId) ||
+        !exactPersistedDailyValueV2_(candidateById[plannerCandidate.candidateId], plannerCandidate)) return null;
+  }
+  return pending.candidates;
+}
+
+function validPersistedSelectionSummaryForCandidatesV2_(selection, candidates) {
+  if (!validPersistedSelectionSummaryV2_(selection) ||
+      Object.keys(selection.compositeById).length !== candidates.length) return false;
+  var candidateCountByArchetype = Object.create(null);
+  DAILY_V2.ARCHETYPES.forEach(function(archetype) { candidateCountByArchetype[archetype] = 0; });
+  for (var index = 0; index < candidates.length; index += 1) {
+    var candidate = candidates[index];
+    candidateCountByArchetype[candidate.archetype] += 1;
+    if (!ownDailyJobKeyV2_(selection.compositeById, candidate.candidateId)) return false;
+  }
+  var replanned = Object.create(null);
+  selection.replannedArchetypes.forEach(function(archetype) { replanned[archetype] = true; });
+  return DAILY_V2.ARCHETYPES.every(function(archetype) {
+    var candidateCount = candidateCountByArchetype[archetype];
+    var eligibleCount = selection.eligibleCountByArchetype[archetype];
+    var additions = candidateCount - 5;
+    return candidateCount >= 5 && candidateCount <= 10 && eligibleCount <= candidateCount &&
+      (ownDailyJobKeyV2_(replanned, archetype) ? additions >= 1 : additions === 0);
+  });
 }
 
 function validDailyAttemptCountsV2_(attemptCounts) {
@@ -287,14 +356,7 @@ function validPersistedStagePrerequisitesV2_(stage, pending, localDate, wardrobe
 }
 
 function validScheduledStageResumeV2_(state, pending, snapshot, expectedLocalDate) {
-  if (!validOwnDailyRecordV2_(state) ||
-      !ownDailyJobKeyV2_(state, 'stage') || DAILY_JOB_STAGES_V2_.indexOf(state.stage) < 0 ||
-      !ownDailyJobKeyV2_(state, 'qualityPolicyVersion') ||
-      state.qualityPolicyVersion !== DAILY_V2.QUALITY_POLICY_VERSION ||
-      !ownNonEmptyDailyStringV2_(state, 'localDate') ||
-      (expectedLocalDate !== undefined && state.localDate !== expectedLocalDate) ||
-      !ownNonEmptyDailyStringV2_(state, 'wardrobeFingerprint') ||
-      !ownDailyJobKeyV2_(state, 'attemptCounts') || !validDailyAttemptCountsV2_(state.attemptCounts)) return false;
+  if (!validScheduledJobStateV2_(state, expectedLocalDate, snapshot && snapshot.wardrobeFingerprint)) return false;
   if (state.stage === 'idle' || state.stage === 'sent' || state.stage === 'failed') return true;
   return validPersistedStagePrerequisitesV2_(
     state.stage,
@@ -303,6 +365,18 @@ function validScheduledStageResumeV2_(state, pending, snapshot, expectedLocalDat
     state.wardrobeFingerprint,
     snapshot
   );
+}
+
+function validScheduledJobStateV2_(state, expectedLocalDate, expectedWardrobeFingerprint) {
+  return validOwnDailyRecordV2_(state) &&
+      ownDailyJobKeyV2_(state, 'stage') && DAILY_JOB_STAGES_V2_.indexOf(state.stage) >= 0 &&
+      ownDailyJobKeyV2_(state, 'qualityPolicyVersion') &&
+      state.qualityPolicyVersion === DAILY_V2.QUALITY_POLICY_VERSION &&
+      ownNonEmptyDailyStringV2_(state, 'localDate') &&
+      (expectedLocalDate === undefined || state.localDate === expectedLocalDate) &&
+      ownNonEmptyDailyStringV2_(state, 'wardrobeFingerprint') &&
+      (expectedWardrobeFingerprint === undefined || state.wardrobeFingerprint === expectedWardrobeFingerprint) &&
+      ownDailyJobKeyV2_(state, 'attemptCounts') && validDailyAttemptCountsV2_(state.attemptCounts);
 }
 
 function validPersistedSelectionCandidateV2_(candidate) {
@@ -345,48 +419,36 @@ function validPersistedSelectionScoreV2_(score) {
 
 function assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, wardrobeFingerprint) {
   var valid = validCurrentPendingV2_(pending, expectedLocalDate, wardrobeFingerprint) &&
+    ownDailyJobKeyV2_(pending, 'planners') &&
+    ownDailyJobKeyV2_(pending, 'candidates') &&
     ownDailyJobKeyV2_(pending, 'selectedCandidates') &&
     validOwnDailyArrayV2_(pending.selectedCandidates, 3) &&
     pending.selectedCandidates.length === 3 && DAILY_V2.ARCHETYPES.length === 3 &&
     ownDailyJobKeyV2_(pending, 'critic') && validOwnDailyRecordV2_(pending.critic) &&
-    ownDailyJobKeyV2_(pending.critic, 'scores') && validOwnDailyArrayV2_(pending.critic.scores) &&
-    pending.critic.scores.length > 0;
+    ownDailyJobKeyV2_(pending, 'selection') && validOwnDailyRecordV2_(pending.selection);
   if (!valid) throw new Error('Deterministic selection must be ready');
 
-  var seenCandidates = Object.create(null);
-  var seenArchetypes = Object.create(null);
+  var plannerCandidates = persistedPlannerCandidatesV2_(pending.planners);
+  var candidates = plannerCandidates && persistedSelectionCandidatesV2_(pending, plannerCandidates);
+  if (!plannerCandidates || !candidates ||
+      !validPersistedCriticForCandidatesV2_(pending.critic, candidates) ||
+      !validPersistedSelectionSummaryForCandidatesV2_(pending.selection, candidates)) {
+    throw new Error('Deterministic selection must be ready');
+  }
+
+  var candidateById = Object.create(null);
+  candidates.forEach(function(candidate) { candidateById[candidate.candidateId] = candidate; });
   for (var candidateIndex = 0; candidateIndex < pending.selectedCandidates.length; candidateIndex += 1) {
     if (!ownDailyJobKeyV2_(pending.selectedCandidates, candidateIndex)) {
       throw new Error('Deterministic selection must be ready');
     }
     var candidate = pending.selectedCandidates[candidateIndex];
-    if (!validPersistedSelectionCandidateV2_(candidate) ||
-        DAILY_V2.ARCHETYPES.indexOf(candidate.archetype) < 0 ||
-        ownDailyJobKeyV2_(seenCandidates, candidate.candidateId) ||
-        ownDailyJobKeyV2_(seenArchetypes, candidate.archetype)) {
+    if (!validPersistedPlannerCandidateV2_(candidate, DAILY_V2.ARCHETYPES[candidateIndex]) ||
+        !ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
+        !exactPersistedDailyValueV2_(candidate, candidateById[candidate.candidateId])) {
       throw new Error('Deterministic selection must be ready');
     }
-    seenCandidates[candidate.candidateId] = true;
-    seenArchetypes[candidate.archetype] = true;
   }
-  if (DAILY_V2.ARCHETYPES.some(function(archetype) { return !ownDailyJobKeyV2_(seenArchetypes, archetype); })) {
-    throw new Error('Deterministic selection must be ready');
-  }
-
-  var scoreById = Object.create(null);
-  for (var scoreIndex = 0; scoreIndex < pending.critic.scores.length; scoreIndex += 1) {
-    if (!ownDailyJobKeyV2_(pending.critic.scores, scoreIndex)) {
-      throw new Error('Deterministic selection must be ready');
-    }
-    var score = pending.critic.scores[scoreIndex];
-    if (!validPersistedSelectionScoreV2_(score) || ownDailyJobKeyV2_(scoreById, score.candidateId)) {
-      throw new Error('Deterministic selection must be ready');
-    }
-    scoreById[score.candidateId] = score;
-  }
-  if (pending.selectedCandidates.some(function(selected) {
-    return !ownDailyJobKeyV2_(scoreById, selected.candidateId);
-  })) throw new Error('Deterministic selection must be ready');
   return pending;
 }
 

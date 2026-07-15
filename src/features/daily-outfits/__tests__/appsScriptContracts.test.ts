@@ -75,39 +75,21 @@ const candidate = (index = 0) => ({
 
 const dailyArchetypes = ['easy', 'polished-casual', 'expressive'];
 
-const persistedSelectionFixture = (candidateIds = ['selected-easy', 'selected-polished', 'selected-expressive']) => {
-  const selectedCandidates = dailyArchetypes.map((archetype, index) => ({
-    candidateId: candidateIds[index],
-    archetype,
-    topId: `selected-top-${index}`,
-    bottomId: `selected-bottom-${index}`,
-    shoeId: `selected-shoe-${index}`,
-    itemIds: [`selected-top-${index}`, `selected-bottom-${index}`, `selected-shoe-${index}`],
-  }));
-  const scores = selectedCandidates.map(({ candidateId }) => ({
-    candidateId,
-    weather: 9,
-    palette: 9,
-    colorIntent: 9,
-    silhouette: 9,
-    formality: 9,
-    visualInterest: 9,
-    wearability: 9,
-    freshness: 9,
-    archetypeFit: 9,
-    disqualified: false,
-    criticalDefects: [] as unknown[],
-    reservations: [] as unknown[],
-  }));
+const persistedSelectionFixture = () => {
+  const planners = persistedPlannersFixture();
+  const candidates = planners.flatMap(response => response.candidates).map(value => structuredClone(value));
+  const selectedCandidates = dailyArchetypes.map((_, index) => structuredClone(candidates[index * 5]));
+  const critic = persistedCriticFixture(planners);
   return {
-    candidates: selectedCandidates.map(value => ({ ...value })),
-    critic: { scores },
+    candidates,
+    critic,
     selectedCandidates,
     selection: {
       path: 'top2',
-      eligibleCountByArchetype: { easy: 2, 'polished-casual': 2, expressive: 2 },
+      eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
+      compositeById: Object.fromEntries(candidates.map(({ candidateId }) => [candidateId, 9])),
       feasibleSetCount: 1,
-      replannedArchetypes: [],
+      replannedArchetypes: [] as string[],
     },
   };
 };
@@ -116,6 +98,7 @@ const currentPendingFixture = () => ({
   qualityPolicyVersion: 3,
   localDate: '2026-07-15',
   wardrobeFingerprint: 'wardrobe-v3',
+  planners: persistedPlannersFixture(),
   ...persistedSelectionFixture(),
 });
 
@@ -204,6 +187,7 @@ const persistedCriticFixture = (planners = persistedPlannersFixture()) => ({
 });
 
 const sendablePendingFixture = () => {
+  const planners = persistedPlannersFixture();
   const selected = persistedSelectionFixture();
   const weather = persistedWeatherFixture();
   const history = persistedHistoryFixture();
@@ -222,6 +206,7 @@ const sendablePendingFixture = () => {
     wardrobeFingerprint: 'wardrobe-v3',
     weather,
     history,
+    planners,
     ...selected,
     bundle: {
       version: 2,
@@ -283,6 +268,53 @@ const sendableSnapshotFixture = () => {
       },
     ]),
   };
+};
+
+type MetadataDimension = 'policy' | 'date' | 'fingerprint';
+
+const mutatePersistedMetadataDimension = (
+  pending: ReturnType<typeof sendablePendingFixture>,
+  dimension: MetadataDimension,
+) => {
+  if (dimension === 'policy') {
+    pending.qualityPolicyVersion = 2;
+    pending.bundle.qualityPolicyVersion = 2;
+  } else if (dimension === 'date') {
+    pending.localDate = '2026-07-14';
+    pending.weather.localDate = '2026-07-14';
+    pending.bundle.localDate = '2026-07-14';
+    pending.bundle.weather.localDate = '2026-07-14';
+  } else {
+    pending.wardrobeFingerprint = 'wardrobe-stale';
+    pending.bundle.wardrobeFingerprint = 'wardrobe-stale';
+  }
+};
+
+const rewriteSelectedOpaqueIds = (pending: ReturnType<typeof currentPendingFixture>) => {
+  const opaqueIds = ['__proto__', 'constructor', 'toString'];
+  pending.selectedCandidates.forEach((selectedCandidate, index) => {
+    const oldCandidateId = selectedCandidate.candidateId;
+    const matchingCandidates = [
+      selectedCandidate,
+      pending.candidates.find(candidate => candidate.candidateId === oldCandidateId),
+      pending.planners[index].candidates.find(candidate => candidate.candidateId === oldCandidateId),
+    ];
+    matchingCandidates.forEach(candidate => {
+      if (!candidate) throw new Error('fixture candidate graph is disconnected');
+      candidate.candidateId = opaqueIds[index];
+      if (index === 0) candidate.topId = '__proto__';
+      if (index === 1) candidate.bottomId = 'constructor';
+      if (index === 2) candidate.shoeId = 'toString';
+      candidate.itemIds = [candidate.topId, candidate.bottomId, candidate.shoeId];
+    });
+    const score = pending.critic.scores.find(value => value.candidateId === oldCandidateId);
+    if (!score) throw new Error('fixture score graph is disconnected');
+    score.candidateId = opaqueIds[index];
+  });
+  pending.selection.compositeById = Object.fromEntries(
+    pending.candidates.map(({ candidateId }) => [candidateId, 9]),
+  );
+  return opaqueIds;
 };
 
 describe('Apps Script contracts', () => {
@@ -359,6 +391,7 @@ describe('Apps Script contracts', () => {
       critic: persistedCriticFixture(planners),
     };
     let selectionRuns = 0;
+    let mergeCalls = 0;
     let persisted: Record<string, unknown> | null = null;
     const runCriticReady = evaluateAppsScript<() => { stage: string; complete: boolean }>(
       ['JobState.gs', 'Scheduler.gs'],
@@ -368,7 +401,7 @@ describe('Apps Script contracts', () => {
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => snapshot,
         loadSnapshotV2_: () => snapshot,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+        mergeSnapshotFeedbackIntoHistoryV2_: () => { mergeCalls += 1; },
         applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
         getDailyConfigV2_: () => ({}),
         localDateV2_: () => '2026-07-15',
@@ -386,6 +419,7 @@ describe('Apps Script contracts', () => {
 
     expect(runCriticReady()).toEqual({ complete: false, stage: 'selection-ready', bundle: null });
     expect(selectionRuns).toBe(1);
+    expect(mergeCalls).toBe(0);
     expect(persisted).toMatchObject({
       manualStage: 'selection-ready',
       candidates: selectedResult.candidates,
@@ -409,7 +443,7 @@ describe('Apps Script contracts', () => {
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => snapshot,
         loadSnapshotV2_: () => snapshot,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+        mergeSnapshotFeedbackIntoHistoryV2_: () => { mergeCalls += 1; },
         applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
         getDailyConfigV2_: () => ({}),
         localDateV2_: () => '2026-07-15',
@@ -439,6 +473,92 @@ describe('Apps Script contracts', () => {
     });
     expect(curatorInputs[0]?.slice(-2)).toEqual([selectedResult.selectedCandidates, selectedResult.critic]);
     expect(validationInputs[0]?.slice(-2)).toEqual([selectedResult.selectedCandidates, selectedResult.critic]);
+    expect(mergeCalls).toBe(0);
+  });
+
+  it('persists fresh manual idle recovery before feedback or weather can fail', () => {
+    const events: string[] = [];
+    let released = false;
+    const generate = evaluateAppsScript<() => unknown>(
+      ['JobState.gs', 'Scheduler.gs'],
+      'generateDailyBundleStepV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => { released = true; } }) },
+        assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
+        getDailyConfigV2_: () => ({}),
+        localDateV2_: () => '2026-07-15',
+        loadPendingV2_: () => {
+          events.push('load');
+          return {
+            workflow: 'manual-v2',
+            qualityPolicyVersion: 3,
+            manualStage: 'selection-ready',
+            localDate: '2026-07-15',
+            wardrobeFingerprint: 'wardrobe-v3',
+            selectedCandidates: [],
+          };
+        },
+        savePendingV2_: (pending: { manualStage: string }) => {
+          events.push(`save:${pending.manualStage}`);
+          return 'pending-file';
+        },
+        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('merge'); },
+        fetchDailyWeatherV2: () => {
+          events.push('weather');
+          throw new Error('weather unavailable');
+        },
+      },
+    );
+
+    expect(generate).toThrowError('weather unavailable');
+    expect(events).toEqual(['load', 'save:idle', 'merge', 'weather']);
+    expect(released).toBe(true);
+  });
+
+  it('loads and validates a persisted manual idle before merging feedback exactly once', () => {
+    const events: string[] = [];
+    const generate = evaluateAppsScript<() => { complete: boolean; stage: string }>(
+      ['JobState.gs', 'Scheduler.gs'],
+      'generateDailyBundleStepV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+        assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
+        getDailyConfigV2_: () => ({}),
+        localDateV2_: () => '2026-07-15',
+        loadPendingV2_: () => {
+          events.push('load');
+          return {
+            workflow: 'manual-v2',
+            qualityPolicyVersion: 3,
+            manualStage: 'idle',
+            localDate: '2026-07-15',
+            wardrobeFingerprint: 'wardrobe-v3',
+          };
+        },
+        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('merge'); },
+        fetchDailyWeatherV2: () => {
+          events.push('weather');
+          return persistedWeatherFixture();
+        },
+        dailyHistoryContextV2_: () => {
+          events.push('history');
+          return persistedHistoryFixture();
+        },
+        savePendingV2_: (pending: { manualStage: string }) => {
+          events.push(`save:${pending.manualStage}`);
+          return 'pending-file';
+        },
+      },
+    );
+
+    expect(generate()).toEqual({ complete: false, stage: 'weather-ready', bundle: null });
+    expect(events).toEqual(['load', 'merge', 'weather', 'history', 'save:weather-ready']);
   });
 
   it('persists the job selection transition and resumes it without rerunning selection', () => {
@@ -737,6 +857,60 @@ describe('Apps Script contracts', () => {
     expect(savedStates).toContainEqual(expect.objectContaining({ stage: 'idle', attemptCounts: {} }));
   });
 
+  it('validates a current sent job before the state-sent short circuit', () => {
+    const events: string[] = [];
+    const savedStates: Record<string, unknown>[] = [];
+    let nowCalls = 0;
+    class SchedulerDate extends Date {
+      static now() {
+        nowCalls += 1;
+        return nowCalls === 1 ? 0 : 300_000;
+      }
+    }
+    const scheduler = evaluateAppsScript<() => { ok: boolean; stage?: string; skipped?: string }>(
+      ['JobState.gs', 'Scheduler.gs'],
+      'runDailyOutfitScheduler',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        Date: SchedulerDate,
+        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+        assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        applySnapshotSettingsV2_: () => ({ timezone: 'UTC', deliveryHour: 6, deliveryMinute: 45, generationLeadMinutes: 75 }),
+        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        localDateV2_: () => '2026-07-15',
+        localMinutesV2_: () => 405,
+        getDailyPropertiesV2_: () => ({
+          getProperty: () => null,
+          setProperty: (key: string) => { events.push(`set:${key}`); },
+        }),
+        getBooleanPropertyV2_: () => false,
+        loadJobStateV2_: () => ({
+          stage: 'sent',
+          qualityPolicyVersion: 3,
+          localDate: '2026-07-15',
+          wardrobeFingerprint: 'wardrobe-v3',
+          attemptCounts: null,
+        }),
+        loadPendingV2_: () => null,
+        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('merge'); },
+        sendDailyBundleNowV2_: () => { events.push('mail'); },
+        recordSentBundleV2_: () => { events.push('record'); },
+        savePendingV2_: () => 'pending-file',
+        saveJobStateV2_: (state: Record<string, unknown>) => {
+          savedStates.push(structuredClone(state));
+          return 'job-file';
+        },
+        sendOperationalAlertV2_: () => undefined,
+        console: { error: () => undefined },
+      },
+    );
+
+    expect(scheduler()).toEqual({ ok: true, stage: 'idle' });
+    expect(events).toEqual([]);
+    expect(savedStates).toContainEqual(expect.objectContaining({ stage: 'idle', attemptCounts: {} }));
+  });
+
   it('writes the sent date only after the persisted bundle is sent successfully', () => {
     const runScheduler = (sendFails: boolean) => {
       const events: string[] = [];
@@ -781,6 +955,7 @@ describe('Apps Script contracts', () => {
           validCurrentPendingV2_: () => true,
           validCurrentBundleV2_: () => true,
           validFullBundleReadyV2_: () => true,
+          validScheduledJobStateV2_: () => true,
           validScheduledStageResumeV2_: () => true,
           incrementAttemptV2_: () => undefined,
           sendDailyBundleNowV2_: () => {
@@ -805,7 +980,110 @@ describe('Apps Script contracts', () => {
     expect(sent.events).toEqual(['send', 'set:LAST_SENT_DATE_V2', 'record']);
   });
 
-  it('never sends or records a stale-policy or prior-date bundle through public normal or test entry points', () => {
+  it('causally blocks policy, prior-date, and fingerprint metadata drift at all three send endpoints', () => {
+    const dimensions: MetadataDimension[] = ['policy', 'date', 'fingerprint'];
+    const baselinePending = sendablePendingFixture();
+    const baselineSnapshot = sendableSnapshotFixture();
+    const fullBundle = evaluateAppsScript<(pending: unknown, snapshot: unknown, localDate: string) => boolean>(
+      ['JobState.gs', 'FinalValidation.gs'],
+      'validFullBundleReadyV2_',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+        savedOutfitNearCopyV2_: () => null,
+      },
+    );
+    expect(fullBundle(baselinePending, baselineSnapshot, '2026-07-15')).toBe(true);
+
+    dimensions.forEach(dimension => {
+      ['sendDailyBundleNowV2', 'sendDailyTestEmailV2'].forEach(exported => {
+        const events: string[] = [];
+        const snapshotValue = sendableSnapshotFixture();
+        const pendingValue = sendablePendingFixture();
+        mutatePersistedMetadataDimension(pendingValue, dimension);
+        const send = evaluateAppsScript<() => unknown>(
+          ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
+          exported,
+          {
+            DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+            loadSnapshotV2_: () => snapshotValue,
+            assertFreshSnapshotV2_: () => snapshotValue,
+            loadPendingV2_: () => structuredClone(pendingValue),
+            getDailyPropertiesV2_: () => ({
+              getProperty: () => null,
+              setProperty: (key: string) => { events.push(`set:${key}`); },
+            }),
+            getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+            applySnapshotSettingsV2_: (value: unknown) => value,
+            localDateV2_: () => '2026-07-15',
+            itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+            savedOutfitNearCopyV2_: () => null,
+            MailApp: { sendEmail: () => { events.push('mail'); } },
+            recordSentBundleV2_: () => { events.push('sent-history'); },
+          },
+        );
+
+        expect({ dimension, exported }).toMatchObject({ dimension, exported });
+        expect(send).toThrow();
+        expect(events).toEqual([]);
+      });
+
+      const events: string[] = [];
+      const snapshotValue = sendableSnapshotFixture();
+      const pendingValue = sendablePendingFixture();
+      mutatePersistedMetadataDimension(pendingValue, dimension);
+      const state = {
+        stage: 'bundle-ready',
+        qualityPolicyVersion: pendingValue.qualityPolicyVersion,
+        localDate: pendingValue.localDate,
+        wardrobeFingerprint: pendingValue.wardrobeFingerprint,
+        attemptCounts: {},
+      };
+      let nowCalls = 0;
+      class SchedulerDate extends Date {
+        static now() {
+          nowCalls += 1;
+          return nowCalls === 1 ? 0 : 300_000;
+        }
+      }
+      const scheduler = evaluateAppsScript<() => { ok: boolean; stage: string }>(
+        ['JobState.gs', 'FinalValidation.gs', 'Scheduler.gs'],
+        'runDailyOutfitScheduler',
+        {
+          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          Date: SchedulerDate,
+          LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+          assertFreshSnapshotV2_: () => snapshotValue,
+          loadSnapshotV2_: () => snapshotValue,
+          applySnapshotSettingsV2_: () => ({ timezone: 'UTC', deliveryHour: 6, deliveryMinute: 45, generationLeadMinutes: 75 }),
+          getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+          localDateV2_: () => '2026-07-15',
+          localMinutesV2_: () => 405,
+          getDailyPropertiesV2_: () => ({
+            getProperty: () => null,
+            setProperty: (key: string) => { events.push(`set:${key}`); },
+          }),
+          getBooleanPropertyV2_: () => false,
+          loadJobStateV2_: () => structuredClone(state),
+          loadPendingV2_: () => structuredClone(pendingValue),
+          mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('feedback-history'); },
+          itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+          savedOutfitNearCopyV2_: () => null,
+          sendDailyBundleNowV2_: () => { events.push('mail'); },
+          recordSentBundleV2_: () => { events.push('sent-history'); },
+          saveJobStateV2_: () => 'job-file',
+          savePendingV2_: () => 'pending-file',
+          sendOperationalAlertV2_: () => undefined,
+          console: { error: () => undefined },
+        },
+      );
+
+      expect({ dimension, result: scheduler() }).toMatchObject({ dimension, result: { ok: true, stage: 'idle' } });
+      expect(events).toEqual([]);
+    });
+  });
+
+  it('never sends or records malformed stale-policy or prior-date content through public normal or test entry points', () => {
     const snapshotValue = { wardrobeFingerprint: 'wardrobe-v3', settings: {}, items: [] };
     const bundle = {
       qualityPolicyVersion: 2,
@@ -985,7 +1263,7 @@ describe('Apps Script contracts', () => {
     invalids.push(invalidHistory);
 
     const invalidCritic = structuredClone(valid);
-    invalidCritic.critic.scores[0].reservations = [9];
+    invalidCritic.critic.scores[0].reservations = [9] as unknown as string[];
     invalids.push(invalidCritic);
 
     invalids.forEach(value => {
@@ -1346,16 +1624,22 @@ describe('Apps Script contracts', () => {
     if (!guard) return;
 
     const valid = currentPendingFixture();
-    const opaqueIds = ['__proto__', 'constructor', 'toString'];
-    valid.selectedCandidates.forEach((candidate, index) => {
-      candidate.candidateId = opaqueIds[index];
-      if (index === 0) candidate.topId = '__proto__';
-      if (index === 1) candidate.bottomId = 'constructor';
-      if (index === 2) candidate.shoeId = 'toString';
-      candidate.itemIds = [candidate.topId, candidate.bottomId, candidate.shoeId];
-    });
-    valid.critic.scores.forEach((score, index) => { score.candidateId = opaqueIds[index]; });
+    rewriteSelectedOpaqueIds(valid);
     expect(() => guard(valid)).not.toThrow();
+
+    const validReplan = structuredClone(valid);
+    const replanAddition = persistedPlannerCandidateFixture('easy', 5);
+    validReplan.candidates.push(structuredClone(replanAddition));
+    validReplan.critic.scores.push({
+      ...structuredClone(validReplan.critic.scores[0]),
+      candidateId: replanAddition.candidateId,
+    });
+    validReplan.selection.path = 'replan-1';
+    validReplan.selection.replannedArchetypes = ['easy'];
+    validReplan.selection.eligibleCountByArchetype.easy = 6;
+    validReplan.selection.compositeById[replanAddition.candidateId] = 9;
+    validReplan.selectedCandidates[0] = structuredClone(replanAddition);
+    expect(() => guard(validReplan)).not.toThrow();
 
     const invalids: unknown[] = [];
     invalids.push({ ...structuredClone(valid), qualityPolicyVersion: 2 });
@@ -1397,7 +1681,7 @@ describe('Apps Script contracts', () => {
     invalids.push(missingScore);
 
     const malformedScore = structuredClone(valid);
-    malformedScore.critic.scores[0].criticalDefects = [9];
+    malformedScore.critic.scores[0].criticalDefects = [9] as unknown as string[];
     invalids.push(malformedScore);
 
     const inheritedCandidate = structuredClone(valid);
@@ -1424,9 +1708,161 @@ describe('Apps Script contracts', () => {
     Object.setPrototypeOf(inheritedComment.critic.scores[0].criticalDefects, Object.assign(Object.create(Array.prototype), { 0: 'inherited' }));
     invalids.push(inheritedComment);
 
+    const noPlanners = structuredClone(valid) as Partial<typeof valid>;
+    delete noPlanners.planners;
+    invalids.push(noPlanners);
+
+    const selectedOnlyUniverse = structuredClone(valid);
+    selectedOnlyUniverse.candidates = structuredClone(selectedOnlyUniverse.selectedCandidates);
+    invalids.push(selectedOnlyUniverse);
+
+    const unknownScore = structuredClone(valid);
+    unknownScore.critic.scores.push({ ...structuredClone(unknownScore.critic.scores[0]), candidateId: 'unknown-candidate' });
+    invalids.push(unknownScore);
+
+    const permutedSelected = structuredClone(valid);
+    permutedSelected.selectedCandidates.reverse();
+    invalids.push(permutedSelected);
+
+    const changedSelectedRecord = structuredClone(valid);
+    changedSelectedRecord.selectedCandidates[0].name = 'Changed persisted copy';
+    invalids.push(changedSelectedRecord);
+
+    const duplicateCombination = structuredClone(valid);
+    const combinationSource = duplicateCombination.candidates[0];
+    const combinationTarget = duplicateCombination.candidates[1];
+    [combinationTarget, duplicateCombination.planners[0].candidates[1]].forEach(candidate => {
+      candidate.topId = combinationSource.topId;
+      candidate.bottomId = combinationSource.bottomId;
+      candidate.shoeId = combinationSource.shoeId;
+      candidate.itemIds = combinationSource.itemIds.slice();
+    });
+    invalids.push(duplicateCombination);
+
+    const permutedPlanners = structuredClone(valid);
+    permutedPlanners.planners.reverse();
+    invalids.push(permutedPlanners);
+
+    const sparsePlannerCandidates = structuredClone(valid);
+    delete sparsePlannerCandidates.planners[0].candidates[0];
+    invalids.push(sparsePlannerCandidates);
+
+    const inheritedPlannerCandidate = structuredClone(valid);
+    inheritedPlannerCandidate.planners[0].candidates[0] = Object.create(inheritedPlannerCandidate.planners[0].candidates[0]);
+    invalids.push(inheritedPlannerCandidate);
+
+    const sparseCandidateUniverse = structuredClone(valid);
+    delete sparseCandidateUniverse.candidates[0];
+    invalids.push(sparseCandidateUniverse);
+
+    const inheritedCandidateUniverse = structuredClone(valid);
+    inheritedCandidateUniverse.candidates[0] = Object.create(inheritedCandidateUniverse.candidates[0]);
+    invalids.push(inheritedCandidateUniverse);
+
+    const sparseScores = structuredClone(valid);
+    delete sparseScores.critic.scores[0];
+    invalids.push(sparseScores);
+
+    const inconsistentReplan = structuredClone(valid);
+    inconsistentReplan.selection.path = 'replan-1';
+    inconsistentReplan.selection.replannedArchetypes = ['easy'];
+    invalids.push(inconsistentReplan);
+
     invalids.forEach(value => {
       expect(() => guard(value)).toThrowError('Deterministic selection must be ready');
     });
+  });
+
+  it('keeps critic-ready validation limited to ordered planners with exact initial score coverage', () => {
+    const validateStage = evaluateAppsScript<(
+      stage: string,
+      pending: unknown,
+      localDate: string,
+      wardrobeFingerprint: string,
+      snapshot: unknown,
+    ) => boolean>(
+      ['JobState.gs'],
+      'validPersistedStagePrerequisitesV2_',
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes } },
+    );
+    const planners = persistedPlannersFixture();
+    const valid = {
+      qualityPolicyVersion: 3,
+      localDate: '2026-07-15',
+      wardrobeFingerprint: 'wardrobe-v3',
+      weather: persistedWeatherFixture(),
+      history: persistedHistoryFixture(),
+      planners,
+      critic: persistedCriticFixture(planners),
+    };
+    const args = ['critic-ready', '2026-07-15', 'wardrobe-v3', { wardrobeFingerprint: 'wardrobe-v3' }] as const;
+
+    expect(validateStage(args[0], valid, args[1], args[2], args[3])).toBe(true);
+    expect('candidates' in valid).toBe(false);
+    expect('selectedCandidates' in valid).toBe(false);
+
+    const permutedPlanners = structuredClone(valid);
+    permutedPlanners.planners.reverse();
+    expect(validateStage(args[0], permutedPlanners, args[1], args[2], args[3])).toBe(false);
+
+    const missingScore = structuredClone(valid);
+    missingScore.critic.scores.pop();
+    expect(validateStage(args[0], missingScore, args[1], args[2], args[3])).toBe(false);
+
+    const unknownScore = structuredClone(valid);
+    unknownScore.critic.scores[0].candidateId = 'unknown-candidate';
+    expect(validateStage(args[0], unknownScore, args[1], args[2], args[3])).toBe(false);
+
+    const duplicatePlannerId = structuredClone(valid);
+    duplicatePlannerId.planners[1].candidates[0].candidateId = duplicatePlannerId.planners[0].candidates[0].candidateId;
+    expect(validateStage(args[0], duplicatePlannerId, args[1], args[2], args[3])).toBe(false);
+  });
+
+  it('makes full-bundle and standalone guards inherit the complete selection graph', () => {
+    const pendingValue = sendablePendingFixture() as Partial<ReturnType<typeof sendablePendingFixture>>;
+    delete pendingValue.planners;
+    const snapshotValue = sendableSnapshotFixture();
+    const fullBundle = evaluateAppsScript<(pending: unknown, snapshot: unknown, localDate: string) => boolean>(
+      ['JobState.gs', 'FinalValidation.gs'],
+      'validFullBundleReadyV2_',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
+        savedOutfitNearCopyV2_: () => null,
+      },
+    );
+    expect(fullBundle(pendingValue, snapshotValue, '2026-07-15')).toBe(false);
+    const validateStage = evaluateAppsScript<(
+      stage: string,
+      pending: unknown,
+      localDate: string,
+      wardrobeFingerprint: string,
+      snapshot: unknown,
+    ) => boolean>(
+      ['JobState.gs'],
+      'validPersistedStagePrerequisitesV2_',
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes } },
+    );
+    expect(validateStage('selection-ready', pendingValue, '2026-07-15', 'wardrobe-v3', snapshotValue)).toBe(false);
+
+    const events: string[] = [];
+    const curator = evaluateAppsScript<() => unknown>(
+      ['JobState.gs', 'Curator.gs'],
+      'runCuratorV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        loadPendingV2_: () => structuredClone(pendingValue),
+        loadSnapshotV2_: () => snapshotValue,
+        assertFreshSnapshotV2_: () => snapshotValue,
+        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        applySnapshotSettingsV2_: (value: unknown) => value,
+        localDateV2_: () => '2026-07-15',
+        callGeminiV2_: () => { events.push('model'); return {}; },
+        savePendingV2_: () => { events.push('save'); },
+      },
+    );
+    expect(curator).toThrowError('Deterministic selection must be ready');
+    expect(events).toEqual([]);
   });
 
   it('resets a malformed selection-ready resume to a persisted fresh idle job', () => {

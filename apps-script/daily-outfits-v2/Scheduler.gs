@@ -50,7 +50,6 @@ function generateDailyBundleStepV2() {
   if (!lock.tryLock(10000)) throw new Error('Another daily outfit job is already running');
   try {
     var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-    mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
     var config = applySnapshotSettingsV2_(getDailyConfigV2_(), snapshot);
     var localDate = localDateV2_(new Date(), config.timezone);
     var pending = null;
@@ -75,9 +74,11 @@ function generateDailyBundleStepV2() {
         wardrobeFingerprint: snapshot.wardrobeFingerprint,
         updatedAt: Date.now()
       };
+      savePendingV2_(pending);
     }
 
     if (pending.manualStage === 'idle') {
+      mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
       pending.weather = fetchDailyWeatherV2();
       pending.history = dailyHistoryContextV2_(pending.weather.localDate, snapshot);
       pending.manualStage = 'weather-ready';
@@ -204,7 +205,7 @@ function runDailyOutfitScheduler() {
     if (currentMinutes < generationStart) return { ok: true, skipped: 'before-generation-window' };
 
     try { state = loadJobStateV2_(); } catch (_ignored) { state = null; }
-    if (!state || state.qualityPolicyVersion !== DAILY_V2.QUALITY_POLICY_VERSION || state.localDate !== localDate || state.wardrobeFingerprint !== snapshot.wardrobeFingerprint) {
+    if (!validScheduledJobStateV2_(state, localDate, snapshot.wardrobeFingerprint)) {
       state = newJobStateV2_(localDate, snapshot.wardrobeFingerprint);
       saveJobStateV2_(state);
     }
