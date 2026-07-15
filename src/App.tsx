@@ -10,6 +10,7 @@ import type { SneakerItem } from './components/SneakerGrid';
 import AddSneakerModal from './components/AddSneakerModal';
 import PackingDrawer from './components/PackingDrawer';
 import DailyOutfitSettings from './features/daily-outfits/DailyOutfitSettings';
+import { fillManifestDailyProfiles } from './features/daily-outfits/itemProfile';
 import { Download, Mail, Plus, Upload } from 'lucide-react';
 import closetData from './data/closet.json';
 import sneakerData from './data/sneakers.json';
@@ -47,14 +48,15 @@ function App() {
         let localItems: ClosetItem[] = JSON.parse(savedItems);
 
         // Remove any base manifest items that have been deleted from the base database manifest
-        const baseManifestIds = new Set((closetData as ClosetItem[]).map(item => item.id));
+        const baseManifestById = new Map((closetData as ClosetItem[]).map(item => [item.id, item]));
         localItems = localItems.filter(item => {
           // If it is a base item (doesn't start with 'user_'), it must exist in the base manifest
           if (!item.id.startsWith('user_')) {
-            return baseManifestIds.has(item.id);
+            return baseManifestById.has(item.id);
           }
           return true;
         });
+        localItems = fillManifestDailyProfiles(localItems, closetData as ClosetItem[]);
 
         const localIds = new Set(localItems.map(item => item.id));
 
@@ -66,9 +68,7 @@ function App() {
         
         const originalSavedCount = JSON.parse(savedItems).length;
         if (newManifestItems.length > 0 || localItems.length !== originalSavedCount) {
-          const merged = [...newManifestItems, ...localItems];
-          localStorage.setItem('closet_items', JSON.stringify(merged));
-          return merged;
+          return [...newManifestItems, ...localItems];
         }
         return localItems;
       } catch (e) {
@@ -117,6 +117,7 @@ function App() {
             imageTop: item.imageTop?.startsWith('data:') ? item.imageTop : base.imageTop
           };
         });
+        localSneakers = fillManifestDailyProfiles(localSneakers, sneakerData as SneakerItem[]);
 
         const localIds = new Set(localSneakers.map(item => item.id));
         const newManifestItems = (sneakerData as SneakerItem[]).filter(

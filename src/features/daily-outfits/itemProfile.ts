@@ -14,6 +14,20 @@ export const dailySlotForItem = (item: Pick<DailySourceItem, 'category'>): Daily
 
 const clamp = <T extends number>(value: number, min: T, max: T): T => Math.min(max, Math.max(min, value)) as T;
 
+type ProfileHydratable = {
+  id: string;
+  dailyProfile?: Partial<DailyRecommendationProfileV2>;
+};
+
+export const fillManifestDailyProfiles = <T extends ProfileHydratable>(localItems: T[], manifestItems: T[]): T[] => {
+  const manifestById = new Map(manifestItems.map(item => [item.id, item]));
+  return localItems.map(item => {
+    const manifest = manifestById.get(item.id);
+    if (item.dailyProfile !== undefined || manifest?.dailyProfile === undefined) return item;
+    return { ...item, dailyProfile: { ...manifest.dailyProfile } };
+  });
+};
+
 export const categoryDefaultProfile = (item: DailySourceItem): DailyRecommendationProfileV2 => {
   const category = item.category;
   const color = item.color || 'unknown';
@@ -37,6 +51,13 @@ export const categoryDefaultProfile = (item: DailySourceItem): DailyRecommendati
     updatedAt: Date.now()
   };
   const override = item.dailyProfile ?? {};
+  const accentColors = Array.isArray(override.accentColors)
+    ? override.accentColors
+        .filter((value): value is string => typeof value === 'string')
+        .map(value => value.trim())
+        .filter(value => /^[a-z][a-z -]*$/i.test(value))
+        .slice(0, 4)
+    : undefined;
   return {
     ...defaults,
     ...override,
@@ -45,6 +66,7 @@ export const categoryDefaultProfile = (item: DailySourceItem): DailyRecommendati
     formality: clamp(Number(override.formality ?? defaults.formality), 1, 5),
     windProtection: clamp(Number(override.windProtection ?? defaults.windProtection), 0, 2),
     patternIntensity: clamp(Number(override.patternIntensity ?? defaults.patternIntensity), 0, 2),
+    accentColors,
     updatedAt: override.updatedAt ?? defaults.updatedAt
   };
 };

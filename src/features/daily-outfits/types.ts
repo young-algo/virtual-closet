@@ -32,6 +32,7 @@ export interface DailyRecommendationProfileV2 {
   patternIntensity: 0 | 1 | 2;
   primaryColorFamily: string;
   secondaryColorFamily?: string;
+  accentColors?: string[];
   available: boolean;
   excludedFromDaily: boolean;
   source: 'category-default' | 'ai-inferred' | 'manual';
