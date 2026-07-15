@@ -33,12 +33,13 @@ function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
     'Choose exactly one Easy, one Polished casual, and one Expressive look. Treat the three as a set: unique tops and bottoms, unique shoes when at least three weather-safe shoes exist, no pair sharing more than one item, distinct color or silhouette stories, and no exact prior-14-day repeat.',
     'Favor finalists with the strongest real colorIntent, not the safest quantity of black, grey, and white. Each selected look must have a visible cross-item hook—accent echo, tonal bridge, analogous color, controlled complement, or precise trim/material link. A graphic top with unrelated achromatic bottoms and shoes is not thoughtful styling merely because it does not clash.',
     'Weather suitability is non-negotiable. Do not modify a finalist. Copy its exact itemIds and candidateId. In colorHook, name the exact visible colors/details and at least two items that create the relationship. Do not use generic language such as "keeps it clean," "lets the top pop," or "ties everything together." Produce concise customer-facing explanations only; do not reveal chain-of-thought.',
-    'WEATHER:\n' + JSON.stringify(weather),
-    'DAILY HISTORY:\n' + JSON.stringify(history),
-    'FINALISTS:\n' + JSON.stringify(finalists),
-    'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(critic)
+    'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+    'FINALISTS:\n' + JSON.stringify(modelFacingCandidatesV2_(finalists, snapshot)),
+    'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic))
   ].join('\n\n');
-  return callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.4);
+  var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.4);
+  return resolveLabelsV2_(raw, snapshot);
 }
 
 function runCuratorV2() {

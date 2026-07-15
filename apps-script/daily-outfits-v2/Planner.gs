@@ -37,7 +37,8 @@ function archetypeBriefV2_(archetype) {
 function plannerPartsV2_(archetype, snapshot, weather, history) {
   var prompt = [
     "You are planning Kevin's real wardrobe for an ordinary day with no inferred special event.",
-    'Every available item is visible in the complete slot-specific atlases and JSON item index. Use only exact listed ids. Do not invent, shop, or omit an item because it is unfamiliar.',
+    'Every available item is visible in the complete slot-specific atlases and JSON item index. Reference items only by their short label (T…, B…, L…, S…) exactly as printed in the index and atlases. Do not invent, shop, or omit an item because it is unfamiliar.',
+    'Each item profile lists primaryColorFamily, secondaryColorFamily, and accentColors verified from its photographs when available. Treat those profile colors as ground truth for what colors exist; use the images to judge how the colors relate.',
     'Weather appropriateness is mandatory. Visual coherence matters more than novelty. Daily history is a rotation signal, not an absolute prohibition, except exact combinations from the prior 14 days may not repeat.',
     'Saved outfits are style-grammar examples, never templates. A candidate may not retain two of the three core pieces (top, bottom, shoes) from any saved outfit and merely swap the third. Express the same taste through a genuinely new combination.',
     'Build a deliberate palette before choosing ids. Every candidate needs a concrete cross-item color hook: an accent echo, tonal bridge, analogous relationship, complementary contrast, or precise trim/material link visible in the images. Merely saying that black, grey, or white pieces "let the top stand out" is not a color strategy.',
@@ -46,8 +47,8 @@ function plannerPartsV2_(archetype, snapshot, weather, history) {
     'Return five genuinely viable and materially distinct candidates for the ' + archetype + ' direction—not superficial variations and not the same hero piece with small substitutions. Each needs one top, one bottom, one shoe, and zero or one layer.',
     'Do not reveal chain-of-thought. Return only the requested concise structured fields.',
     'ARCHETYPE BRIEF: ' + archetypeBriefV2_(archetype),
-    'WEATHER PROFILE:\n' + JSON.stringify(weather),
-    'DAILY ROTATION HISTORY:\n' + JSON.stringify(history),
+    'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'DAILY ROTATION HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     'READ-ONLY SAVED TASTE EVIDENCE (weights indicate confidence; do not copy literally):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'COMPLETE ITEM INDEX:\n' + JSON.stringify(compactItemIndexV2_(snapshot))
   ].join('\n\n');
@@ -56,8 +57,13 @@ function plannerPartsV2_(archetype, snapshot, weather, history) {
 
 function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history) {
   var parts = plannerPartsV2_(archetype, snapshot, weather, history);
-  parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + errors.join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(invalidResponse) });
-  var repaired = callGeminiV2_('repair', parts, PLANNER_SCHEMA_V2, 0.25);
+  var modelInvalidResponse = {
+    archetype: invalidResponse.archetype,
+    candidates: modelFacingCandidatesV2_(invalidResponse.candidates || [], snapshot)
+  };
+  parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + errors.join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(modelInvalidResponse) });
+  var raw = callGeminiV2_('repair', parts, PLANNER_SCHEMA_V2, 0.25);
+  var repaired = resolveLabelsV2_(raw, snapshot);
   var repairedErrors = validatePlannerResponseV2_(repaired, archetype, snapshot);
   if (repairedErrors.length) throw new Error(archetype + ' planner repair failed: ' + repairedErrors.join('; '));
   return repaired;
@@ -73,9 +79,10 @@ function runAllPlannersV2_(snapshot, weather, history) {
       temperature: temperature
     };
   });
-  var responses = callGeminiBatchV2_('planner', calls);
-  return responses.map(function(response, index) {
+  var rawResponses = callGeminiBatchV2_('planner', calls);
+  return rawResponses.map(function(raw, index) {
     var archetype = DAILY_V2.ARCHETYPES[index];
+    var response = resolveLabelsV2_(raw, snapshot);
     var errors = validatePlannerResponseV2_(response, archetype, snapshot);
     return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
   });
@@ -86,7 +93,8 @@ function runPlannerV2(archetype) {
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var weather = fetchDailyWeatherV2();
   var history = dailyHistoryContextV2_(weather.localDate);
-  var response = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
+  var raw = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
+  var response = resolveLabelsV2_(raw, snapshot);
   var errors = validatePlannerResponseV2_(response, archetype, snapshot);
   return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
 }

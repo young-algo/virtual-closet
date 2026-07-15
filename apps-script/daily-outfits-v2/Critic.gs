@@ -35,6 +35,45 @@ var CRITIC_SCHEMA_V2 = {
   required: ['scores', 'finalists']
 };
 
+function criticScoreAnchorsV2_() {
+  return [
+    'SCORE ANCHORS:',
+    '- weather: 10 = ideal across the whole 6:00–23:00 window; 8 = comfortable morning, midday, and evening with at most one minor compromise — the minimum for a finalist; 6 = fine midday but wrong at the edges of the day; 4 = uncomfortable for a meaningful part of the day; ≤2 = unsafe or clearly wrong.',
+    '- palette: 9–10 = every visible color sits in one deliberate scheme; 7–8 = coherent with one minor stray; 5–6 = colors merely coexist; ≤4 = at least one visible conflict.',
+    '- silhouette: 9–10 = proportions read as deliberate, volumes balance; 7–8 = standard and unremarkable; 5–6 = slightly mismatched volumes; ≤4 = clearly fighting proportions.',
+    '- formality: 9–10 = all pieces on one register; 7–8 = one register with a soft outlier; 5–6 = mixed registers; ≤4 = jarring mix.',
+    '- freshness: 9–10 = a genuinely new combination of non-over-exposed items; 7–8 = familiar items in new relationships; 5–6 = leans on over-exposed items or echoes a recent look; ≤4 = barely differs from a recent email, or shares two core pieces with a saved outfit without transforming it. Verified wore/liked feedback on similar looks lifts this score.',
+    '- archetypeFit: 9–10 = unmistakably this archetype next to the other two briefs; 5–6 = could belong to a neighboring archetype; ≤4 = wrong brief.',
+    '- visualInterest: 9–10 = a specific reason to look twice (color idea, texture, proportion); 5–6 = pleasant but forgettable; ≤4 = inert.',
+    '- wearability: 9–10 = zero-friction for an ordinary day; 5–6 = needs babying (delicate, fussy, impractical); ≤4 = impractical for the day described.'
+  ].join('\n');
+}
+
+function modelFacingCriticResponseV2_(response) {
+  response = response || {};
+  var scoreFields = ['weather', 'palette', 'colorIntent', 'silhouette', 'formality', 'visualInterest', 'wearability', 'freshness', 'archetypeFit'];
+  var scores = (Array.isArray(response.scores) ? response.scores : []).map(function(score) {
+    var view = copyStringFieldsV2_(score, {}, ['candidateId']);
+    scoreFields.forEach(function(field) {
+      if (typeof score[field] === 'number') view[field] = score[field];
+    });
+    if (typeof score.disqualified === 'boolean') view.disqualified = score.disqualified;
+    ['criticalDefects', 'reservations'].forEach(function(field) {
+      if (Array.isArray(score[field])) view[field] = score[field].filter(function(value) { return typeof value === 'string'; });
+    });
+    return view;
+  });
+  var finalists = response.finalists || {};
+  return {
+    scores: scores,
+    finalists: {
+      easy: Array.isArray(finalists.easy) ? finalists.easy.filter(function(value) { return typeof value === 'string'; }) : [],
+      polishedCasual: Array.isArray(finalists.polishedCasual) ? finalists.polishedCasual.filter(function(value) { return typeof value === 'string'; }) : [],
+      expressive: Array.isArray(finalists.expressive) ? finalists.expressive.filter(function(value) { return typeof value === 'string'; }) : []
+    }
+  };
+}
+
 function criticFinalistIdsV2_(response) {
   return response.finalists.easy.concat(response.finalists.polishedCasual, response.finalists.expressive);
 }
@@ -82,12 +121,13 @@ function repairCriticResponseV2_(snapshot, weather, history, candidates, invalid
     'Repair this multimodal critic response without changing any candidate contents. Re-evaluate only where necessary and select two valid finalists per archetype.',
     'Every finalist must be non-disqualified, have weather at least 8, palette at least 7.5, colorIntent at least 8, and an average of palette, silhouette, and formality of at least 7.5. Do not inflate scores to force a result; judge the actual images and weather faithfully.',
     'ColorIntent measures a specific cross-item visual relationship, not mere absence of clashing. Black/grey/white bottoms and shoes around an unrelated top are not intentional by default. Require a visible accent echo, tonal bridge, analogous relationship, controlled contrast, or precise trim/material link.',
+    criticScoreAnchorsV2_(),
     'VALIDATION ERRORS:\n' + errors.join('\n'),
-    'INVALID CRITIC RESPONSE:\n' + JSON.stringify(invalidResponse),
-    'WEATHER:\n' + JSON.stringify(weather),
-    'DAILY HISTORY:\n' + JSON.stringify(history),
-    'SAVED OUTFIT SIGNATURES (near-copy reference only):\n' + JSON.stringify(savedTasteSignaturesV2_(snapshot)),
-    'CANDIDATES:\n' + JSON.stringify(candidates)
+    'INVALID CRITIC RESPONSE:\n' + JSON.stringify(modelFacingCriticResponseV2_(invalidResponse)),
+    'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
+    'SAVED OUTFIT SIGNATURES (near-copy reference only):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
+    'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
   var repaired = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.25);
   var repairedErrors = validateCriticResponseV2_(repaired, candidates);
@@ -99,14 +139,15 @@ function runCriticV2_(snapshot, weather, history, plannerResponses) {
   var candidates = plannerResponses.flatMap(function(response) { return response.candidates; });
   var prompt = [
     'Act as a demanding multimodal wardrobe critic. Judge the actual item images, not metadata alone.',
-    'Score all 15 candidates independently on every 0–10 rubric dimension. Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, exact recent repeat, a candidate that retains two core pieces from a saved outfit, or material duplication of a stronger candidate.',
+    'Score all ' + candidates.length + ' candidates independently on every 0–10 rubric dimension. Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, exact recent repeat, a candidate that retains two core pieces from a saved outfit, or material duplication of a stronger candidate.',
     'Palette measures harmony; colorIntent measures whether the outfit has a precise, visible cross-item color idea. Score colorIntent 0–4 for generic neutral safety or a top placed over unrelated black/grey/white bottoms and shoes; 5–7 for competent anchoring without a meaningful hook; 8–10 only for a clearly observable accent echo, tonal bridge, analogous relationship, complementary contrast, or trim/material link. For graphic, patterned, jersey, or multicolor tops, look for a bottom or shoe that subtly connects to a secondary/accent color. "The neutrals let the top stand out" is insufficient by itself.',
+    criticScoreAnchorsV2_(),
     'Do not disqualify simple item reuse by itself. Prefer a strong familiar piece over weak novelty, but never a near-copy of a saved outfit. Select exactly two non-disqualified finalists per archetype. Every finalist must have weather at least 8, palette at least 7.5, colorIntent at least 8, and an average of palette, silhouette, and formality of at least 7.5. Do not rewrite any candidate contents. Do not expose chain-of-thought.',
     'ARCHETYPES:\n' + DAILY_V2.ARCHETYPES.map(function(value) { return value + ': ' + archetypeBriefV2_(value); }).join('\n'),
-    'WEATHER:\n' + JSON.stringify(weather),
-    'DAILY HISTORY:\n' + JSON.stringify(history),
+    'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     'SAVED OUTFIT SIGNATURES (style evidence and near-copy reference):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
-    'CANDIDATES:\n' + JSON.stringify(candidates)
+    'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
   var response = callGeminiV2_('critic', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.3);
   var errors = validateCriticResponseV2_(response, candidates);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateAppsScript } from './appsScriptTestHarness';
+import { apps, evaluateAppsScript } from './appsScriptTestHarness';
 
 const sneakerId = 'user_sneaker_1783863184667';
 const topId = 'user_closet_1783863184668';
@@ -80,6 +80,73 @@ const snapshot = {
     }
   ]
 };
+
+const richWeather = {
+  localDate: '2026-07-14',
+  locationLabel: 'Brooklyn, NY',
+  timezone: 'America/New_York',
+  fetchedAt: 1,
+  hourly: [{ localHour: 6, feelsLikeF: 70 }],
+  morningFeelsLikeF: 70,
+  middayFeelsLikeF: 80,
+  eveningFeelsLikeF: 72,
+  minFeelsLikeF: 68,
+  maxFeelsLikeF: 82,
+  highTemperatureF: 82,
+  lowTemperatureF: 65,
+  maxRainProbability: 0,
+  totalPrecipitationInches: 0,
+  maxWindMph: 5,
+  maxGustMph: 8,
+  averageHumidity: 50,
+  rainExpected: false,
+  windy: false,
+  largeTemperatureSwing: false,
+  layerGuidance: 'none',
+  plainEnglishSummary: 'Light pieces.',
+  weatherPhrase: 'clear'
+};
+
+const richHistory = {
+  exactOutfitsPrevious14Days: [{ localDate: '2026-07-13', itemIds: [topId, sneakerId], archetype: 'easy' }],
+  itemUsagePrevious7Days: { [topId]: 2, [sneakerId]: 1 },
+  feedback: [],
+  cooldownItemIds: [topId],
+  wornItemIds: [sneakerId]
+};
+
+const richSnapshot = {
+  ...snapshot,
+  settings: { allowShoeReuseWhenNecessary: true, privateOperationalFlag: true }
+};
+
+const internalCandidate = (archetype = 'easy') => ({
+  candidateId: `${archetype}-1`,
+  archetype,
+  topId,
+  bottomId,
+  shoeId: sneakerId,
+  itemIds: [topId, bottomId, sneakerId],
+  name: 'Utility Neutral',
+  styleSummary: 'Relaxed proportions align across the outfit',
+  colorStrategy: 'Cream and olive bridge the brown shoes through warm neutral accents.',
+  weatherSummary: 'Breathable for today',
+  potentialRisks: [],
+  plannerConfidence: 0.9
+});
+
+const labelCandidate = (archetype = 'easy') => ({
+  ...internalCandidate(archetype),
+  topId: 'T004',
+  bottomId: 'B002',
+  shoeId: 'S009',
+  itemIds: ['T004', 'B002', 'S009']
+});
+
+const labelPlannerResponse = (archetype = 'easy') => ({
+  archetype,
+  candidates: [labelCandidate(archetype)]
+});
 
 const api = evaluateAppsScript<{
   modelWeatherViewV2_: (weather: object) => Record<string, unknown>;
@@ -413,5 +480,285 @@ describe('model boundary views', () => {
       'B002 Nike Utility Pant (bottom, olive)',
       'S009 Jordan Mocha (shoes, brown)'
     ]);
+  });
+});
+
+describe('prompt and response label boundary', () => {
+  it('assembles a planner prompt with labels and no long ids or full weather fields', () => {
+    const plannerParts = evaluateAppsScript<(
+      archetype: string,
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => Array<{ text?: string }>>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'plannerPartsV2_',
+      { DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] }, console }
+    );
+
+    const serialized = JSON.stringify(plannerParts('easy', richSnapshot, richWeather, richHistory));
+    expect(serialized).toContain('S009');
+    expect(serialized).not.toContain(sneakerId);
+    expect(serialized).not.toContain(topId);
+    expect(serialized).not.toContain('hourly');
+    expect(serialized).not.toContain('fetchedAt');
+    expect(serialized).not.toContain('timezone');
+    expect(serialized).not.toContain('excludedFromDaily');
+    expect(serialized).not.toContain('privateOperationalFlag');
+    expect(serialized).not.toContain('privateNote');
+  });
+
+  it('resolves batch and standalone planner responses before deterministic validation', () => {
+    const validated: Array<Record<string, unknown>> = [];
+    const planner = evaluateAppsScript<{
+      runAllPlannersV2_: (snapshot: object, weather: object, history: object) => Array<{ candidates: Array<{ shoeId: string }> }>;
+      runPlannerV2: (archetype: string) => { candidates: Array<{ shoeId: string }> };
+    }>(
+      ['ItemIndex.gs', 'Planner.gs'],
+      '({ runAllPlannersV2_, runPlannerV2 })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: (weather: typeof richWeather) => ({
+          localDate: weather.localDate,
+          locationLabel: weather.locationLabel,
+          morningFeelsLikeF: weather.morningFeelsLikeF,
+          middayFeelsLikeF: weather.middayFeelsLikeF,
+          eveningFeelsLikeF: weather.eveningFeelsLikeF,
+          rainExpected: weather.rainExpected
+        }),
+        buildTasteSummaryV2_: () => [],
+        getNumberPropertyV2_: () => 0.9,
+        callGeminiBatchV2_: (_stage: string, calls: Array<{ context: string }>) => calls.map(call => labelPlannerResponse(call.context)),
+        callGeminiV2_: () => labelPlannerResponse('easy'),
+        validatePlannerResponseV2_: (response: Record<string, unknown>) => {
+          validated.push(structuredClone(response));
+          return [];
+        },
+        assertFreshSnapshotV2_: (value: object) => value,
+        loadSnapshotV2_: () => richSnapshot,
+        fetchDailyWeatherV2: () => richWeather,
+        dailyHistoryContextV2_: () => richHistory
+      }
+    );
+
+    const batch = planner.runAllPlannersV2_(richSnapshot, richWeather, richHistory);
+    const standalone = planner.runPlannerV2('easy');
+    expect(batch.every(response => response.candidates[0].shoeId === sneakerId)).toBe(true);
+    expect(standalone.candidates[0].shoeId).toBe(sneakerId);
+    expect(validated).toHaveLength(4);
+    expect(validated.every(response => (response.candidates as Array<{ topId: string }>)[0].topId === topId)).toBe(true);
+  });
+
+  it('captures a planner repair prompt without real ids and resolves its response before validation', () => {
+    let capturedParts: Array<{ text?: string }> = [];
+    let validatedResolvedResponse = false;
+    const repairPlanner = evaluateAppsScript<(
+      archetype: string,
+      invalidResponse: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => { candidates: Array<{ shoeId: string }> }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'repairPlannerResponseV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          capturedParts = parts;
+          return labelPlannerResponse('easy');
+        },
+        validatePlannerResponseV2_: (response: { candidates: Array<{ shoeId: string }> }) => {
+          validatedResolvedResponse = response.candidates[0].shoeId === sneakerId;
+          return [];
+        }
+      }
+    );
+
+    const result = repairPlanner('easy', {
+      archetype: 'easy',
+      candidates: [internalCandidate()],
+      privateNested: { wardrobeId: sneakerId }
+    }, ['candidate[0].itemIds does not match its slots'], richSnapshot, richWeather, richHistory);
+    const serialized = JSON.stringify(capturedParts);
+    expect(serialized).toContain('S009');
+    expect(serialized).not.toContain(sneakerId);
+    expect(serialized).not.toContain(topId);
+    expect(serialized).not.toContain('privateNested');
+    expect(serialized).not.toContain('hourly');
+    expect(validatedResolvedResponse).toBe(true);
+    expect(result.candidates[0].shoeId).toBe(sneakerId);
+  });
+
+  it('keeps the same exact score anchors in primary and repair critic prompts', () => {
+    const calls: Array<{ stage: string; parts: Array<{ text?: string }> }> = [];
+    const candidates = ['easy', 'polished-casual', 'expressive'].flatMap(archetype =>
+      Array.from({ length: 2 }, (_, index) => ({ ...internalCandidate(archetype), candidateId: `${archetype}-${index}` }))
+    );
+    const validRepair = {
+      scores: candidates.map(candidate => ({
+        candidateId: candidate.candidateId,
+        weather: 9,
+        palette: 9,
+        colorIntent: 9,
+        silhouette: 9,
+        formality: 9,
+        visualInterest: 9,
+        wearability: 9,
+        freshness: 9,
+        archetypeFit: 9,
+        disqualified: false,
+        criticalDefects: [],
+        reservations: []
+      })),
+      finalists: {
+        easy: ['easy-0', 'easy-1'],
+        polishedCasual: ['polished-casual-0', 'polished-casual-1'],
+        expressive: ['expressive-0', 'expressive-1']
+      }
+    };
+    const critic = evaluateAppsScript<{
+      criticScoreAnchorsV2_: () => string;
+      runCriticV2_: (snapshot: object, weather: object, history: object, planners: object[]) => object;
+    }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs'],
+      '({ criticScoreAnchorsV2_, runCriticV2_ })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (stage: string, parts: Array<{ text?: string }>) => {
+          calls.push({ stage, parts });
+          return stage === 'critic'
+            ? { scores: { malformed: true }, finalists: { easy: [], polishedCasual: [], expressive: [] }, privateWardrobeId: sneakerId }
+            : validRepair;
+        }
+      }
+    );
+
+    critic.runCriticV2_(richSnapshot, richWeather, richHistory, [{ candidates }]);
+    const anchors = critic.criticScoreAnchorsV2_();
+    const primary = calls[0].parts.map(part => part.text || '').join('\n');
+    const repair = calls[1].parts.map(part => part.text || '').join('\n');
+    expect(calls.map(call => call.stage)).toEqual(['critic', 'repair']);
+    expect(primary.split(anchors)).toHaveLength(2);
+    expect(repair.split(anchors)).toHaveLength(2);
+    expect(primary).toContain('Score all 6 candidates independently');
+    expect(primary).not.toContain(sneakerId);
+    expect(repair).not.toContain(sneakerId);
+    expect(primary).not.toContain('hourly');
+    expect(repair).not.toContain('fetchedAt');
+
+    const source = apps('Critic.gs');
+    expect(source.match(/criticScoreAnchorsV2_\(\)/g)).toHaveLength(3);
+    expect(source).toContain('weather: 10 = ideal across the whole 6:00–23:00 window');
+    expect(source).toContain('wearability: 9–10 = zero-friction for an ordinary day');
+  });
+
+  it('uses compact curator inputs and resolves curator output immediately', () => {
+    let capturedParts: Array<{ text?: string }> = [];
+    const curator = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => { recommendations: Array<{ itemIds: string[] }> }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs'],
+      'runCuratorV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          capturedParts = parts;
+          return {
+            recommendations: [{
+              candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
+              itemIds: ['T004', 'B002', 'S009'], colorHook: 'Cream, olive, and brown connect.',
+              whyItWorks: 'The relaxed proportions align.', weatherNote: 'Breathable today.'
+            }]
+          };
+        }
+      }
+    );
+    const critic = {
+      scores: [],
+      finalists: { easy: ['easy-1'], polishedCasual: [], expressive: [] },
+      privateWardrobeId: sneakerId
+    };
+
+    const result = curator(richSnapshot, richWeather, richHistory, [{ candidates: [internalCandidate()] }], critic);
+    const serialized = JSON.stringify(capturedParts);
+    expect(serialized).toContain('S009');
+    expect(serialized).not.toContain(sneakerId);
+    expect(serialized).not.toContain(topId);
+    expect(serialized).not.toContain('hourly');
+    expect(serialized).not.toContain('cooldownItemIds');
+    expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+  });
+
+  it('captures final repair prompts on compact views and resolves before validation', () => {
+    let capturedParts: Array<{ text?: string }> = [];
+    let validatedResolvedResponse = false;
+    const repairFinal = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => { recommendations: Array<{ itemIds: string[] }> }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          capturedParts = parts;
+          return {
+            recommendations: [{
+              candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
+              itemIds: ['T004', 'B002', 'S009'], colorHook: 'Cream, olive, and brown connect.',
+              whyItWorks: 'The relaxed proportions align.', weatherNote: 'Breathable today.'
+            }]
+          };
+        },
+        validateFinalBundleV2_: (response: { recommendations: Array<{ itemIds: string[] }> }) => {
+          validatedResolvedResponse = JSON.stringify(response.recommendations[0].itemIds) === JSON.stringify([topId, bottomId, sneakerId]);
+          return [];
+        }
+      }
+    );
+    const current = {
+      recommendations: [{
+        candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
+        itemIds: [topId, bottomId, sneakerId], colorHook: 'Too short',
+        whyItWorks: 'Too short', weatherNote: 'Too short', privateWardrobeId: sneakerId
+      }],
+      privateNested: { wardrobeId: sneakerId }
+    };
+    const critic = {
+      scores: [],
+      finalists: { easy: ['easy-1'], polishedCasual: [], expressive: [] },
+      privateWardrobeId: sneakerId
+    };
+
+    const result = repairFinal(current, ['recommendation[0].colorHook is too short'], richSnapshot, richWeather, richHistory, [{ candidates: [internalCandidate()] }], critic);
+    const serialized = JSON.stringify(capturedParts);
+    expect(serialized).toContain('S009');
+    expect(serialized).not.toContain(sneakerId);
+    expect(serialized).not.toContain(topId);
+    expect(serialized).not.toContain('privateNested');
+    expect(serialized).not.toContain('hourly');
+    expect(validatedResolvedResponse).toBe(true);
+    expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+  });
+
+  it('does not directly stringify full prompt-boundary objects', () => {
+    const sources = ['Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'].map(apps).join('\n');
+    expect(sources).not.toMatch(/JSON\.stringify\((weather|history|candidates|finalists|current|curated|invalidResponse)\)/);
+    expect(sources).not.toContain('JSON.stringify(savedTasteSignaturesV2_');
   });
 });
