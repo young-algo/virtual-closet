@@ -592,6 +592,55 @@ describe('prompt and response label boundary', () => {
     expect(result.candidates[0].shoeId).toBe(sneakerId);
   });
 
+  it.each([
+    ['null response', null, 'easy'],
+    ['object-valued archetype', {
+      archetype: { value: 'easy', privateNested: { wardrobeId: sneakerId } },
+      candidates: []
+    }, 'easy'],
+    ['non-array candidates', {
+      archetype: 'polished-casual',
+      candidates: { malformed: true, privateNested: { wardrobeId: sneakerId } }
+    }, 'polished-casual']
+  ])('repairs malformed planner input (%s) through a closed envelope', (_case, invalidResponse, expectedArchetype) => {
+    let capturedParts: Array<{ text?: string }> = [];
+    const repairPlanner = evaluateAppsScript<(
+      archetype: string,
+      invalidResponse: unknown,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => { candidates: Array<{ shoeId: string }> }>(
+      ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs'],
+      'repairPlannerResponseV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          capturedParts = parts;
+          return labelPlannerResponse('easy');
+        },
+        validatePlannerResponseV2_: () => []
+      }
+    );
+
+    const result = repairPlanner(
+      'easy',
+      invalidResponse,
+      ['exactly five candidates are required'],
+      richSnapshot,
+      richWeather,
+      richHistory
+    );
+    const repairInstruction = capturedParts[0]?.text || '';
+    expect(repairInstruction).toContain('INVALID RESPONSE:\n' + JSON.stringify({ archetype: expectedArchetype, candidates: [] }));
+    expect(repairInstruction).not.toContain(sneakerId);
+    expect(repairInstruction).not.toContain('privateNested');
+    expect(repairInstruction).not.toContain('malformed');
+    expect(result.candidates[0].shoeId).toBe(sneakerId);
+  });
+
   it('keeps the same exact score anchors in primary and repair critic prompts', () => {
     const calls: Array<{ stage: string; parts: Array<{ text?: string }> }> = [];
     const candidates = ['easy', 'polished-casual', 'expressive'].flatMap(archetype =>

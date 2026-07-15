@@ -57,9 +57,10 @@ function plannerPartsV2_(archetype, snapshot, weather, history) {
 
 function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history) {
   var parts = plannerPartsV2_(archetype, snapshot, weather, history);
+  invalidResponse = invalidResponse && typeof invalidResponse === 'object' && !Array.isArray(invalidResponse) ? invalidResponse : {};
   var modelInvalidResponse = {
-    archetype: invalidResponse.archetype,
-    candidates: modelFacingCandidatesV2_(invalidResponse.candidates || [], snapshot)
+    archetype: typeof invalidResponse.archetype === 'string' ? invalidResponse.archetype : archetype,
+    candidates: modelFacingCandidatesV2_(Array.isArray(invalidResponse.candidates) ? invalidResponse.candidates : [], snapshot)
   };
   parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + errors.join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(modelInvalidResponse) });
   var raw = callGeminiV2_('repair', parts, PLANNER_SCHEMA_V2, 0.25);
