@@ -123,6 +123,12 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
   return { state: state, pending: pending };
 }
 
+function logDailySchedulerErrorV2_(message) {
+  try {
+    console.error(message);
+  } catch (_ignored) {}
+}
+
 function runDailyOutfitScheduler() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) return { ok: true, skipped: 'lock-busy' };
@@ -161,14 +167,14 @@ function runDailyOutfitScheduler() {
     }
     return { ok: true, stage: state.stage };
   } catch (error) {
-    console.error('Daily scheduler failed: ' + error.message);
+    logDailySchedulerErrorV2_('Daily scheduler failed: ' + error.message);
     try {
       var timezone = config && config.timezone;
       if (!timezone) {
         try {
           timezone = getDailyConfigV2_().timezone;
         } catch (configError) {
-          console.error('Daily scheduler could not read fallback timezone: ' + configError.message);
+          logDailySchedulerErrorV2_('Daily scheduler could not read fallback timezone: ' + configError.message);
         }
       }
       var current = timezone ? localMinutesV2_(new Date(), timezone) : null;
@@ -181,7 +187,7 @@ function runDailyOutfitScheduler() {
       }
       if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) sendOperationalAlertV2_('recommendation quality gate failed', error.message);
     } catch (handlerError) {
-      console.error('Daily scheduler error handler failed: ' + handlerError.message);
+      logDailySchedulerErrorV2_('Daily scheduler error handler failed: ' + handlerError.message);
     }
     return { ok: false, error: error.message, stage: state && state.stage };
   } finally {

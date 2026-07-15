@@ -26,8 +26,10 @@ function fetchDailyWeatherV2() {
   try {
     response = UrlFetchApp.fetch('https://api.open-meteo.com/v1/forecast?' + query, { muteHttpExceptions: true });
   } catch (error) {
-    var exceptionCached = loadWeatherCacheV2_();
-    if (exceptionCached && exceptionCached.localDate === localDateV2_(new Date(), config.timezone) && Date.now() - exceptionCached.fetchedAt <= DAILY_V2.MAX_WEATHER_AGE_MS) return exceptionCached;
+    try {
+      var exceptionCached = loadWeatherCacheV2_();
+      if (exceptionCached && exceptionCached.localDate === localDateV2_(new Date(), config.timezone) && Date.now() - exceptionCached.fetchedAt <= DAILY_V2.MAX_WEATHER_AGE_MS) return exceptionCached;
+    } catch (_cacheError) {}
     throw error;
   }
   var status = response.getResponseCode();

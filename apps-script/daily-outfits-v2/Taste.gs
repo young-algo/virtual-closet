@@ -71,12 +71,12 @@ function mergeSnapshotFeedbackIntoHistoryV2_(snapshot) {
     var entry = history.find(function(value) { return value.localDate === feedback.localDate; });
     if (!entry) return;
     var before = entry.feedback || [];
+    var matching = before.filter(function(value) { return value.candidateId === feedback.candidateId; });
+    if (matching.length === 1 && JSON.stringify(matching[0]) === JSON.stringify(feedback)) return;
     var after = before.filter(function(value) { return value.candidateId !== feedback.candidateId; });
     after.push(feedback);
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
-      entry.feedback = after;
-      changed = true;
-    }
+    entry.feedback = after;
+    changed = true;
   });
   if (changed) saveHistoryV2_(history);
   return changed;
