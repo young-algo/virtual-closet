@@ -1,18 +1,31 @@
 function itemMapV2_(snapshot) {
-  var map = {};
-  snapshot.items.forEach(function(item) { map[item.id] = item; });
+  var map = Object.create(null);
+  (snapshot && snapshot.items || []).forEach(function(item) { map[item.id] = item; });
   return map;
 }
 
 function itemLabelMapV2_(snapshot) {
-  var map = {};
-  snapshot.items.forEach(function(item) { map[item.shortLabel] = item.id; });
+  var map = Object.create(null);
+  (snapshot && snapshot.items || []).forEach(function(item) { map[item.shortLabel] = item.id; });
   return map;
 }
 
 function labelForItemIdV2_(id, snapshot) {
   var item = itemMapV2_(snapshot)[id];
-  return item ? item.shortLabel : id;
+  return item && item.shortLabel ? item.shortLabel : null;
+}
+
+function requiredItemLabelV2_(id, snapshot, boundaryName) {
+  var label = labelForItemIdV2_(id, snapshot);
+  if (!label) throw new Error(boundaryName + ' references a missing wardrobe item');
+  return label;
+}
+
+function copyStringFieldsV2_(source, target, keys) {
+  keys.forEach(function(key) {
+    if (typeof source[key] === 'string') target[key] = source[key];
+  });
+  return target;
 }
 
 function modelProfileViewV2_(profile) {
@@ -40,11 +53,22 @@ function compactItemIndexV2_(snapshot) {
 }
 
 function modelFacingCandidateV2_(candidate, snapshot) {
-  var view = Object.assign({}, candidate);
+  candidate = candidate || {};
+  var view = copyStringFieldsV2_(candidate, {}, [
+    'candidateId', 'archetype', 'name', 'styleSummary', 'colorStrategy', 'weatherSummary'
+  ]);
+  if (Array.isArray(candidate.potentialRisks)) {
+    view.potentialRisks = candidate.potentialRisks.filter(function(value) { return typeof value === 'string'; });
+  }
+  if (typeof candidate.plannerConfidence === 'number') view.plannerConfidence = candidate.plannerConfidence;
   ['topId', 'bottomId', 'shoeId', 'layerId'].forEach(function(key) {
-    if (view[key]) view[key] = labelForItemIdV2_(view[key], snapshot);
+    if (!Object.prototype.hasOwnProperty.call(candidate, key)) return;
+    if (key === 'layerId' && candidate[key] === null) view[key] = null;
+    else if (candidate[key]) view[key] = requiredItemLabelV2_(candidate[key], snapshot, 'Candidate');
   });
-  view.itemIds = (candidate.itemIds || []).map(function(id) { return labelForItemIdV2_(id, snapshot); });
+  view.itemIds = (candidate.itemIds || []).map(function(id) {
+    return requiredItemLabelV2_(id, snapshot, 'Candidate');
+  });
   return view;
 }
 
@@ -53,23 +77,45 @@ function modelFacingCandidatesV2_(candidates, snapshot) {
 }
 
 function modelFacingHistoryV2_(history, snapshot) {
-  var view = JSON.parse(JSON.stringify(history || {}));
-  view.exactOutfitsPrevious14Days = (history.exactOutfitsPrevious14Days || []).map(function(entry) {
-    return Object.assign({}, entry, { itemIds: entry.itemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }) });
-  });
-  view.itemUsagePrevious7Days = Object.keys(history.itemUsagePrevious7Days || {}).reduce(function(counts, id) {
-    counts[labelForItemIdV2_(id, snapshot)] = history.itemUsagePrevious7Days[id];
+  history = history || {};
+  var exactOutfits = (history.exactOutfitsPrevious14Days || []).reduce(function(entries, entry) {
+    var ids = Array.isArray(entry.itemIds) ? entry.itemIds : [];
+    var labels = ids.map(function(id) { return labelForItemIdV2_(id, snapshot); });
+    if (labels.some(function(label) { return !label; })) return entries;
+    var modelEntry = copyStringFieldsV2_(entry, {}, ['localDate', 'archetype']);
+    modelEntry.itemIds = labels;
+    entries.push(modelEntry);
+    return entries;
+  }, []);
+  var usageCounts = Object.keys(history.itemUsagePrevious7Days || {}).reduce(function(counts, id) {
+    var label = labelForItemIdV2_(id, snapshot);
+    var count = history.itemUsagePrevious7Days[id];
+    if (label && typeof count === 'number') counts[label] = count;
     return counts;
   }, {});
-  delete view.cooldownItemIds;
-  delete view.wornItemIds;
-  return view;
+  var feedback = (history.feedback || []).map(function(entry) {
+    var modelEntry = copyStringFieldsV2_(entry, {}, ['localDate', 'candidateId', 'value', 'reason', 'note']);
+    if (typeof entry.createdAt === 'number') modelEntry.createdAt = entry.createdAt;
+    return modelEntry;
+  });
+  return {
+    exactOutfitsPrevious14Days: exactOutfits,
+    itemUsagePrevious7Days: usageCounts,
+    feedback: feedback
+  };
 }
 
 function modelFacingCuratedV2_(curated, snapshot) {
+  curated = curated || {};
   return {
     recommendations: (curated.recommendations || []).map(function(rec) {
-      return Object.assign({}, rec, { itemIds: rec.itemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }) });
+      var modelRecommendation = copyStringFieldsV2_(rec, {}, [
+        'candidateId', 'archetype', 'name', 'colorHook', 'whyItWorks', 'weatherNote'
+      ]);
+      modelRecommendation.itemIds = (rec.itemIds || []).map(function(id) {
+        return requiredItemLabelV2_(id, snapshot, 'Curated recommendation');
+      });
+      return modelRecommendation;
     })
   };
 }
@@ -77,7 +123,9 @@ function modelFacingCuratedV2_(curated, snapshot) {
 function resolveLabelsV2_(response, snapshot) {
   var resolved = JSON.parse(JSON.stringify(response));
   var byLabel = itemLabelMapV2_(snapshot);
-  var resolve = function(token) { return byLabel[token] || token; };
+  var resolve = function(token) {
+    return Object.prototype.hasOwnProperty.call(byLabel, token) ? byLabel[token] : token;
+  };
   (resolved.candidates || []).forEach(function(candidate) {
     ['topId', 'bottomId', 'shoeId', 'layerId'].forEach(function(key) { if (candidate[key]) candidate[key] = resolve(candidate[key]); });
     candidate.itemIds = (candidate.itemIds || []).map(resolve);
@@ -94,9 +142,10 @@ function inlineImagePartV2_(dataUrl) {
 
 function atlasPartsV2_(snapshot) {
   var parts = [];
-  var itemMap = itemMapV2_(snapshot);
   snapshot.atlasPages.forEach(function(page) {
-    var labels = page.itemIds.map(function(id) { return itemMap[id] ? itemMap[id].shortLabel : id; });
+    var labels = page.itemIds.map(function(id) {
+      return requiredItemLabelV2_(id, snapshot, 'Atlas page');
+    });
     parts.push({ text: 'ATLAS ' + page.pageId + ' | slot=' + page.slot + ' | item labels=' + labels.join(',') });
     parts.push(inlineImagePartV2_(page.imageDataUrl));
   });
@@ -115,7 +164,7 @@ function candidateImagePartsV2_(snapshot, candidates) {
   var parts = [];
   Object.keys(memberships).sort().forEach(function(id) {
     var item = items[id];
-    if (!item) throw new Error('Candidate references missing item image: ' + id);
+    if (!item) throw new Error('Candidate image references a missing wardrobe item');
     parts.push({ text: 'ITEM ' + item.shortLabel + ' | slot=' + item.slot + ' | ' + item.brand + ' ' + item.name + ' | listed colors=' + item.color + ' | description=' + item.description + ' | candidates=' + memberships[id].join(',') });
     parts.push(inlineImagePartV2_(item.thumbnailDataUrl));
   });

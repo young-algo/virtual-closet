@@ -37,15 +37,16 @@ function savedOutfitNearCopyV2_(itemIds, snapshot) {
 function buildTasteSummaryV2_(snapshot) {
   var items = itemMapV2_(snapshot);
   return savedTasteSignaturesV2_(snapshot).map(function(outfit) {
+    var currentItems = outfit.itemIds.map(function(id) { return items[id]; }).filter(Boolean);
     return {
       id: outfit.id,
       name: outfit.name,
       source: outfit.source,
       weight: outfit.weight,
-      itemLabels: outfit.itemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }),
-      coreItemLabels: outfit.coreItemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }),
+      itemLabels: currentItems.map(function(item) { return item.shortLabel; }),
+      coreItemLabels: outfit.coreItemIds.map(function(id) { return labelForItemIdV2_(id, snapshot); }).filter(Boolean),
       note: outfit.note,
-      pieces: outfit.itemIds.map(function(id) { return items[id]; }).filter(Boolean).map(function(item) {
+      pieces: currentItems.map(function(item) {
         return item.shortLabel + ' ' + item.brand + ' ' + item.name + ' (' + item.slot + ', ' + item.color + ')';
       })
     };
