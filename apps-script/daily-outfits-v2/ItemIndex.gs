@@ -37,6 +37,18 @@ function historyGuidanceV2_() {
   ].join('\n');
 }
 
+function historyTextForModelV2_(value, snapshot) {
+  var sanitized = value;
+  (snapshot && snapshot.items || []).slice().sort(function(left, right) {
+    return String(right.id || '').length - String(left.id || '').length;
+  }).forEach(function(item) {
+    if (typeof item.id === 'string' && item.id) {
+      sanitized = sanitized.split(item.id).join(item.shortLabel || 'INVALID_LABEL');
+    }
+  });
+  return sanitized.replace(/\b(?:user|item)_[A-Za-z0-9_-]+\b/g, 'INVALID_LABEL');
+}
+
 function modelProfileViewV2_(profile) {
   var keys = ['warmth', 'breathability', 'rainSafety', 'windProtection', 'formality', 'silhouette', 'patternIntensity', 'primaryColorFamily', 'secondaryColorFamily', 'accentColors'];
   return keys.reduce(function(view, key) {
@@ -96,7 +108,10 @@ function modelFacingHistoryV2_(history, snapshot) {
     var ids = Array.isArray(entry.itemIds) ? entry.itemIds : [];
     var labels = ids.map(function(id) { return labelForItemIdV2_(id, snapshot); });
     if (labels.some(function(label) { return !label; })) return entries;
-    var modelEntry = copyStringFieldsV2_(entry, {}, ['localDate', 'archetype']);
+    var modelEntry = {};
+    ['localDate', 'archetype'].forEach(function(key) {
+      if (typeof entry[key] === 'string') modelEntry[key] = historyTextForModelV2_(entry[key], snapshot);
+    });
     modelEntry.itemIds = labels;
     entries.push(modelEntry);
     return entries;
@@ -108,11 +123,16 @@ function modelFacingHistoryV2_(history, snapshot) {
     return counts;
   }, {});
   var feedback = (history.feedback || []).map(function(entry) {
-    var modelEntry = copyStringFieldsV2_(entry, {}, ['localDate', 'candidateId', 'value', 'reason', 'note', 'outfitName', 'archetype']);
+    var modelEntry = {};
+    ['localDate', 'candidateId', 'value', 'reason', 'note', 'outfitName', 'archetype'].forEach(function(key) {
+      if (typeof entry[key] === 'string') modelEntry[key] = historyTextForModelV2_(entry[key], snapshot);
+    });
     if (typeof entry.createdAt === 'number') modelEntry.createdAt = entry.createdAt;
     if (Array.isArray(entry.items)) {
       modelEntry.items = entry.items.filter(function(description) {
         return typeof description === 'string' && Object.prototype.hasOwnProperty.call(safeItemDescriptions, description);
+      }).map(function(description) {
+        return historyTextForModelV2_(description, snapshot);
       });
     }
     return modelEntry;

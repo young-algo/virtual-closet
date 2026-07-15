@@ -6,6 +6,7 @@ const bottomId = 'user_closet_1784000000002';
 const shoeId = 'user_sneaker_1784000000003';
 const layerId = 'user_closet_1784000000004';
 const staleId = 'user_closet_1784000000999';
+const staleItemId = 'item_archived_1784000000998';
 
 const snapshot = {
   settings: { maxDailyHistoryDays: 30, timezone: 'America/New_York' },
@@ -177,6 +178,69 @@ describe('daily history context', () => {
     })).not.toContain(staleId);
   });
 
+  it('drops feedback for absent prototype-key candidate ids', () => {
+    const context = contextFor([{
+      localDate: '2026-07-11',
+      recommendations: [{
+        candidateId: 'sent-look',
+        name: 'Sent Look',
+        archetype: 'easy',
+        itemIds: [topId, bottomId]
+      }],
+      feedback: ['constructor', 'toString', '__proto__'].map(candidateId => ({
+        candidateId,
+        value: 'liked'
+      }))
+    }])('2026-07-14', snapshot);
+
+    expect(context.feedback).toEqual([]);
+    expect(context.itemFeedbackSignals).toEqual({});
+  });
+
+  it('resolves unambiguous own prototype-key candidate ids', () => {
+    const context = contextFor([{
+      localDate: '2026-07-11',
+      recommendations: [
+        { candidateId: 'constructor', name: 'Constructor Look', archetype: 'easy', itemIds: [topId] },
+        { candidateId: 'toString', name: 'To String Look', archetype: 'polished-casual', itemIds: [bottomId] }
+      ],
+      encore: { candidateId: '__proto__', name: 'Proto Encore', itemIds: [shoeId] },
+      feedback: ['constructor', 'toString', '__proto__'].map(candidateId => ({
+        candidateId,
+        value: 'liked'
+      }))
+    }])('2026-07-14', snapshot);
+
+    expect(context.feedback.map((entry: { outfitName: string }) => entry.outfitName)).toEqual([
+      'Constructor Look',
+      'To String Look',
+      'Proto Encore'
+    ]);
+  });
+
+  it('silently drops feedback for every duplicate candidate id', () => {
+    const context = contextFor([
+      {
+        localDate: '2026-07-10',
+        recommendations: [
+          { candidateId: 'duplicate-rec', name: 'First Recommendation', itemIds: [topId] },
+          { candidateId: 'duplicate-rec', name: 'Second Recommendation', itemIds: [bottomId] }
+        ],
+        feedback: [{ candidateId: 'duplicate-rec', value: 'liked' }]
+      },
+      {
+        localDate: '2026-07-11',
+        recommendations: [{ candidateId: 'duplicate-encore', name: 'Recommendation', itemIds: [topId] }],
+        encore: { candidateId: 'duplicate-encore', name: 'Encore', itemIds: [shoeId] },
+        feedback: [{ candidateId: 'duplicate-encore', value: 'wore' }]
+      }
+    ])('2026-07-14', snapshot);
+
+    expect(context.feedback).toEqual([]);
+    expect(context.itemFeedbackSignals).toEqual({});
+    expect(context.wornItemIds).toEqual([]);
+  });
+
   it('uses the configured retained window and defaults to the latest 30 entries', () => {
     const entries = Array.from({ length: 31 }, (_, index) => ({
       localDate: `2026-05-${String(index + 1).padStart(2, '0')}`,
@@ -289,6 +353,49 @@ describe('model-facing history boundary', () => {
     expect(JSON.stringify(model)).not.toContain(shoeId);
     expect(JSON.stringify(model)).not.toContain(staleId);
   });
+
+  it('sanitizes ids in resolved feedback strings and accepted item descriptions', () => {
+    const modelFacingHistoryV2_ = evaluateAppsScript<(
+      history: Record<string, unknown>,
+      snapshotValue: HistorySnapshot
+    ) => Record<string, any>>(['ItemIndex.gs'], 'modelFacingHistoryV2_', { console });
+    const leakySnapshot = structuredClone(snapshot);
+    leakySnapshot.items[0].name = `ACG ${topId} ${staleItemId}`;
+    const context = contextFor([{
+      localDate: '2026-07-11',
+      recommendations: [{
+        candidateId: 'leaky-look',
+        name: `Look ${shoeId} ${staleId}`,
+        archetype: `easy ${layerId}`,
+        itemIds: [topId, bottomId]
+      }],
+      feedback: [{
+        candidateId: 'leaky-look',
+        value: 'liked',
+        reason: `Reason ${bottomId} ${staleItemId}`,
+        note: `Keep ordinary prose intact with ${topId}, ${staleId}, and ${staleItemId}.`
+      }]
+    }])('2026-07-14', leakySnapshot);
+
+    const model = modelFacingHistoryV2_(context, leakySnapshot);
+
+    expect(model.feedback[0]).toEqual(expect.objectContaining({
+      outfitName: 'Look S001 INVALID_LABEL',
+      archetype: 'easy L001',
+      reason: 'Reason B001 INVALID_LABEL',
+      note: 'Keep ordinary prose intact with T001, INVALID_LABEL, and INVALID_LABEL.',
+      items: [
+        'T001 Nike ACG T001 INVALID_LABEL',
+        'B001 Dickies Double Knee'
+      ]
+    }));
+    expect(JSON.stringify(model)).not.toContain(topId);
+    expect(JSON.stringify(model)).not.toContain(bottomId);
+    expect(JSON.stringify(model)).not.toContain(shoeId);
+    expect(JSON.stringify(model)).not.toContain(layerId);
+    expect(JSON.stringify(model)).not.toContain(staleId);
+    expect(JSON.stringify(model)).not.toContain(staleItemId);
+  });
 });
 
 describe('history prompt contracts', () => {
@@ -321,7 +428,10 @@ describe('history prompt contracts', () => {
   });
 
   it('includes the exact guidance in every runtime prompt without leaking internal history ids', () => {
-    const history = contextFor(feedbackHistory)('2026-07-14', snapshot);
+    const promptFeedbackHistory = structuredClone(feedbackHistory);
+    (promptFeedbackHistory[0].feedback[0] as { note?: string }).note =
+      `Keep ordinary prose intact with ${topId}, ${staleId}, and ${staleItemId}.`;
+    const history = contextFor(promptFeedbackHistory)('2026-07-14', snapshot);
     const weather = { localDate: '2026-07-14', locationLabel: 'Brooklyn, NY' };
     const archetypes = ['easy', 'polished-casual', 'expressive'];
     const candidates = archetypes.flatMap(archetype => Array.from({ length: 2 }, (_, index) => ({
@@ -440,11 +550,13 @@ describe('history prompt contracts', () => {
     expect(captured).toHaveLength(6);
     captured.forEach(prompt => {
       expect(prompt).toContain(guidance);
+      expect(prompt).toContain('Keep ordinary prose intact with T001, INVALID_LABEL, and INVALID_LABEL.');
       expect(prompt).not.toContain(topId);
       expect(prompt).not.toContain(bottomId);
       expect(prompt).not.toContain(shoeId);
       expect(prompt).not.toContain(layerId);
       expect(prompt).not.toContain(staleId);
+      expect(prompt).not.toContain(staleItemId);
       expect(prompt).not.toContain('cooldownItemIds');
       expect(prompt).not.toContain('wornItemIds');
     });

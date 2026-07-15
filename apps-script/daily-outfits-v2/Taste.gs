@@ -80,12 +80,22 @@ function dailyHistoryContextV2_(localDate, snapshot) {
   var signals = {};
   var worn = {};
   history.forEach(function(entry) {
-    var byCandidate = {};
-    historyLooksV2_(entry).forEach(function(look) { byCandidate[look.candidateId] = look; });
+    var byCandidate = Object.create(null);
+    var ambiguousCandidates = Object.create(null);
+    historyLooksV2_(entry).forEach(function(look) {
+      var candidateId = look.candidateId;
+      if (Object.prototype.hasOwnProperty.call(byCandidate, candidateId) ||
+          Object.prototype.hasOwnProperty.call(ambiguousCandidates, candidateId)) {
+        delete byCandidate[candidateId];
+        ambiguousCandidates[candidateId] = true;
+        return;
+      }
+      byCandidate[candidateId] = look;
+    });
     (entry.feedback || []).forEach(function(signal) {
       if (['liked', 'disliked', 'wore'].indexOf(signal.value) < 0) return;
+      if (!Object.prototype.hasOwnProperty.call(byCandidate, signal.candidateId)) return;
       var look = byCandidate[signal.candidateId];
-      if (!look) return;
       var currentItemIds = (look.itemIds || []).filter(function(id) { return Boolean(itemMap[id]); });
       var resolvedSignal = {
         localDate: entry.localDate,
