@@ -1284,6 +1284,12 @@ describe('prompt and response label boundary', () => {
   ])('routes malformed curator output (%s) into final validation and repair', (_case, malformedCurated) => {
     let validated: unknown;
     let repaired: unknown;
+    let curatorSelection: unknown;
+    let curatorCritic: unknown;
+    let validationSelection: unknown;
+    let validationCritic: unknown;
+    const selectedCandidates = [internalCandidate()];
+    const selectedCritic = { scores: [criticScore('easy-1')], selectionMarker: 'selected-critic' };
     const pipeline = evaluateAppsScript<(snapshot: object, weather: object) => { curated: { recommendations: unknown[] } }>(
       ['Scheduler.gs'],
       'generationBundlePipelineV2_',
@@ -1293,9 +1299,21 @@ describe('prompt and response label boundary', () => {
         dailyHistoryContextV2_: () => richHistory,
         runAllPlannersV2_: () => [{ candidates: [internalCandidate()] }],
         runCriticV2_: () => ({ scores: [criticScore('easy-1')] }),
-        runCuratorV2_: () => malformedCurated,
-        validateFinalBundleV2_: (curated: unknown) => {
+        runSelectionV2_: () => ({
+          candidates: selectedCandidates,
+          critic: selectedCritic,
+          selectedCandidates,
+          selection: { path: 'top2' }
+        }),
+        runCuratorV2_: (_snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
+          curatorSelection = selected;
+          curatorCritic = critic;
+          return malformedCurated;
+        },
+        validateFinalBundleV2_: (curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
           validated = curated;
+          validationSelection = selected;
+          validationCritic = critic;
           return ['exactly three final recommendations are required'];
         },
         repairFinalBundleV2_: (curated: unknown) => {
@@ -1307,6 +1325,10 @@ describe('prompt and response label boundary', () => {
     );
 
     const result = pipeline(richSnapshot, richWeather);
+    expect(curatorSelection).toEqual(selectedCandidates);
+    expect(curatorCritic).toEqual(selectedCritic);
+    expect(validationSelection).toEqual(selectedCandidates);
+    expect(validationCritic).toEqual(selectedCritic);
     expect(validated).toEqual(malformedCurated);
     expect(repaired).toEqual(malformedCurated);
     expect(result.curated).toEqual({ recommendations: [] });
@@ -1318,6 +1340,12 @@ describe('prompt and response label boundary', () => {
     };
     let repaired: unknown;
     let validationErrors: string[] = [];
+    let curatorSelection: unknown;
+    let curatorCritic: unknown;
+    let validationSelection: unknown;
+    let validationCritic: unknown;
+    const selectedCandidates = [internalCandidate()];
+    const selectedCritic = { ...validCriticResponse(), selectionMarker: 'selected-critic' };
     const pipeline = evaluateAppsScript<(snapshot: object, weather: object) => { curated: { recommendations: unknown[] } }>(
       ['Scheduler.gs'],
       'generationBundlePipelineV2_',
@@ -1327,8 +1355,22 @@ describe('prompt and response label boundary', () => {
         dailyHistoryContextV2_: () => richHistory,
         runAllPlannersV2_: () => [{ candidates: criticCandidates() }],
         runCriticV2_: () => validCriticResponse(),
-        runCuratorV2_: () => malformedCurated,
-        validateFinalBundleV2_: () => ['final recommendations must be object records with array itemIds'],
+        runSelectionV2_: () => ({
+          candidates: criticCandidates(),
+          critic: selectedCritic,
+          selectedCandidates,
+          selection: { path: 'top2' }
+        }),
+        runCuratorV2_: (_snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
+          curatorSelection = selected;
+          curatorCritic = critic;
+          return malformedCurated;
+        },
+        validateFinalBundleV2_: (_curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
+          validationSelection = selected;
+          validationCritic = critic;
+          return ['final recommendations must be object records with array itemIds'];
+        },
         repairFinalBundleV2_: (curated: unknown, errors: string[]) => {
           repaired = curated;
           validationErrors = errors;
@@ -1340,6 +1382,10 @@ describe('prompt and response label boundary', () => {
 
     const result = pipeline(richSnapshot, richWeather);
 
+    expect(curatorSelection).toEqual(selectedCandidates);
+    expect(curatorCritic).toEqual(selectedCritic);
+    expect(validationSelection).toEqual(selectedCandidates);
+    expect(validationCritic).toEqual(selectedCritic);
     expect(validationErrors.length).toBeGreaterThan(0);
     expect(repaired).toEqual(malformedCurated);
     expect(result.curated).toEqual({ recommendations: [] });

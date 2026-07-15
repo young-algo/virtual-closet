@@ -167,6 +167,7 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
 
 function validateFinalBundleV2() {
   var pending = loadPendingV2_();
+  if (!pending || !pending.selectedCandidates || !pending.critic) throw new Error('Deterministic selection must be ready');
   if (!pending || !pending.curated) throw new Error('No curated response is ready');
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
