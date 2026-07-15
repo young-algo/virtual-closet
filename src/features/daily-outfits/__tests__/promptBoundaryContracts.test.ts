@@ -188,7 +188,7 @@ const criticCandidateRunner = (callGeminiV2_: (stage: string) => unknown) => eva
   history: object,
   candidates: object[]
 ) => { scores: CriticScore[] }>(
-  ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+  ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs'],
   'runCriticCandidatesV2_',
   {
     DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -213,14 +213,21 @@ const api = evaluateAppsScript<{
     candidates: Array<{ shoeId: string; itemIds: string[] }>;
     recommendations: Array<{ itemIds: string[] }>;
   };
-  savedTasteSignaturesV2_: (snapshot: object) => Array<{ itemIds: string[] }>;
+  tasteEvidenceV2_: ((snapshot: object) => Array<{ itemIds: string[]; coreItemIds: string[]; source: string; weight: number }>) | null;
+  manualCoreTriosV2_: ((snapshot: object) => Array<{ itemIds: string[]; coreItemIds: string[] }>) | null;
+  savedOutfitExactCopyV2_: ((itemIds: string[], snapshot: object) => { name: string } | null) | null;
+  sharedTwoCoreSavedOutfitsV2_: ((itemIds: string[], snapshot: object) => Array<{ name: string }>) | null;
   buildTasteSummaryV2_: (snapshot: object) => Array<Record<string, unknown>>;
 }>(
   ['Weather.gs', 'ItemIndex.gs', 'Taste.gs'],
   `({
     modelWeatherViewV2_, modelProfileViewV2_, compactItemIndexV2_, labelForItemIdV2_, atlasPartsV2_, candidateImagePartsV2_,
     modelFacingCandidateV2_, modelFacingHistoryV2_, modelFacingCuratedV2_, resolveLabelsV2_,
-    savedTasteSignaturesV2_, buildTasteSummaryV2_
+    tasteEvidenceV2_: typeof tasteEvidenceV2_ === 'function' ? tasteEvidenceV2_ : null,
+    manualCoreTriosV2_: typeof manualCoreTriosV2_ === 'function' ? manualCoreTriosV2_ : null,
+    savedOutfitExactCopyV2_: typeof savedOutfitExactCopyV2_ === 'function' ? savedOutfitExactCopyV2_ : null,
+    sharedTwoCoreSavedOutfitsV2_: typeof sharedTwoCoreSavedOutfitsV2_ === 'function' ? sharedTwoCoreSavedOutfitsV2_ : null,
+    buildTasteSummaryV2_
   })`,
   { console }
 );
@@ -304,7 +311,8 @@ describe('model boundary views', () => {
       topId: 'T004',
       bottomId: 'B002',
       shoeId: 'S009',
-      itemIds: ['T004', 'B002', 'S009']
+      itemIds: ['T004', 'B002', 'S009'],
+      sharesTwoCoreWith: []
     });
     expect(api.modelFacingHistoryV2_(history, snapshot)).toEqual({
       exactOutfitsPrevious14Days: [{ localDate: '2026-07-13', itemIds: ['T004', 'S009'] }],
@@ -386,7 +394,8 @@ describe('model boundary views', () => {
       colorStrategy: 'Cream and olive bridge the brown shoes',
       weatherSummary: 'Breathable for today',
       potentialRisks: ['None'],
-      plannerConfidence: 0.9
+      plannerConfidence: 0.9,
+      sharesTwoCoreWith: []
     });
     expect(modelHistory).toEqual({
       exactOutfitsPrevious14Days: [{
@@ -515,8 +524,48 @@ describe('model boundary views', () => {
     expect(api.modelFacingCuratedV2_(undefined, snapshot)).toEqual({ recommendations: [] });
   });
 
+  it('separates taste evidence from exact-manual blocking signatures', () => {
+    expect(api.tasteEvidenceV2_).toBeTypeOf('function');
+    expect(api.manualCoreTriosV2_).toBeTypeOf('function');
+    expect(api.savedOutfitExactCopyV2_).toBeTypeOf('function');
+    expect(api.sharedTwoCoreSavedOutfitsV2_).toBeTypeOf('function');
+    if (!api.tasteEvidenceV2_ || !api.manualCoreTriosV2_ || !api.savedOutfitExactCopyV2_ || !api.sharedTwoCoreSavedOutfitsV2_) return;
+
+    const policySnapshot = {
+      ...snapshot,
+      tasteExamples: [
+        { id: 'manual', name: 'Manual', itemIds: [topId, bottomId, sneakerId], note: 'Keep this logic' },
+        { id: 'ai', name: 'AI', source: 'ai', itemIds: [topId, bottomId, sneakerId] },
+        { id: 'hidden', name: 'Hidden', seedStylist: false, itemIds: [topId, bottomId, sneakerId] },
+        { id: 'two', name: 'Two', itemIds: [topId, bottomId] },
+        { id: 'duplicate', name: 'Duplicate', itemIds: [topId, topId, bottomId, sneakerId, 'non-core'] }
+      ]
+    };
+    const evidence = api.tasteEvidenceV2_(policySnapshot);
+    expect(evidence.map(value => ({ name: (value as unknown as { name: string }).name, source: value.source, weight: value.weight }))).toEqual([
+      { name: 'Manual', source: 'manual', weight: 1 },
+      { name: 'AI', source: 'ai', weight: 0.3 },
+      { name: 'Two', source: 'manual', weight: 1 },
+      { name: 'Duplicate', source: 'manual', weight: 1 }
+    ]);
+    expect(evidence[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+    expect(evidence[0].itemIds).not.toBe(policySnapshot.tasteExamples[0].itemIds);
+    expect(evidence[0].coreItemIds).toEqual([topId, bottomId, sneakerId]);
+
+    expect(api.manualCoreTriosV2_(policySnapshot).map(value => (value as unknown as { name: string }).name)).toEqual([
+      'Manual', 'Hidden', 'Duplicate'
+    ]);
+    expect(api.savedOutfitExactCopyV2_([topId, bottomId, sneakerId], policySnapshot)?.name).toBe('Manual');
+    expect(api.savedOutfitExactCopyV2_([topId, bottomId], policySnapshot)).toBeNull();
+    expect(api.sharedTwoCoreSavedOutfitsV2_([topId, bottomId, 'other'], policySnapshot).map(value => value.name)).toEqual([
+      'Manual', 'AI', 'Two', 'Duplicate'
+    ]);
+  });
+
   it('keeps saved taste internals on real ids but emits label-only model summaries', () => {
-    expect(api.savedTasteSignaturesV2_(snapshot)[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+    expect(api.tasteEvidenceV2_).toBeTypeOf('function');
+    if (!api.tasteEvidenceV2_) return;
+    expect(api.tasteEvidenceV2_(snapshot)[0].itemIds).toEqual([topId, bottomId, sneakerId]);
 
     const summary = api.buildTasteSummaryV2_(snapshot)[0];
     expect(summary).toEqual(expect.objectContaining({
@@ -531,6 +580,29 @@ describe('model boundary views', () => {
       'B002 Nike Utility Pant (bottom, olive)',
       'S009 Jordan Mocha (shoes, brown)'
     ]);
+  });
+
+  it('emits two-core overlap names as critic context without long item ids', () => {
+    const contextSnapshot = {
+      ...snapshot,
+      tasteExamples: [{ id: 'saved', name: 'Saved Look', itemIds: ['top-long-id', 'bottom-long-id', sneakerId], createdAt: 1 }],
+      items: [...snapshot.items,
+        { id: 'top-long-id', shortLabel: 'T001', slot: 'top' },
+        { id: 'bottom-long-id', shortLabel: 'B001', slot: 'bottom' },
+        { id: 'other', shortLabel: 'S010', slot: 'shoes' }
+      ]
+    };
+    const view = api.modelFacingCandidateV2_({
+      candidateId: 'c1',
+      topId: 'top-long-id',
+      bottomId: 'bottom-long-id',
+      shoeId: 'other',
+      itemIds: ['top-long-id', 'bottom-long-id', 'other']
+    }, contextSnapshot);
+    expect(view.sharesTwoCoreWith).toEqual(['Saved Look']);
+    expect(JSON.stringify(view)).not.toContain('top-long-id');
+    expect(JSON.stringify(view)).not.toContain('bottom-long-id');
+    expect(JSON.stringify(view)).not.toContain(sneakerId);
   });
 });
 
@@ -570,6 +642,7 @@ describe('prompt and response label boundary', () => {
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
         console,
+        sharedTwoCoreSavedOutfitsV2_: () => [],
         modelWeatherViewV2_: (weather: typeof richWeather) => ({
           localDate: weather.localDate,
           locationLabel: weather.locationLabel,
@@ -618,6 +691,7 @@ describe('prompt and response label boundary', () => {
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
         console,
+        sharedTwoCoreSavedOutfitsV2_: () => [],
         modelWeatherViewV2_: () => ({}),
         buildTasteSummaryV2_: () => [],
         getNumberPropertyV2_: () => 0.9,
@@ -778,6 +852,7 @@ describe('prompt and response label boundary', () => {
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
         console,
+        sharedTwoCoreSavedOutfitsV2_: () => [],
         modelWeatherViewV2_: () => ({}),
         buildTasteSummaryV2_: () => [],
         getNumberPropertyV2_: () => 0.9,
@@ -1042,6 +1117,20 @@ describe('prompt and response label boundary', () => {
     expect(source).toContain('wearability: 9–10 = zero-friction for an ordinary day');
   });
 
+  it('states the exact saved-outfit planner and critic policy while preserving the freshness anchor', () => {
+    const plannerSource = apps('Planner.gs');
+    const criticSource = apps('Critic.gs');
+    expect(plannerSource).toContain(
+      'Saved outfits are style-grammar examples, never unlabeled templates. Never reproduce the exact core trio of a saved outfit. Sharing two core pieces is acceptable only when the third piece meaningfully changes the look.'
+    );
+    expect(criticSource).toContain(
+      'Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, an exact recent repeat, an exact manual saved-outfit core trio, or material duplication of a stronger candidate.'
+    );
+    expect(criticSource).toContain(
+      '- freshness: 9–10 = a genuinely new combination of non-over-exposed items; 7–8 = familiar items in new relationships; 5–6 = leans on over-exposed items or echoes a recent look; ≤4 = barely differs from a recent email, or shares two core pieces with a saved outfit without transforming it. Verified wore/liked feedback on similar looks lifts this score.'
+    );
+  });
+
   it('returns a shuffled valid direct critic response in supplied candidate order without rewriting scores', () => {
     const candidates = criticCandidates();
     const orderedScores = candidates.map((candidate, index) => ({
@@ -1171,7 +1260,7 @@ describe('prompt and response label boundary', () => {
         modelFacingCandidatesV2_: (values: object[]) => values,
         candidateImagePartsV2_: () => [],
         replanArchetypeV2_: () => ({ archetype: 'easy', candidates: additions }),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
         weatherSafetyErrorsV2_: () => [],
         callGeminiV2_: () => ({ scores: additionScores.slice().reverse() })
       }
@@ -1218,7 +1307,7 @@ describe('prompt and response label boundary', () => {
       history: object,
       planners: object[]
     ) => ReturnType<typeof validCriticResponse>>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs'],
       'runCriticV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -1251,7 +1340,7 @@ describe('prompt and response label boundary', () => {
       history: object,
       planners: object[]
     ) => unknown>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs'],
       'runCriticV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -1277,7 +1366,7 @@ describe('prompt and response label boundary', () => {
     const criticViews = evaluateAppsScript<{
       modelFacingCriticResponseV2_: (response: unknown, snapshot: object) => object;
     }>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs'],
       '({ modelFacingCriticResponseV2_ })',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -1309,7 +1398,7 @@ describe('prompt and response label boundary', () => {
       history: object,
       planners: object[]
     ) => object>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs'],
       'runCriticV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -1334,7 +1423,7 @@ describe('prompt and response label boundary', () => {
       selectedCandidates: object[],
       critic: object
     ) => object>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs', 'Selection.gs', 'Curator.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Selection.gs', 'Curator.gs'],
       'runCuratorV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -1363,7 +1452,7 @@ describe('prompt and response label boundary', () => {
       selectedCandidates: object[],
       critic: object
     ) => object>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
@@ -1693,14 +1782,14 @@ describe('prompt and response label boundary', () => {
       selectedCandidates: object[],
       critic: object
     ) => unknown>(
-      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'FinalValidation.gs', 'Repair.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'FinalValidation.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
         console,
         modelWeatherViewV2_: () => ({}),
         buildTasteSummaryV2_: () => [],
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
         callGeminiV2_: () => {
           repairCalls += 1;
           return malformedRepair;
@@ -1723,7 +1812,7 @@ describe('prompt and response label boundary', () => {
   it('does not directly stringify full prompt-boundary objects', () => {
     const sources = ['Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'].map(apps).join('\n');
     expect(sources).not.toMatch(/JSON\.stringify\((weather|history|candidates|finalists|current|curated|invalidResponse)\)/);
-    expect(sources).not.toContain('JSON.stringify(savedTasteSignaturesV2_');
+    expect(sources).not.toContain('JSON.stringify(tasteEvidenceV2_');
     expect(apps('Repair.gs')).toContain('modelFacingCuratedV2_(');
   });
 });

@@ -315,10 +315,22 @@ describe('candidate eligibility and per-archetype ordering', () => {
     expect(finalSet(pools, scoresForPools(pools), snapshot).selectedCandidates).toBeNull();
   });
 
-  it('keeps the current saved-outfit policy and rejects two shared core items', () => {
+  it('blocks only exact manual saved core trios', () => {
     const candidate = makeCandidate('e1', 'easy', 't1', 'b1', 's1');
-    const snapshot = { ...baseSnapshot, tasteExamples: [{ id: 'saved', name: 'Saved', itemIds: ['t1', 'b1', 's4'] }] };
-    expect(finalists([candidate], [makeScore('e1')], snapshot).eligibleCountByArchetype.easy).toBe(0);
+    const transformedSnapshot = { ...baseSnapshot, tasteExamples: [{ id: 'saved', name: 'Saved', itemIds: ['t1', 'b1', 's4'] }] };
+    expect(finalists([candidate], [makeScore('e1')], transformedSnapshot).eligibleCountByArchetype.easy).toBe(1);
+
+    const exactManualSnapshot = { ...baseSnapshot, tasteExamples: [{ id: 'manual', name: 'Manual', itemIds: ['t1', 'b1', 's1'] }] };
+    expect(finalists([candidate], [makeScore('e1')], exactManualSnapshot).eligibleCountByArchetype.easy).toBe(0);
+
+    const exactAiSnapshot = { ...baseSnapshot, tasteExamples: [{ id: 'ai', name: 'AI', source: 'ai', itemIds: ['t1', 'b1', 's1'] }] };
+    expect(finalists([candidate], [makeScore('e1')], exactAiSnapshot).eligibleCountByArchetype.easy).toBe(1);
+
+    const hiddenManualSnapshot = { ...baseSnapshot, tasteExamples: [{ id: 'hidden', name: 'Hidden', seedStylist: false, itemIds: ['t1', 'b1', 's1'] }] };
+    expect(finalists([candidate], [makeScore('e1')], hiddenManualSnapshot).eligibleCountByArchetype.easy).toBe(0);
+
+    const duplicateAndLayerSnapshot = { ...baseSnapshot, tasteExamples: [{ id: 'layered', name: 'Layered', itemIds: ['t1', 't1', 'b1', 's1', 'l1'] }] };
+    expect(finalists([candidate], [makeScore('e1')], duplicateAndLayerSnapshot).eligibleCountByArchetype.easy).toBe(0);
   });
 
   it('applies cooldown only to tops and bottoms, not shoes or layers', () => {
@@ -851,7 +863,7 @@ describe('bounded targeted replan orchestration', () => {
     {
       replanArchetypeV2_: replan,
       runCriticCandidatesV2_: scoreNew,
-      savedOutfitNearCopyV2_: () => null,
+      savedOutfitExactCopyV2_: () => null,
       weatherSafetyErrorsV2_: () => [],
       console
     }

@@ -148,7 +148,7 @@ function repairCriticResponseV2_(snapshot, weather, history, candidates, invalid
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     historyGuidanceV2_(),
-    'SAVED OUTFIT SIGNATURES (near-copy reference only):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
+    'SAVED OUTFIT STYLE EVIDENCE:\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
   var repaired = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.25);
@@ -163,7 +163,7 @@ function runCriticCandidatesV2_(snapshot, weather, history, candidates) {
     'Each item profile lists primaryColorFamily, secondaryColorFamily, and accentColors verified from its photographs. Treat them as ground truth for what colors exist; use the images to judge how the colors relate.',
     'Score all ' + candidates.length + ' candidates independently on every 0–10 rubric dimension.',
     'Your scores feed a deterministic selector that applies quality floors downstream. Score each candidate faithfully against the anchors — an honest low score is more useful than a generous one. You are not responsible for ensuring any candidate qualifies.',
-    'Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, exact recent repeat, a candidate that retains two core pieces from a saved outfit, or material duplication of a stronger candidate.',
+    'Penalize weather risk heavily and disqualify clear weather mismatch, obvious color conflict, incoherent formality, uncertain item identification, an exact recent repeat, an exact manual saved-outfit core trio, or material duplication of a stronger candidate.',
     'Palette measures harmony; colorIntent measures whether the outfit has a precise, visible cross-item color idea. Score colorIntent 0–4 for generic neutral safety or a top placed over unrelated black/grey/white bottoms and shoes; 5–7 for competent anchoring without a meaningful hook; 8–10 only for a clearly observable accent echo, tonal bridge, analogous relationship, complementary contrast, or trim/material link.',
     criticScoreAnchorsV2_(),
     'Do not rewrite candidate contents or expose chain-of-thought.',
@@ -171,7 +171,7 @@ function runCriticCandidatesV2_(snapshot, weather, history, candidates) {
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     historyGuidanceV2_(),
-    'SAVED OUTFIT SIGNATURES (style evidence and near-copy reference):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
+    'SAVED OUTFIT STYLE EVIDENCE:\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
   var response = callGeminiV2_('critic', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.3);

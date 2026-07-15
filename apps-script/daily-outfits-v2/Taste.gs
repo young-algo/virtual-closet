@@ -1,6 +1,6 @@
 function coreTasteItemIdsV2_(itemIds, snapshot) {
   var items = itemMapV2_(snapshot);
-  var seen = {};
+  var seen = Object.create(null);
   return (itemIds || []).filter(function(id) {
     var item = items[id];
     if (!item || seen[id] || (item.slot !== 'top' && item.slot !== 'bottom' && item.slot !== 'shoes')) return false;
@@ -9,7 +9,7 @@ function coreTasteItemIdsV2_(itemIds, snapshot) {
   });
 }
 
-function savedTasteSignaturesV2_(snapshot) {
+function tasteEvidenceV2_(snapshot) {
   return (snapshot.tasteExamples || []).filter(function(outfit) {
     return outfit.seedStylist !== false;
   }).map(function(outfit) {
@@ -25,18 +25,37 @@ function savedTasteSignaturesV2_(snapshot) {
   }).filter(function(outfit) { return outfit.coreItemIds.length >= 2; });
 }
 
-function savedOutfitNearCopyV2_(itemIds, snapshot) {
+function manualCoreTriosV2_(snapshot) {
+  return (snapshot.tasteExamples || []).filter(function(outfit) {
+    return outfit.source !== 'ai';
+  }).map(function(outfit) {
+    return {
+      id: outfit.id,
+      name: outfit.name,
+      source: 'manual',
+      itemIds: (outfit.itemIds || []).slice(),
+      coreItemIds: coreTasteItemIdsV2_(outfit.itemIds, snapshot)
+    };
+  }).filter(function(outfit) { return outfit.coreItemIds.length === 3; });
+}
+
+function savedOutfitExactCopyV2_(itemIds, snapshot) {
   var coreIds = coreTasteItemIdsV2_(itemIds, snapshot);
-  var matches = savedTasteSignaturesV2_(snapshot).map(function(saved) {
-    var sharedCoreItemIds = coreIds.filter(function(id) { return saved.coreItemIds.indexOf(id) >= 0; });
-    return Object.assign({}, saved, { sharedCoreItemIds: sharedCoreItemIds });
-  }).filter(function(saved) { return saved.sharedCoreItemIds.length >= 2; });
-  return matches.length ? matches[0] : null;
+  return manualCoreTriosV2_(snapshot).find(function(saved) {
+    return saved.coreItemIds.every(function(id) { return coreIds.indexOf(id) >= 0; });
+  }) || null;
+}
+
+function sharedTwoCoreSavedOutfitsV2_(itemIds, snapshot) {
+  var coreIds = coreTasteItemIdsV2_(itemIds, snapshot);
+  return tasteEvidenceV2_(snapshot).filter(function(saved) {
+    return coreIds.filter(function(id) { return saved.coreItemIds.indexOf(id) >= 0; }).length === 2;
+  });
 }
 
 function buildTasteSummaryV2_(snapshot) {
   var items = itemMapV2_(snapshot);
-  return savedTasteSignaturesV2_(snapshot).map(function(outfit) {
+  return tasteEvidenceV2_(snapshot).map(function(outfit) {
     var currentItems = outfit.itemIds.map(function(id) { return items[id]; }).filter(Boolean);
     return {
       id: outfit.id,

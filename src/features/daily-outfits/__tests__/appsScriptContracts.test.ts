@@ -13,7 +13,7 @@ const evaluateAppsScript = <T>(
     ? ['Selection.gs', ...files]
     : files;
   const runtimeGlobals: Record<string, unknown> = {
-    savedOutfitNearCopyV2_: () => null,
+    savedOutfitExactCopyV2_: () => null,
     weatherSafetyErrorsV2_: () => [],
     ...globals,
     ...(globals.DAILY_V2 && typeof globals.DAILY_V2 === 'object'
@@ -51,7 +51,7 @@ const criticValidator = criticApi.validate;
 const finalValidator = new Function(`
   var DAILY_V2 = { ARCHETYPES: ['easy','polished-casual','expressive'], REQUIRED_SLOTS: ['top','bottom','shoes'] };
   function itemMapV2_(snapshot) { var map = Object.create(null); snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
-  function savedOutfitNearCopyV2_() { return null; }
+  ${apps('Taste.gs')}
   ${apps('FinalValidation.gs')}
   return validateFinalBundleV2_;
 `)() as (
@@ -382,7 +382,7 @@ const deterministicSelectionGuard = evaluateAppsScript<(
   'assertDeterministicSelectionReadyV2_',
   {
     DAILY_V2: dailySelectionRuntime,
-    savedOutfitNearCopyV2_: () => null,
+    savedOutfitExactCopyV2_: () => null,
     weatherSafetyErrorsV2_: () => [],
   },
 );
@@ -416,7 +416,7 @@ const deterministicSelectionSelectors = evaluateAppsScript<{
   '({ finalists: selectFinalistsV2_, finalSet: selectFinalSetV2_ })',
   {
     DAILY_V2: dailySelectionRuntime,
-    savedOutfitNearCopyV2_: () => null,
+    savedOutfitExactCopyV2_: () => null,
     weatherSafetyErrorsV2_: () => [],
   },
 );
@@ -493,12 +493,37 @@ describe('Apps Script contracts', () => {
     expect(plannerValidator(duplicate, 'easy', snapshot).join(' ')).toMatch(/wrong slot|repeats/);
   });
 
-  it('rejects saved-outfit near-copies and superficial planner variations', () => {
+  it('blocks exact manual core trios but permits transformed and AI-sourced saves', () => {
     const valid = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
-    const nearCopy = structuredClone(valid);
-    nearCopy.candidates[0] = { ...nearCopy.candidates[0], topId: 'top', bottomId: 'bottom', itemIds: ['top', 'bottom', 'shoe-0'] };
-    expect(plannerValidator(nearCopy, 'easy', snapshot).join(' ')).toMatch(/near-copies saved outfit/);
+    const twoOfThree = structuredClone(valid);
+    twoOfThree.candidates[0] = { ...twoOfThree.candidates[0], topId: 'top', bottomId: 'bottom', itemIds: ['top', 'bottom', 'shoe-0'] };
+    expect(plannerValidator(twoOfThree, 'easy', snapshot)).toEqual([]);
 
+    const exactManual = structuredClone(valid);
+    exactManual.candidates[0] = { ...exactManual.candidates[0], topId: 'top', bottomId: 'bottom', shoeId: 'shoe', itemIds: ['top', 'bottom', 'shoe'] };
+    expect(plannerValidator(exactManual, 'easy', snapshot).join(' ')).toMatch(/exactly copies manual saved outfit "Saved Look"/);
+
+    const aiSnapshot = { ...snapshot, tasteExamples: [{ id: 'ai-1', name: 'AI Save', itemIds: ['top', 'bottom', 'shoe'], createdAt: 1, source: 'ai' }] };
+    expect(plannerValidator(exactManual, 'easy', aiSnapshot)).toEqual([]);
+
+    const hiddenManualSnapshot = { ...snapshot, tasteExamples: [{ id: 'hidden', name: 'Hidden Manual', itemIds: ['top', 'bottom', 'shoe'], createdAt: 1, seedStylist: false }] };
+    expect(plannerValidator(exactManual, 'easy', hiddenManualSnapshot).join(' ')).toMatch(/exactly copies manual saved outfit "Hidden Manual"/);
+
+    const duplicateAndLayerSnapshot = { ...snapshot, tasteExamples: [{ id: 'duplicate', name: 'Layered Manual', itemIds: ['top', 'top', 'bottom', 'shoe', 'layer'], createdAt: 1 }] };
+    expect(plannerValidator(exactManual, 'easy', duplicateAndLayerSnapshot).join(' ')).toMatch(/exactly copies manual saved outfit "Layered Manual"/);
+
+    const onlyTwoCoreSnapshot = { ...snapshot, tasteExamples: [{ id: 'two-core', name: 'Two Core', itemIds: ['top', 'bottom', 'layer'], createdAt: 1 }] };
+    expect(plannerValidator(exactManual, 'easy', onlyTwoCoreSnapshot)).toEqual([]);
+
+    const mismatchedIds = structuredClone(exactManual);
+    mismatchedIds.candidates[0].itemIds = ['top-0', 'bottom-0', 'shoe-0'];
+    const mismatchErrors = plannerValidator(mismatchedIds, 'easy', snapshot).join(' ');
+    expect(mismatchErrors).toMatch(/itemIds does not match/);
+    expect(mismatchErrors).toMatch(/exactly copies manual saved outfit "Saved Look"/);
+  });
+
+  it('still rejects superficial variations within one planner response', () => {
+    const valid = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
     const superficial = structuredClone(valid);
     superficial.candidates[1] = { ...superficial.candidates[1], topId: 'top-0', bottomId: 'bottom-0', itemIds: ['top-0', 'bottom-0', 'shoe-1'] };
     expect(plannerValidator(superficial, 'easy', snapshot).join(' ')).toMatch(/one-core-item variation/);
@@ -1147,7 +1172,7 @@ describe('Apps Script contracts', () => {
       {
         DAILY_V2: dailySelectionRuntime,
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
       },
     );
     expect(fullBundle(baselinePending, baselineSnapshot, '2026-07-15')).toBe(true);
@@ -1170,7 +1195,7 @@ describe('Apps Script contracts', () => {
           applySnapshotSettingsV2_: (value: unknown) => value,
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-          savedOutfitNearCopyV2_: () => null,
+          savedOutfitExactCopyV2_: () => null,
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => { events.push('mail'); } },
           loadHistoryV2_: () => [],
@@ -1219,7 +1244,7 @@ describe('Apps Script contracts', () => {
         loadPendingV2_: () => structuredClone(baselinePending),
         mergeSnapshotFeedbackIntoHistoryV2_: () => { scheduledEvents.push('feedback-history'); },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
         MailApp: { sendEmail: () => { scheduledEvents.push('mail'); } },
         loadHistoryV2_: () => [],
         saveHistoryV2_: () => { scheduledEvents.push('sent-history'); },
@@ -1254,7 +1279,7 @@ describe('Apps Script contracts', () => {
             applySnapshotSettingsV2_: (value: unknown) => value,
             localDateV2_: () => '2026-07-15',
             itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-            savedOutfitNearCopyV2_: () => null,
+            savedOutfitExactCopyV2_: () => null,
             Utilities: emailUtilitiesFixture,
             MailApp: { sendEmail: () => { events.push('mail'); } },
             loadHistoryV2_: () => [],
@@ -1311,7 +1336,7 @@ describe('Apps Script contracts', () => {
             throw new Error('drift recovery advanced into generation');
           },
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-          savedOutfitNearCopyV2_: () => null,
+          savedOutfitExactCopyV2_: () => null,
           MailApp: { sendEmail: () => { events.push('mail'); } },
           loadHistoryV2_: () => [],
           saveHistoryV2_: () => { events.push('sent-history'); },
@@ -1460,7 +1485,7 @@ describe('Apps Script contracts', () => {
         applySnapshotSettingsV2_: (value: unknown) => value,
         localDateV2_: () => '2026-07-15',
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
         MailApp: { sendEmail: () => { events.push('mail'); } },
       },
     );
@@ -1476,7 +1501,7 @@ describe('Apps Script contracts', () => {
       {
         DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
       },
     );
     expect(validator).toBeTypeOf('function');
@@ -1557,7 +1582,7 @@ describe('Apps Script contracts', () => {
             applySnapshotSettingsV2_: (value: unknown) => value,
             localDateV2_: () => '2026-07-15',
             itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-            savedOutfitNearCopyV2_: () => null,
+            savedOutfitExactCopyV2_: () => null,
             Utilities: {
               base64Decode: () => [],
               newBlob: () => ({}),
@@ -1589,7 +1614,7 @@ describe('Apps Script contracts', () => {
         getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
         applySnapshotSettingsV2_: (value: unknown) => value,
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
         Utilities: {
           base64Decode: () => [],
           newBlob: () => ({}),
@@ -1776,7 +1801,7 @@ describe('Apps Script contracts', () => {
           }),
           loadPendingV2_: () => structuredClone(pendingValue),
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-          savedOutfitNearCopyV2_: () => null,
+          savedOutfitExactCopyV2_: () => null,
           sendDailyBundleNowV2_: () => { events.push('mail'); },
           recordSentBundleV2_: () => { events.push('record'); },
           saveJobStateV2_: () => undefined,
@@ -2258,7 +2283,7 @@ describe('Apps Script contracts', () => {
       {
         DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
-        savedOutfitNearCopyV2_: () => null,
+        savedOutfitExactCopyV2_: () => null,
       },
     );
     expect(fullBundle(pendingValue, snapshotValue, '2026-07-15')).toBe(false);
@@ -3058,6 +3083,25 @@ describe('Apps Script contracts', () => {
     const weather = { morningFeelsLikeF: 60, middayFeelsLikeF: 70, eveningFeelsLikeF: 60, rainExpected: false, layerGuidance: 'none' };
     const history = { exactOutfitsPrevious14Days: [], cooldownItemIds: [] };
     expect(finalValidator(curated, finalSnapshot, weather, history, selected, critic)).toEqual([]);
+
+    const twoCoreSavedSnapshot = {
+      ...finalSnapshot,
+      tasteExamples: [{ id: 'saved-two', name: 'Two Core', itemIds: [selected[0].topId, selected[0].bottomId, selected[1].shoeId] }]
+    };
+    expect(finalValidator(curated, twoCoreSavedSnapshot, weather, history, selected, critic)).toEqual([]);
+
+    const exactManualSnapshot = {
+      ...finalSnapshot,
+      tasteExamples: [{ id: 'saved-exact', name: 'Exact Manual', itemIds: selected[0].itemIds.slice() }]
+    };
+    expect(finalValidator(curated, exactManualSnapshot, weather, history, selected, critic).join(' '))
+      .toMatch(/recommendation\[0\] exactly copies manual saved outfit "Exact Manual"/);
+
+    const exactAiSnapshot = {
+      ...finalSnapshot,
+      tasteExamples: [{ id: 'saved-ai', name: 'Exact AI', source: 'ai', itemIds: selected[0].itemIds.slice() }]
+    };
+    expect(finalValidator(curated, exactAiSnapshot, weather, history, selected, critic)).toEqual([]);
 
     const duplicateSelected = structuredClone(selected);
     const duplicateCurated = structuredClone(curated);

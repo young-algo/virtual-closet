@@ -127,8 +127,8 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
       if (ownFinalValidationKeyV2_(diversityStories, story)) errors.push('final recommendations need materially different color or silhouette stories');
       diversityStories[story] = true;
     }
-    var savedNearCopy = savedOutfitNearCopyV2_(rec.itemIds || [], snapshot);
-    if (savedNearCopy) errors.push(path + ' near-copies saved outfit "' + savedNearCopy.name + '" by retaining ' + savedNearCopy.sharedCoreItemIds.length + ' core pieces');
+    var savedExactCopy = savedOutfitExactCopyV2_(rec.itemIds || [], snapshot);
+    if (savedExactCopy) errors.push(path + ' exactly copies manual saved outfit "' + savedExactCopy.name + '"');
     if (ownFinalValidationKeyV2_(historyKeys, (rec.itemIds || []).slice().sort().join('|'))) errors.push(path + ' exactly repeats a prior-14-day outfit');
     var cooldown = new Set(history.cooldownItemIds || []);
     if (candidate && (cooldown.has(candidate.topId) || cooldown.has(candidate.bottomId))) {

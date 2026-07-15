@@ -212,7 +212,7 @@ function candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, hist
     return errors;
   }
   var safeSnapshot = safeSelectionSnapshotV2_(snapshot);
-  if (savedOutfitNearCopyV2_(candidate.itemIds, safeSnapshot)) errors.push('saved-outfit near-copy');
+  if (savedOutfitExactCopyV2_(candidate.itemIds || [], safeSnapshot)) errors.push('exact manual saved-outfit copy');
   var cooldown = new Set(Array.isArray(history.cooldownItemIds) ? history.cooldownItemIds : []);
   if (cooldown.has(candidate.topId) || cooldown.has(candidate.bottomId)) {
     errors.push('yesterday top/bottom cooldown');

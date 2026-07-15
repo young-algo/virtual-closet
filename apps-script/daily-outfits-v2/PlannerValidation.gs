@@ -33,8 +33,8 @@ function validatePlannerResponseV2_(response, archetype, snapshot) {
       if (shared.length >= 2) errors.push(path + ' is only a one-core-item variation of candidate[' + previousIndex + ']');
     });
     coreSelections.push(coreIds);
-    var nearCopy = savedOutfitNearCopyV2_(coreIds, snapshot);
-    if (nearCopy) errors.push(path + ' near-copies saved outfit "' + nearCopy.name + '" by retaining ' + nearCopy.sharedCoreItemIds.length + ' core pieces');
+    var exactCopy = savedOutfitExactCopyV2_(coreIds, snapshot);
+    if (exactCopy) errors.push(path + ' exactly copies manual saved outfit "' + exactCopy.name + '"');
   });
   return errors;
 }
