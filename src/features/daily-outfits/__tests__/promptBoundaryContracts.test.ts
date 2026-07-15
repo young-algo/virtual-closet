@@ -5,6 +5,7 @@ const sneakerId = 'user_sneaker_1783863184667';
 const topId = 'user_closet_1783863184668';
 const bottomId = 'user_closet_1783863184669';
 const staleLongId = 'user_closet_1783863199999';
+const staleItemId = 'item_archived_1783863199998';
 
 const snapshot = {
   items: [
@@ -148,6 +149,41 @@ const labelPlannerResponse = (archetype = 'easy') => ({
   archetype,
   candidates: [labelCandidate(archetype)]
 });
+
+const criticCandidates = () => ['easy', 'polished-casual', 'expressive'].flatMap(archetype =>
+  Array.from({ length: 2 }, (_, index) => ({
+    ...internalCandidate(archetype),
+    candidateId: `${archetype}-${index}`
+  }))
+);
+
+const criticScore = (candidateId: string) => ({
+  candidateId,
+  weather: 9,
+  palette: 9,
+  colorIntent: 9,
+  silhouette: 9,
+  formality: 9,
+  visualInterest: 9,
+  wearability: 9,
+  freshness: 9,
+  archetypeFit: 9,
+  disqualified: false,
+  criticalDefects: [] as string[],
+  reservations: [] as string[]
+});
+
+const validCriticResponse = () => {
+  const candidates = criticCandidates();
+  return {
+    scores: candidates.map(candidate => criticScore(candidate.candidateId)),
+    finalists: {
+      easy: ['easy-0', 'easy-1'],
+      polishedCasual: ['polished-casual-0', 'polished-casual-1'],
+      expressive: ['expressive-0', 'expressive-1']
+    }
+  };
+};
 
 const api = evaluateAppsScript<{
   modelWeatherViewV2_: (weather: object) => Record<string, unknown>;
@@ -606,6 +642,110 @@ describe('prompt and response label boundary', () => {
     expect(repairCalls).toBe(4);
   });
 
+  it.each([
+    ['null candidate records', () => Array.from({ length: 5 }, () => null)],
+    ['truthy non-array candidate fields', () => Array.from({ length: 5 }, (_, index) => ({
+      candidateId: `easy-invalid-${index}`,
+      archetype: 'easy',
+      topId: `top-${index}`,
+      bottomId: `bottom-${index}`,
+      shoeId: `shoe-${index}`,
+      itemIds: { malformed: true },
+      name: 'Malformed candidate',
+      styleSummary: 'Malformed candidate summary',
+      colorStrategy: 'A deliberately long but structurally malformed color strategy.',
+      weatherSummary: 'Malformed weather summary',
+      potentialRisks: { malformed: true },
+      plannerConfidence: 0.5
+    }))]
+  ])('routes nested planner output with %s through exactly one repair', (_case, malformedCandidates) => {
+    const plannerSnapshot = {
+      items: Array.from({ length: 5 }, (_, index) => [
+        { id: `top-${index}`, shortLabel: `T10${index}`, slot: 'top', profile: {} },
+        { id: `bottom-${index}`, shortLabel: `B10${index}`, slot: 'bottom', profile: {} },
+        { id: `shoe-${index}`, shortLabel: `S10${index}`, slot: 'shoes', profile: {} }
+      ]).flat(),
+      atlasPages: [],
+      tasteExamples: []
+    };
+    const validRepair = {
+      archetype: 'easy',
+      candidates: Array.from({ length: 5 }, (_, index) => ({
+        candidateId: `easy-${index}`,
+        archetype: 'easy',
+        topId: `T10${index}`,
+        bottomId: `B10${index}`,
+        shoeId: `S10${index}`,
+        itemIds: [`T10${index}`, `B10${index}`, `S10${index}`],
+        name: `Valid candidate ${index}`,
+        styleSummary: 'The proportions align cleanly across all three pieces.',
+        colorStrategy: 'The top, bottom, and shoes share a deliberate tonal color relationship.',
+        weatherSummary: 'The pieces are comfortable across the full day.',
+        potentialRisks: [],
+        plannerConfidence: 0.9
+      }))
+    };
+    let repairCalls = 0;
+    const planner = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => Array<{ candidates: Array<{ itemIds: string[] }> }>>(
+      ['ItemIndex.gs', 'Taste.gs', 'PlannerValidation.gs', 'Planner.gs'],
+      'runAllPlannersV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        getNumberPropertyV2_: () => 0.9,
+        callGeminiBatchV2_: () => [{ archetype: 'easy', candidates: malformedCandidates() }],
+        callGeminiV2_: () => {
+          repairCalls += 1;
+          return validRepair;
+        }
+      }
+    );
+
+    const result = planner(plannerSnapshot, richWeather, richHistory);
+
+    expect(repairCalls).toBe(1);
+    expect(result[0].candidates[0].itemIds).toEqual(['top-0', 'bottom-0', 'shoe-0']);
+  });
+
+  it.each([
+    ['null candidate records', () => Array.from({ length: 5 }, () => null)],
+    ['truthy non-array candidate fields', () => Array.from({ length: 5 }, (_, index) => ({
+      ...labelCandidate(),
+      candidateId: `easy-invalid-${index}`,
+      itemIds: { malformed: true },
+      potentialRisks: { malformed: true }
+    }))]
+  ])('rejects planner repair-model output with %s without a raw TypeError', (_case, malformedCandidates) => {
+    let repairCalls = 0;
+    const planner = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object
+    ) => unknown>(
+      ['ItemIndex.gs', 'Taste.gs', 'PlannerValidation.gs', 'Planner.gs'],
+      'runAllPlannersV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        getNumberPropertyV2_: () => 0.9,
+        callGeminiBatchV2_: () => [{ archetype: 'easy', candidates: malformedCandidates() }],
+        callGeminiV2_: () => {
+          repairCalls += 1;
+          return { archetype: 'easy', candidates: malformedCandidates() };
+        }
+      }
+    );
+
+    expect(() => planner(richSnapshot, richWeather, richHistory)).toThrow(/^easy planner repair failed:/);
+    expect(repairCalls).toBe(1);
+  });
+
   it('repairs invented planner labels through closed prompts in batch and standalone flows', () => {
     const invalidCandidate = {
       ...labelCandidate(),
@@ -815,6 +955,215 @@ describe('prompt and response label boundary', () => {
     expect(source).toContain('wearability: 9–10 = zero-friction for an ordinary day');
   });
 
+  it.each([
+    ['scores containing only null', {
+      scores: [null],
+      finalists: { easy: [], polishedCasual: [], expressive: [] }
+    }],
+    ['a full score array containing null', {
+      scores: [
+        null,
+        criticScore('easy-1'),
+        criticScore('polished-casual-0'),
+        criticScore('polished-casual-1'),
+        criticScore('expressive-0'),
+        criticScore('expressive-1')
+      ],
+      finalists: validCriticResponse().finalists
+    }],
+    ['truthy non-array score and finalist fields', {
+      scores: { malformed: true },
+      finalists: { easy: { malformed: true }, polishedCasual: 'bad', expressive: null }
+    }]
+  ])('routes critic output with %s through exactly one repair', (_case, malformedCritic) => {
+    let repairCalls = 0;
+    const critic = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[]
+    ) => ReturnType<typeof validCriticResponse>>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      'runCriticV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        callGeminiV2_: (stage: string) => {
+          if (stage === 'repair') {
+            repairCalls += 1;
+            return validCriticResponse();
+          }
+          return malformedCritic;
+        }
+      }
+    );
+
+    const result = critic(richSnapshot, richWeather, richHistory, [{ candidates: criticCandidates() }]);
+
+    expect(repairCalls).toBe(1);
+    expect(result.finalists.easy).toEqual(['easy-0', 'easy-1']);
+  });
+
+  it('rejects malformed critic repair-model records with a deterministic quality-gate error', () => {
+    let repairCalls = 0;
+    const malformedRepair = validCriticResponse();
+    malformedRepair.scores[0] = null as never;
+    const critic = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[]
+    ) => unknown>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      'runCriticV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        callGeminiV2_: (stage: string) => {
+          if (stage === 'repair') {
+            repairCalls += 1;
+            return malformedRepair;
+          }
+          return { scores: [], finalists: {} };
+        }
+      }
+    );
+
+    expect(() => critic(richSnapshot, richWeather, richHistory, [{ candidates: criticCandidates() }]))
+      .toThrow(/^Critic repair failed quality gates:/);
+    expect(repairCalls).toBe(1);
+  });
+
+  it('keeps critic model views and finalist-id extraction total for malformed nested records', () => {
+    const criticViews = evaluateAppsScript<{
+      modelFacingCriticResponseV2_: (response: unknown, snapshot: object) => object;
+      criticFinalistIdsV2_: (response: unknown) => string[];
+    }>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      '({ modelFacingCriticResponseV2_, criticFinalistIdsV2_ })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console
+      }
+    );
+
+    expect(criticViews.modelFacingCriticResponseV2_({
+      scores: [null, 'bad', { candidateId: 'easy-0', criticalDefects: { malformed: true } }],
+      finalists: { easy: null, polishedCasual: { malformed: true }, expressive: ['expressive-0', null] }
+    }, richSnapshot)).toEqual({
+      scores: [{}, {}, { candidateId: 'easy-0' }],
+      finalists: { easy: [], polishedCasual: [], expressive: ['expressive-0'] }
+    });
+    expect(criticViews.criticFinalistIdsV2_(null)).toEqual([]);
+    expect(criticViews.criticFinalistIdsV2_({
+      finalists: { easy: null, polishedCasual: { malformed: true }, expressive: ['expressive-0', null] }
+    })).toEqual(['expressive-0']);
+  });
+
+  it('scrubs current and stale wardrobe ids from critic repair, curator, and final-repair prompts', () => {
+    const leakingCritic = validCriticResponse();
+    leakingCritic.scores[0] = {
+      ...leakingCritic.scores[0],
+      candidateId: `easy-0-${sneakerId}-${staleLongId}-${staleItemId}`,
+      criticalDefects: [`Current ${topId}`, `Stale ${staleLongId}`, `Stale item ${staleItemId}`, 'Useful ordinary defect prose remains.'],
+      reservations: [`Current ${sneakerId}`, `Stale ${staleLongId}`, `Stale item ${staleItemId}`, 'Useful ordinary reservation prose remains.']
+    };
+    const captured: Record<string, string> = {};
+    const critic = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[]
+    ) => object>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs'],
+      'runCriticV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        callGeminiV2_: (stage: string, parts: Array<{ text?: string }>) => {
+          if (stage === 'repair') {
+            captured.criticRepair = parts.map(part => part.text || '').join('\n');
+            return validCriticResponse();
+          }
+          return leakingCritic;
+        }
+      }
+    );
+    critic(richSnapshot, richWeather, richHistory, [{ candidates: criticCandidates() }]);
+
+    const curator = evaluateAppsScript<(
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => object>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs'],
+      'runCuratorV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          captured.curator = parts.map(part => part.text || '').join('\n');
+          return { recommendations: [] };
+        }
+      }
+    );
+    curator(richSnapshot, richWeather, richHistory, [{ candidates: criticCandidates() }], leakingCritic);
+
+    const finalRepair = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => object>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        validateFinalBundleV2_: () => [],
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          captured.finalRepair = parts.map(part => part.text || '').join('\n');
+          return { recommendations: [] };
+        }
+      }
+    );
+    finalRepair(
+      { recommendations: [] },
+      [`Current validation ${topId}`, `Stale validation ${staleLongId}`, `Stale item validation ${staleItemId}`],
+      richSnapshot,
+      richWeather,
+      richHistory,
+      [{ candidates: criticCandidates() }],
+      leakingCritic
+    );
+
+    expect(Object.keys(captured).sort()).toEqual(['criticRepair', 'curator', 'finalRepair']);
+    Object.values(captured).forEach(prompt => {
+      expect(prompt).not.toContain(sneakerId);
+      expect(prompt).not.toContain(topId);
+      expect(prompt).not.toContain(staleLongId);
+      expect(prompt).not.toContain(staleItemId);
+      expect(prompt).toContain('polished-casual-1');
+      expect(prompt).toContain('Useful ordinary defect prose remains.');
+      expect(prompt).toContain('Useful ordinary reservation prose remains.');
+    });
+  });
+
   it('uses compact curator inputs and resolves curator output immediately', () => {
     let capturedParts: Array<{ text?: string }> = [];
     const curator = evaluateAppsScript<(
@@ -891,6 +1240,46 @@ describe('prompt and response label boundary', () => {
     const result = pipeline(richSnapshot, richWeather);
     expect(validated).toEqual(malformedCurated);
     expect(repaired).toEqual(malformedCurated);
+    expect(result.curated).toEqual({ recommendations: [] });
+  });
+
+  it('routes null and non-array nested curator records into deterministic final repair', () => {
+    const malformedCurated = {
+      recommendations: [null, { itemIds: { malformed: true } }, { itemIds: 'bad' }]
+    };
+    let repaired: unknown;
+    let validationErrors: string[] = [];
+    const pipeline = evaluateAppsScript<(snapshot: object, weather: object) => { curated: { recommendations: unknown[] } }>(
+      ['ItemIndex.gs', 'Curator.gs', 'FinalValidation.gs', 'Scheduler.gs'],
+      'generationBundlePipelineV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        criticFinalistIdsV2_: (critic: ReturnType<typeof validCriticResponse>) => [
+          ...critic.finalists.easy,
+          ...critic.finalists.polishedCasual,
+          ...critic.finalists.expressive
+        ],
+        modelWeatherViewV2_: () => ({}),
+        modelFacingCriticResponseV2_: () => ({ scores: [], finalists: {} }),
+        dailyHistoryContextV2_: () => richHistory,
+        runAllPlannersV2_: () => [{ candidates: criticCandidates() }],
+        runCriticV2_: () => validCriticResponse(),
+        callGeminiV2_: () => malformedCurated,
+        savedOutfitNearCopyV2_: () => null,
+        repairFinalBundleV2_: (curated: unknown, errors: string[]) => {
+          repaired = curated;
+          validationErrors = errors;
+          return { recommendations: [] };
+        },
+        buildBundleV2_: () => ({})
+      }
+    );
+
+    const result = pipeline(richSnapshot, richWeather);
+
+    expect(validationErrors.length).toBeGreaterThan(0);
+    expect(repaired).toEqual({ recommendations: [{ itemIds: [] }, { itemIds: [] }, { itemIds: [] }] });
     expect(result.curated).toEqual({ recommendations: [] });
   });
 
@@ -1013,6 +1402,47 @@ describe('prompt and response label boundary', () => {
     expect(capturedPrompt).not.toContain('wardrobeId');
     expect(validatedResolvedResponse).toBe(true);
     expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+  });
+
+  it('rejects malformed final-repair model records with deterministic errors', () => {
+    const malformedRepair = {
+      recommendations: [null, 'bad', { itemIds: { malformed: true } }]
+    };
+    let repairCalls = 0;
+    const repairFinal = evaluateAppsScript<(
+      curated: object,
+      errors: string[],
+      snapshot: object,
+      weather: object,
+      history: object,
+      planners: object[],
+      critic: object
+    ) => unknown>(
+      ['ItemIndex.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'FinalValidation.gs', 'Repair.gs'],
+      'repairFinalBundleV2_',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        modelWeatherViewV2_: () => ({}),
+        buildTasteSummaryV2_: () => [],
+        savedOutfitNearCopyV2_: () => null,
+        callGeminiV2_: () => {
+          repairCalls += 1;
+          return malformedRepair;
+        }
+      }
+    );
+
+    expect(() => repairFinal(
+      { recommendations: [] },
+      ['exactly three final recommendations are required'],
+      richSnapshot,
+      richWeather,
+      richHistory,
+      [{ candidates: criticCandidates() }],
+      validCriticResponse()
+    )).toThrow(/^Final repair failed quality gates:/);
+    expect(repairCalls).toBe(2);
   });
 
   it('does not directly stringify full prompt-boundary objects', () => {

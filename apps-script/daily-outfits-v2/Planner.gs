@@ -72,6 +72,18 @@ function resolvePlannerResponseForValidationV2_(response, snapshot) {
   return plannerResponseCanResolveLabelsV2_(response) ? resolveLabelsV2_(response, snapshot) : response;
 }
 
+function validatePlannerResponseSafelyV2_(response, archetype, snapshot) {
+  if (response && typeof response === 'object' && !Array.isArray(response) && Array.isArray(response.candidates)) {
+    var recordsAreSafe = response.candidates.every(function(candidate) {
+      return candidate && typeof candidate === 'object' && !Array.isArray(candidate) &&
+        (candidate.itemIds === undefined || candidate.itemIds === null || Array.isArray(candidate.itemIds)) &&
+        (candidate.potentialRisks === undefined || candidate.potentialRisks === null || Array.isArray(candidate.potentialRisks));
+    });
+    if (!recordsAreSafe) return ['planner candidates must be object records with array itemIds and potentialRisks'];
+  }
+  return validatePlannerResponseV2_(response, archetype, snapshot);
+}
+
 function repairPromptStringV2_(value, snapshot) {
   if (typeof value !== 'string') return null;
   var sanitized = value;
@@ -136,7 +148,7 @@ function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, 
   parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + repairPromptErrorsV2_(errors, snapshot).join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(modelInvalidResponse) });
   var raw = callGeminiV2_('repair', parts, PLANNER_SCHEMA_V2, 0.25);
   var repaired = resolvePlannerResponseForValidationV2_(raw, snapshot);
-  var repairedErrors = validatePlannerResponseV2_(repaired, archetype, snapshot);
+  var repairedErrors = validatePlannerResponseSafelyV2_(repaired, archetype, snapshot);
   if (repairedErrors.length) throw new Error(archetype + ' planner repair failed: ' + repairedErrors.join('; '));
   return repaired;
 }
@@ -155,7 +167,7 @@ function runAllPlannersV2_(snapshot, weather, history) {
   return rawResponses.map(function(raw, index) {
     var archetype = DAILY_V2.ARCHETYPES[index];
     var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
-    var errors = validatePlannerResponseV2_(response, archetype, snapshot);
+    var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
     return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
   });
 }
@@ -167,7 +179,7 @@ function runPlannerV2(archetype) {
   var history = dailyHistoryContextV2_(weather.localDate);
   var raw = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
   var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
-  var errors = validatePlannerResponseV2_(response, archetype, snapshot);
+  var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
   return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
 }
 

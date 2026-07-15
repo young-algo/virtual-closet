@@ -23,7 +23,9 @@ var CURATOR_SCHEMA_V2 = {
 function finalistsV2_(plannerResponses, critic) {
   var byId = {};
   plannerResponses.flatMap(function(response) { return response.candidates; }).forEach(function(candidate) { byId[candidate.candidateId] = candidate; });
-  return criticFinalistIdsV2_(critic).map(function(id) { return byId[id]; });
+  return criticFinalistIdsV2_(critic).map(function(id) { return byId[id]; }).filter(function(candidate) {
+    return candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Array.isArray(candidate.itemIds);
+  });
 }
 
 function curatorResponseCanResolveLabelsV2_(response) {
@@ -40,7 +42,16 @@ function curatorResponseCanResolveLabelsV2_(response) {
 }
 
 function resolveCuratorResponseForValidationV2_(response, snapshot) {
-  return curatorResponseCanResolveLabelsV2_(response) ? resolveLabelsV2_(response, snapshot) : response;
+  if (curatorResponseCanResolveLabelsV2_(response)) return resolveLabelsV2_(response, snapshot);
+  if (!response || typeof response !== 'object' || Array.isArray(response) || !Array.isArray(response.recommendations)) return response;
+  var normalized = Object.assign({}, response);
+  normalized.recommendations = response.recommendations.map(function(recommendation) {
+    recommendation = recommendation && typeof recommendation === 'object' && !Array.isArray(recommendation) ? recommendation : {};
+    var safeRecommendation = Object.assign({}, recommendation);
+    safeRecommendation.itemIds = Array.isArray(recommendation.itemIds) ? recommendation.itemIds.slice() : [];
+    return safeRecommendation;
+  });
+  return normalized;
 }
 
 function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
@@ -53,7 +64,7 @@ function runCuratorV2_(snapshot, weather, history, plannerResponses, critic) {
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     'FINALISTS:\n' + JSON.stringify(modelFacingCandidatesV2_(finalists, snapshot)),
-    'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic))
+    'CRITIC SCORES AND COMMENTS:\n' + JSON.stringify(modelFacingCriticResponseV2_(critic, snapshot))
   ].join('\n\n');
   var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, finalists)), CURATOR_SCHEMA_V2, 0.4);
   return resolveCuratorResponseForValidationV2_(raw, snapshot);

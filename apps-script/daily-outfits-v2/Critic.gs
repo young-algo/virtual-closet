@@ -49,33 +49,55 @@ function criticScoreAnchorsV2_() {
   ].join('\n');
 }
 
-function modelFacingCriticResponseV2_(response) {
-  response = response || {};
+function modelFacingCriticResponseV2_(response, snapshot) {
+  response = response && typeof response === 'object' && !Array.isArray(response) ? response : {};
   var scoreFields = ['weather', 'palette', 'colorIntent', 'silhouette', 'formality', 'visualInterest', 'wearability', 'freshness', 'archetypeFit'];
   var scores = (Array.isArray(response.scores) ? response.scores : []).map(function(score) {
-    var view = copyStringFieldsV2_(score, {}, ['candidateId']);
+    score = score && typeof score === 'object' && !Array.isArray(score) ? score : {};
+    var view = {};
+    var candidateId = repairPromptStringV2_(score.candidateId, snapshot);
+    if (candidateId !== null) view.candidateId = candidateId;
     scoreFields.forEach(function(field) {
       if (typeof score[field] === 'number') view[field] = score[field];
     });
     if (typeof score.disqualified === 'boolean') view.disqualified = score.disqualified;
     ['criticalDefects', 'reservations'].forEach(function(field) {
-      if (Array.isArray(score[field])) view[field] = score[field].filter(function(value) { return typeof value === 'string'; });
+      if (Array.isArray(score[field])) {
+        view[field] = score[field].reduce(function(values, value) {
+          var sanitized = repairPromptStringV2_(value, snapshot);
+          if (sanitized !== null) values.push(sanitized);
+          return values;
+        }, []);
+      }
     });
     return view;
   });
-  var finalists = response.finalists || {};
+  var finalists = response.finalists && typeof response.finalists === 'object' && !Array.isArray(response.finalists) ? response.finalists : {};
+  var finalistView = function(values) {
+    return (Array.isArray(values) ? values : []).reduce(function(ids, value) {
+      var sanitized = repairPromptStringV2_(value, snapshot);
+      if (sanitized !== null) ids.push(sanitized);
+      return ids;
+    }, []);
+  };
   return {
     scores: scores,
     finalists: {
-      easy: Array.isArray(finalists.easy) ? finalists.easy.filter(function(value) { return typeof value === 'string'; }) : [],
-      polishedCasual: Array.isArray(finalists.polishedCasual) ? finalists.polishedCasual.filter(function(value) { return typeof value === 'string'; }) : [],
-      expressive: Array.isArray(finalists.expressive) ? finalists.expressive.filter(function(value) { return typeof value === 'string'; }) : []
+      easy: finalistView(finalists.easy),
+      polishedCasual: finalistView(finalists.polishedCasual),
+      expressive: finalistView(finalists.expressive)
     }
   };
 }
 
 function criticFinalistIdsV2_(response) {
-  return response.finalists.easy.concat(response.finalists.polishedCasual, response.finalists.expressive);
+  response = response && typeof response === 'object' && !Array.isArray(response) ? response : {};
+  var finalists = response.finalists && typeof response.finalists === 'object' && !Array.isArray(response.finalists) ? response.finalists : {};
+  return ['easy', 'polishedCasual', 'expressive'].reduce(function(ids, group) {
+    return ids.concat((Array.isArray(finalists[group]) ? finalists[group] : []).filter(function(value) {
+      return typeof value === 'string';
+    }));
+  }, []);
 }
 
 function criticScoreMeetsFinalFloorV2_(score) {
@@ -116,21 +138,33 @@ function validateCriticResponseV2_(response, candidates) {
   return errors;
 }
 
+function validateCriticResponseSafelyV2_(response, candidates) {
+  if (response && typeof response === 'object' && !Array.isArray(response) && Array.isArray(response.scores)) {
+    var scoresAreSafe = response.scores.every(function(score) {
+      return score && typeof score === 'object' && !Array.isArray(score) &&
+        (score.criticalDefects === undefined || score.criticalDefects === null || Array.isArray(score.criticalDefects)) &&
+        (score.reservations === undefined || score.reservations === null || Array.isArray(score.reservations));
+    });
+    if (!scoresAreSafe) return ['critic scores must be object records with array comments'];
+  }
+  return validateCriticResponseV2_(response, candidates);
+}
+
 function repairCriticResponseV2_(snapshot, weather, history, candidates, invalidResponse, errors) {
   var prompt = [
     'Repair this multimodal critic response without changing any candidate contents. Re-evaluate only where necessary and select two valid finalists per archetype.',
     'Every finalist must be non-disqualified, have weather at least 8, palette at least 7.5, colorIntent at least 8, and an average of palette, silhouette, and formality of at least 7.5. Do not inflate scores to force a result; judge the actual images and weather faithfully.',
     'ColorIntent measures a specific cross-item visual relationship, not mere absence of clashing. Black/grey/white bottoms and shoes around an unrelated top are not intentional by default. Require a visible accent echo, tonal bridge, analogous relationship, controlled contrast, or precise trim/material link.',
     criticScoreAnchorsV2_(),
-    'VALIDATION ERRORS:\n' + errors.join('\n'),
-    'INVALID CRITIC RESPONSE:\n' + JSON.stringify(modelFacingCriticResponseV2_(invalidResponse)),
+    'VALIDATION ERRORS:\n' + repairPromptErrorsV2_(errors, snapshot).join('\n'),
+    'INVALID CRITIC RESPONSE:\n' + JSON.stringify(modelFacingCriticResponseV2_(invalidResponse, snapshot)),
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     'SAVED OUTFIT SIGNATURES (near-copy reference only):\n' + JSON.stringify(buildTasteSummaryV2_(snapshot)),
     'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
   var repaired = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.25);
-  var repairedErrors = validateCriticResponseV2_(repaired, candidates);
+  var repairedErrors = validateCriticResponseSafelyV2_(repaired, candidates);
   if (repairedErrors.length) throw new Error('Critic repair failed quality gates: ' + repairedErrors.join('; '));
   return repaired;
 }
@@ -150,7 +184,7 @@ function runCriticV2_(snapshot, weather, history, plannerResponses) {
     'CANDIDATES:\n' + JSON.stringify(modelFacingCandidatesV2_(candidates, snapshot))
   ].join('\n\n');
   var response = callGeminiV2_('critic', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, candidates)), CRITIC_SCHEMA_V2, 0.3);
-  var errors = validateCriticResponseV2_(response, candidates);
+  var errors = validateCriticResponseSafelyV2_(response, candidates);
   return errors.length ? repairCriticResponseV2_(snapshot, weather, history, candidates, response, errors) : response;
 }
 
