@@ -20,6 +20,25 @@ function compareSelectionStringsV2_(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function canonicalSelectionIdListV2_(ids) {
+  if (!Array.isArray(ids) || ids.some(function(id) {
+    return typeof id !== 'string' || !id;
+  })) return null;
+  return JSON.stringify(ids.slice().sort(compareSelectionStringsV2_));
+}
+
+function selectionExactHistoryKeysV2_(history) {
+  var keys = Object.create(null);
+  var entries = history && Array.isArray(history.exactOutfitsPrevious14Days)
+    ? history.exactOutfitsPrevious14Days
+    : [];
+  entries.forEach(function(entry) {
+    var key = canonicalSelectionIdListV2_(entry && entry.itemIds);
+    if (key !== null) keys[key] = true;
+  });
+  return keys;
+}
+
 function validSelectionScoreV2_(score) {
   return Boolean(score) && typeof score === 'object' && !Array.isArray(score) &&
     typeof score.candidateId === 'string' && score.candidateId.length > 0 &&
@@ -46,10 +65,85 @@ function validSelectionCandidateV2_(candidate) {
   if (candidate.itemIds.length !== expected.length || candidate.itemIds.some(function(id) {
     return typeof id !== 'string' || !id;
   })) return false;
-  var actual = candidate.itemIds.slice().sort();
-  expected.sort();
-  if (actual.join('|') !== expected.join('|')) return false;
+  if (canonicalSelectionIdListV2_(candidate.itemIds) !== canonicalSelectionIdListV2_(expected)) return false;
   return new Set(candidate.itemIds).size === candidate.itemIds.length;
+}
+
+function validSelectionProfileNumberV2_(profile, key) {
+  return typeof profile[key] === 'number' && Number.isFinite(profile[key]);
+}
+
+function validSelectionProfileStringV2_(profile, key) {
+  return typeof profile[key] === 'string' && profile[key].length > 0;
+}
+
+function validSelectionItemProfileV2_(slot, profile) {
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return false;
+  if (slot === 'top') {
+    return validSelectionProfileNumberV2_(profile, 'warmth') &&
+      validSelectionProfileNumberV2_(profile, 'breathability') &&
+      validSelectionProfileStringV2_(profile, 'primaryColorFamily') &&
+      validSelectionProfileStringV2_(profile, 'silhouette');
+  }
+  if (slot === 'bottom') {
+    return validSelectionProfileStringV2_(profile, 'primaryColorFamily') &&
+      validSelectionProfileStringV2_(profile, 'silhouette');
+  }
+  if (slot === 'shoes') return validSelectionProfileStringV2_(profile, 'rainSafety');
+  if (slot === 'layer') return validSelectionProfileNumberV2_(profile, 'warmth');
+  return false;
+}
+
+function selectionInventoryIndexV2_(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.items)) return null;
+  var byId = Object.create(null);
+  var duplicates = Object.create(null);
+  snapshot.items.forEach(function(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+        typeof item.id !== 'string' || !item.id) return;
+    if (ownSelectionKeyV2_(byId, item.id) || ownSelectionKeyV2_(duplicates, item.id)) {
+      duplicates[item.id] = true;
+      delete byId[item.id];
+      return;
+    }
+    byId[item.id] = item;
+  });
+  return byId;
+}
+
+function selectionCandidateInventoryV2_(candidate, snapshot) {
+  if (!validSelectionCandidateV2_(candidate)) return null;
+  var items = selectionInventoryIndexV2_(snapshot);
+  if (!items) return null;
+  var required = [
+    { key: 'topId', slot: 'top' },
+    { key: 'bottomId', slot: 'bottom' },
+    { key: 'shoeId', slot: 'shoes' }
+  ];
+  if (candidate.layerId) required.push({ key: 'layerId', slot: 'layer' });
+  var resolved = { itemMap: items, top: null, bottom: null, shoe: null, layer: null };
+  for (var index = 0; index < required.length; index += 1) {
+    var reference = required[index];
+    var item = items[candidate[reference.key]];
+    if (!item || item.slot !== reference.slot || !validSelectionItemProfileV2_(reference.slot, item.profile)) {
+      return null;
+    }
+    if (reference.slot === 'shoes') resolved.shoe = item;
+    else resolved[reference.slot] = item;
+  }
+  return resolved;
+}
+
+function safeSelectionSnapshotV2_(snapshot) {
+  return Object.assign({}, snapshot, {
+    items: (snapshot && Array.isArray(snapshot.items) ? snapshot.items : []).filter(function(item) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      return item.slot !== 'shoes' || validSelectionItemProfileV2_('shoes', item.profile);
+    }),
+    tasteExamples: (snapshot && Array.isArray(snapshot.tasteExamples) ? snapshot.tasteExamples : []).filter(function(outfit) {
+      return outfit && typeof outfit === 'object' && !Array.isArray(outfit) && Array.isArray(outfit.itemIds);
+    })
+  });
 }
 
 function compositeScoreV2_(score) {
@@ -103,16 +197,21 @@ function candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, hist
     errors.push('critic score floors');
   }
   history = history && typeof history === 'object' && !Array.isArray(history) ? history : {};
-  var historyKeys = exactHistoryKeysV2_(history);
-  var historyKey = candidate.itemIds.slice().sort().join('|');
+  var historyKeys = selectionExactHistoryKeysV2_(history);
+  var historyKey = canonicalSelectionIdListV2_(candidate.itemIds);
   if (ownSelectionKeyV2_(historyKeys, historyKey)) errors.push('prior-14-day exact repeat');
-  if (savedOutfitNearCopyV2_(candidate.itemIds, snapshot)) errors.push('saved-outfit near-copy');
+  var inventory = selectionCandidateInventoryV2_(candidate, snapshot);
+  if (!inventory) {
+    errors.push('candidate contains missing, wrong-slot, or incomplete-profile inventory');
+    return errors;
+  }
+  var safeSnapshot = safeSelectionSnapshotV2_(snapshot);
+  if (savedOutfitNearCopyV2_(candidate.itemIds, safeSnapshot)) errors.push('saved-outfit near-copy');
   var cooldown = new Set(Array.isArray(history.cooldownItemIds) ? history.cooldownItemIds : []);
   if (cooldown.has(candidate.topId) || cooldown.has(candidate.bottomId)) {
     errors.push('yesterday top/bottom cooldown');
   }
-  var items = itemMapV2_(snapshot);
-  return errors.concat(weatherSafetyErrorsV2_(candidate, items, weather || {}, snapshot || {}));
+  return errors.concat(weatherSafetyErrorsV2_(candidate, inventory.itemMap, weather || {}, safeSnapshot));
 }
 
 function eligibleReplanCandidatesV2_(eligibleByArchetype, scoreIndex) {
@@ -208,6 +307,7 @@ function usableWeatherSafeShoeCountV2_(snapshot, weather) {
     var profile = item && item.profile;
     if (item && item.slot === 'shoes' && typeof item.id === 'string' && item.id &&
         profile && profile.available === true && profile.excludedFromDaily !== true &&
+        validSelectionProfileStringV2_(profile, 'rainSafety') &&
         (!rainExpected || profile.rainSafety !== 'poor')) ids.add(item.id);
   });
   return ids.size;
@@ -218,7 +318,8 @@ function credibleLayerCountV2_(snapshot) {
   (snapshot && Array.isArray(snapshot.items) ? snapshot.items : []).forEach(function(item) {
     var profile = item && item.profile;
     if (item && item.slot === 'layer' && typeof item.id === 'string' && item.id &&
-        profile && profile.available === true && profile.excludedFromDaily !== true) ids.add(item.id);
+        profile && profile.available === true && profile.excludedFromDaily !== true &&
+        validSelectionProfileNumberV2_(profile, 'warmth')) ids.add(item.id);
   });
   return ids.size;
 }
@@ -228,7 +329,6 @@ function candidateSetErrorsV2_(set, snapshot, weather) {
   if (!Array.isArray(set) || set.length !== DAILY_V2.ARCHETYPES.length) {
     return ['one candidate per archetype is required'];
   }
-  var items = itemMapV2_(snapshot);
   var seenArchetypes = Object.create(null);
   var tops = [];
   var bottoms = [];
@@ -244,32 +344,25 @@ function candidateSetErrorsV2_(set, snapshot, weather) {
       return;
     }
     seenArchetypes[candidate.archetype] = true;
-    var top = items[candidate.topId];
-    var bottom = items[candidate.bottomId];
-    var shoe = items[candidate.shoeId];
-    var layer = candidate.layerId ? items[candidate.layerId] : null;
-    if (!top || top.slot !== 'top' || !bottom || bottom.slot !== 'bottom' ||
-        !shoe || shoe.slot !== 'shoes' || (candidate.layerId && (!layer || layer.slot !== 'layer'))) {
-      errors.push('candidate contains a missing or wrong-slot item');
+    var inventory = selectionCandidateInventoryV2_(candidate, snapshot);
+    if (!inventory) {
+      errors.push('candidate contains missing, wrong-slot, or incomplete-profile inventory');
       return;
     }
+    var top = inventory.top;
+    var bottom = inventory.bottom;
+    var shoe = inventory.shoe;
+    var layer = inventory.layer;
     tops.push(top.id);
     bottoms.push(bottom.id);
     shoes.push(shoe.id);
     if (layer) layers.push(layer.id);
-    var topProfile = top.profile || {};
-    var bottomProfile = bottom.profile || {};
-    if (typeof topProfile.primaryColorFamily !== 'string' || typeof bottomProfile.primaryColorFamily !== 'string' ||
-        typeof topProfile.silhouette !== 'string' || typeof bottomProfile.silhouette !== 'string') {
-      errors.push('candidate lacks a deterministic diversity story');
-    } else {
-      stories.push(JSON.stringify([
-        topProfile.primaryColorFamily,
-        bottomProfile.primaryColorFamily,
-        topProfile.silhouette,
-        bottomProfile.silhouette
-      ]));
-    }
+    stories.push(JSON.stringify([
+      top.profile.primaryColorFamily,
+      bottom.profile.primaryColorFamily,
+      top.profile.silhouette,
+      bottom.profile.silhouette
+    ]));
   });
 
   if (Object.keys(seenArchetypes).length !== DAILY_V2.ARCHETYPES.length) {
@@ -356,8 +449,8 @@ function rankCandidateSetsV2_(sets, scores) {
     }, 0);
     if (colorLeft !== colorRight) return colorRight - colorLeft;
     return compareSelectionStringsV2_(
-      left.map(function(candidate) { return candidate.candidateId; }).join('|'),
-      right.map(function(candidate) { return candidate.candidateId; }).join('|')
+      JSON.stringify(left.map(function(candidate) { return candidate.candidateId; })),
+      JSON.stringify(right.map(function(candidate) { return candidate.candidateId; }))
     );
   });
 }

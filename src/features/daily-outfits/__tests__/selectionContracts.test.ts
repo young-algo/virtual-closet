@@ -126,6 +126,22 @@ const updateItem = (snapshot: typeof baseSnapshot, id: string, patch: Partial<It
   }) : structuredClone(existing))
 });
 
+const removeItemProfile = (snapshot: typeof baseSnapshot, id: string) => {
+  const broken = structuredClone(snapshot) as unknown as {
+    items: Array<{ id: string; profile?: Record<string, unknown> }>;
+  };
+  const selected = broken.items.find(existing => existing.id === id);
+  if (selected) delete selected.profile;
+  return broken;
+};
+
+const removeItemProfileField = (snapshot: typeof baseSnapshot, id: string, field: string) => {
+  const broken = structuredClone(snapshot);
+  const selected = broken.items.find(existing => existing.id === id);
+  if (selected) delete selected.profile[field];
+  return broken;
+};
+
 let forbiddenCalls = 0;
 const forbidden = () => {
   forbiddenCalls += 1;
@@ -243,6 +259,62 @@ describe('candidate eligibility and per-archetype ordering', () => {
     expect(finalists([candidate], [makeScore('e1')], baseSnapshot, baseWeather, history).eligibleCountByArchetype.easy).toBe(0);
   });
 
+  it('does not confuse distinct exact-history item arrays containing delimiters', () => {
+    const snapshot = {
+      ...baseSnapshot,
+      items: [
+        ...baseSnapshot.items,
+        item('a', 'top'),
+        item('a|b', 'top'),
+        item('b|c', 'bottom'),
+        item('c', 'bottom'),
+        item('d', 'shoes')
+      ]
+    };
+    const candidate = makeCandidate('pipe-history', 'easy', 'a|b', 'c', 'd');
+    const collidingHistory = {
+      exactOutfitsPrevious14Days: [{ itemIds: ['a', 'b|c', 'd'] }],
+      cooldownItemIds: []
+    };
+    expect(finalists([candidate], [makeScore(candidate.candidateId)], snapshot, baseWeather, collidingHistory)
+      .eligibleCountByArchetype.easy).toBe(1);
+  });
+
+  it('rejects a true exact-history repeat whose item ids contain delimiters', () => {
+    const snapshot = {
+      ...baseSnapshot,
+      items: [...baseSnapshot.items, item('a|b', 'top'), item('c', 'bottom'), item('d', 'shoes')]
+    };
+    const candidate = makeCandidate('pipe-exact', 'easy', 'a|b', 'c', 'd');
+    const history = {
+      exactOutfitsPrevious14Days: [{ itemIds: ['d', 'a|b', 'c'] }],
+      cooldownItemIds: []
+    };
+    expect(finalists([candidate], [makeScore(candidate.candidateId)], snapshot, baseWeather, history)
+      .eligibleCountByArchetype.easy).toBe(0);
+  });
+
+  it('rejects structurally different candidate itemIds that collide when joined', () => {
+    const snapshot = {
+      ...baseSnapshot,
+      items: [
+        ...baseSnapshot.items,
+        item('a', 'top'),
+        item('a|b', 'top'),
+        item('b|c', 'bottom'),
+        item('c', 'bottom'),
+        item('d', 'shoes')
+      ]
+    };
+    const malformed = {
+      ...makeCandidate('pipe-malformed', 'easy', 'a', 'b|c', 'd'),
+      itemIds: ['a|b', 'c', 'd']
+    };
+    expect(finalists([malformed], [makeScore(malformed.candidateId)], snapshot).eligibleCountByArchetype.easy).toBe(0);
+    const pools = onePerArchetype({ easy: malformed });
+    expect(finalSet(pools, scoresForPools(pools), snapshot).selectedCandidates).toBeNull();
+  });
+
   it('keeps the current saved-outfit policy and rejects two shared core items', () => {
     const candidate = makeCandidate('e1', 'easy', 't1', 'b1', 's1');
     const snapshot = { ...baseSnapshot, tasteExamples: [{ id: 'saved', name: 'Saved', itemIds: ['t1', 'b1', 's4'] }] };
@@ -306,6 +378,43 @@ describe('candidate eligibility and per-archetype ordering', () => {
     expect(finalists([candidate], [makeScore('e1')], snapshot, { ...baseWeather, rainExpected: true }).eligibleCountByArchetype.easy).toBe(1);
   });
 
+  it.each([
+    ['unknown topId', makeCandidate('invalid', 'easy', 'unknown-top', 'b1', 's1'), baseSnapshot, baseWeather],
+    ['unknown bottomId', makeCandidate('invalid', 'easy', 't1', 'unknown-bottom', 's1'), baseSnapshot, baseWeather],
+    ['unknown shoeId', makeCandidate('invalid', 'easy', 't1', 'b1', 'unknown-shoe'), baseSnapshot, baseWeather],
+    ['unknown layerId', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 'unknown-layer'), baseSnapshot, baseWeather],
+    ['wrong-slot topId', makeCandidate('invalid', 'easy', 's2', 'b1', 's1'), baseSnapshot, baseWeather],
+    ['wrong-slot bottomId', makeCandidate('invalid', 'easy', 't1', 't2', 's1'), baseSnapshot, baseWeather],
+    ['wrong-slot shoeId', makeCandidate('invalid', 'easy', 't1', 'b1', 't2'), baseSnapshot, baseWeather],
+    ['wrong-slot layerId', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 's2'), baseSnapshot, baseWeather],
+    ['missing top profile', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfile(baseSnapshot, 't1'), baseWeather],
+    ['missing bottom profile', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfile(baseSnapshot, 'b1'), baseWeather],
+    ['missing shoe profile', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfile(baseSnapshot, 's1'), baseWeather],
+    ['missing layer profile', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 'l1'), removeItemProfile(baseSnapshot, 'l1'), baseWeather],
+    ['missing top story color', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 't1', 'primaryColorFamily'), baseWeather],
+    ['missing bottom story silhouette', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 'b1', 'silhouette'), baseWeather],
+    ['missing top warmth', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 't1', 'warmth'), baseWeather],
+    ['missing top breathability', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 'l1'), removeItemProfileField(updateItem(baseSnapshot, 'l1', { profile: { warmth: 4 } }), 't1', 'breathability'), { ...baseWeather, middayFeelsLikeF: 80.1 }],
+    ['missing shoe rainSafety', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 's1', 'rainSafety'), { ...baseWeather, rainExpected: true }],
+    ['missing layer warmth', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 'l1'), removeItemProfileField(baseSnapshot, 'l1', 'warmth'), baseWeather]
+  ])('fails closed without throwing for %s in finalists and direct final-set selection', (_name, candidate, snapshot, weather) => {
+    const pools = onePerArchetype({ easy: candidate });
+    const scores = scoresForPools(pools);
+    expect(() => finalists([candidate], [makeScore(candidate.candidateId)], snapshot, weather)).not.toThrow();
+    expect(finalists([candidate], [makeScore(candidate.candidateId)], snapshot, weather).eligibleCountByArchetype.easy).toBe(0);
+    expect(() => finalSet(pools, scores, snapshot, weather)).not.toThrow();
+    expect(finalSet(pools, scores, snapshot, weather).selectedCandidates).toBeNull();
+  });
+
+  it('tolerates an unrelated shoe with no profile during rainy finalist safety checks', () => {
+    let snapshot = updateItem(baseSnapshot, 's1', { profile: { rainSafety: 'poor' } });
+    snapshot = removeItemProfile(snapshot, 's2') as typeof baseSnapshot;
+    const candidate = makeCandidate('rain-profile-gap', 'easy', 't1', 'b1', 's1');
+    expect(() => finalists([candidate], [makeScore(candidate.candidateId)], snapshot, { ...baseWeather, rainExpected: true })).not.toThrow();
+    expect(finalists([candidate], [makeScore(candidate.candidateId)], snapshot, { ...baseWeather, rainExpected: true })
+      .eligibleCountByArchetype.easy).toBe(0);
+  });
+
   it('orders each archetype by composite, color intent, then candidate id', () => {
     const candidates = [
       makeCandidate('composite-low', 'easy', 't1', 'b1', 's1'),
@@ -327,16 +436,41 @@ describe('candidate eligibility and per-archetype ordering', () => {
     ]);
   });
 
-  it('fails closed on malformed or duplicate score and candidate records', () => {
-    const duplicate = makeCandidate('duplicate', 'easy', 't1', 'b1', 's1');
+  it('uses a raw total string order for canonically equivalent candidate ids', () => {
+    const candidates = [
+      makeCandidate('\u00e9', 'easy', 't1', 'b1', 's1'),
+      makeCandidate('e\u0301', 'easy', 't2', 'b2', 's2')
+    ];
+    const scores = candidates.map(candidate => makeScore(candidate.candidateId));
+    expect(finalists(candidates, scores).finalistPools.easy.map(value => value.candidateId)).toEqual(['e\u0301', '\u00e9']);
+  });
+
+  it('fails closed on duplicate candidate ids when the score id is unique', () => {
+    const duplicate = makeCandidate('duplicate-candidate', 'easy', 't1', 'b1', 's1');
+    const candidates = [
+      duplicate,
+      makeCandidate('duplicate-candidate', 'easy', 't2', 'b2', 's2')
+    ];
+    expect(finalists(candidates, [makeScore('duplicate-candidate')]).eligibleCountByArchetype.easy).toBe(0);
+  });
+
+  it('fails closed on duplicate score ids when the candidate id is unique', () => {
+    const candidate = makeCandidate('duplicate-score', 'easy', 't1', 'b1', 's1');
+    expect(finalists(
+      [candidate],
+      [makeScore('duplicate-score'), makeScore('duplicate-score')]
+    ).eligibleCountByArchetype.easy).toBe(0);
+  });
+
+  it('fails closed without throwing on malformed candidate and score records', () => {
     const malformed = { candidateId: 'malformed', archetype: 'easy', itemIds: 'not-an-array' };
     expect(() => finalists(
-      [duplicate, { ...duplicate, topId: 't2', bottomId: 'b2', shoeId: 's2', itemIds: ['t2', 'b2', 's2'] }, malformed, null],
-      [makeScore('duplicate'), makeScore('duplicate'), makeScore('malformed', { palette: Number.NaN }), null]
+      [malformed, null],
+      [makeScore('malformed', { palette: Number.NaN }), null]
     )).not.toThrow();
     expect(finalists(
-      [duplicate, { ...duplicate }, malformed, null],
-      [makeScore('duplicate'), makeScore('duplicate'), makeScore('malformed', { palette: Number.NaN }), null]
+      [malformed, null],
+      [makeScore('malformed', { palette: Number.NaN }), null]
     ).eligibleCountByArchetype.easy).toBe(0);
     expect(api.compositeScoreV2_({})).toBe(Number.NEGATIVE_INFINITY);
   });
@@ -427,6 +561,33 @@ describe('final set constraints, widening, and rank order', () => {
     expect(finalSet(pools, scores, snapshot, { ...baseWeather, layerGuidance: 'required' }).selectedCandidates?.map(value => value.candidateId)).toEqual(['e1', 'p1', 'x1']);
   });
 
+  it('does not count a shoe with a missing profile in the usable-shoe scan', () => {
+    const pools = onePerArchetype({
+      'polished-casual': makeCandidate('p1', 'polished-casual', 't2', 'b2', 's1'),
+      expressive: makeCandidate('x1', 'expressive', 't3', 'b3', 's2')
+    });
+    let snapshot = structuredClone(baseSnapshot);
+    snapshot.items = snapshot.items.filter(existing => existing.slot !== 'shoes' || ['s1', 's2', 's3'].includes(existing.id));
+    snapshot = removeItemProfile(snapshot, 's3') as typeof baseSnapshot;
+    expect(() => finalSet(pools, scoresForPools(pools), snapshot)).not.toThrow();
+    expect(finalSet(pools, scoresForPools(pools), snapshot)
+      .selectedCandidates?.map(candidate => candidate.candidateId)).toEqual(['e1', 'p1', 'x1']);
+  });
+
+  it('does not count a layer with a missing profile in the credible-layer scan', () => {
+    const pools = onePerArchetype({
+      easy: makeCandidate('e1', 'easy', 't1', 'b1', 's1', 'l1'),
+      'polished-casual': makeCandidate('p1', 'polished-casual', 't2', 'b2', 's2', 'l1'),
+      expressive: makeCandidate('x1', 'expressive', 't3', 'b3', 's3', 'l1')
+    });
+    let snapshot = structuredClone(baseSnapshot);
+    snapshot.items = snapshot.items.filter(existing => existing.slot !== 'layer' || ['l1', 'l2'].includes(existing.id));
+    snapshot = removeItemProfile(snapshot, 'l2') as typeof baseSnapshot;
+    expect(() => finalSet(pools, scoresForPools(pools), snapshot, { ...baseWeather, layerGuidance: 'required' })).not.toThrow();
+    expect(finalSet(pools, scoresForPools(pools), snapshot, { ...baseWeather, layerGuidance: 'required' })
+      .selectedCandidates?.map(candidate => candidate.candidateId)).toEqual(['e1', 'p1', 'x1']);
+  });
+
   it('widens from top two to top three when the top-two matrix has no unique-shoe set', () => {
     const pools = {
       easy: [
@@ -496,7 +657,7 @@ describe('final set constraints, widening, and rank order', () => {
     expect(finalSet(pools, scores).selectedCandidates?.map(value => value.candidateId)).toEqual(['e-a', 'p-a', 'x-a']);
   });
 
-  it('breaks complete score ties by joined candidate ids', () => {
+  it('breaks complete score ties by candidate ids', () => {
     const pools = {
       easy: [makeCandidate('e-b', 'easy', 't1', 'b1', 's1'), makeCandidate('e-a', 'easy', 't2', 'b2', 's4')],
       'polished-casual': [makeCandidate('p-a', 'polished-casual', 't4', 'b4', 's2'), makeCandidate('p-b', 'polished-casual', 't5', 'b5', 's4')],
@@ -505,13 +666,48 @@ describe('final set constraints, widening, and rank order', () => {
     expect(finalSet(pools, scoresForPools(pools)).selectedCandidates?.map(value => value.candidateId).join('|')).toBe('e-a|p-a|x-a');
   });
 
-  it('fails closed on malformed or duplicate finalist candidates and scores', () => {
+  it('uses an injective total set order across genuinely permuted colliding inputs', () => {
+    const pools = {
+      easy: [
+        makeCandidate('a', 'easy', 't1', 'b1', 's1'),
+        makeCandidate('a|b', 'easy', 't2', 'b2', 's2')
+      ],
+      'polished-casual': [
+        makeCandidate('b|c', 'polished-casual', 't3', 'b3', 's2'),
+        makeCandidate('c', 'polished-casual', 't4', 'b4', 's1')
+      ],
+      expressive: [makeCandidate('d', 'expressive', 't5', 'b5', 's3')]
+    };
+    const scores = scoresForPools(pools);
+    const permutedPools = {
+      easy: pools.easy.slice().reverse(),
+      'polished-casual': pools['polished-casual'].slice().reverse(),
+      expressive: pools.expressive.slice().reverse()
+    };
+    const first = finalSet(pools, scores).selectedCandidates?.map(value => value.candidateId);
+    const permuted = finalSet(permutedPools, scores.slice().reverse()).selectedCandidates?.map(value => value.candidateId);
+    expect(first).toEqual(['a', 'b|c', 'd']);
+    expect(permuted).toEqual(first);
+  });
+
+  it('fails closed on duplicate finalist candidate ids when score ids are unique', () => {
     const pools = onePerArchetype();
     pools.easy.push({ ...pools.easy[0], topId: 't4', bottomId: 'b4', shoeId: 's4', itemIds: ['t4', 'b4', 's4'] });
     const scores = scoresForPools(pools);
-    scores.push(makeScore('e1'));
-    expect(() => finalSet(pools, scores)).not.toThrow();
     expect(finalSet(pools, scores).selectedCandidates).toBeNull();
+  });
+
+  it('fails closed on duplicate finalist score ids when candidate ids are unique', () => {
+    const pools = onePerArchetype();
+    const scores = scoresForPools(pools);
+    scores.push(makeScore('e1'));
+    expect(finalSet(pools, scores).selectedCandidates).toBeNull();
+  });
+
+  it('fails closed without throwing on malformed finalist candidates', () => {
+    const pools = onePerArchetype();
+    const scores = scoresForPools(pools);
+    expect(() => finalSet({ ...pools, easy: [null as unknown as Candidate] }, scores)).not.toThrow();
     expect(finalSet({ ...pools, easy: [null as unknown as Candidate] }, scores).selectedCandidates).toBeNull();
   });
 });
