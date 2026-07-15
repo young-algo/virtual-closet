@@ -212,6 +212,33 @@ describe('Apps Script contracts', () => {
     expect(finalValidator(curated, finalSnapshot, weather, history, selected, malformedScore).join(' '))
       .toMatch(/no eligible critic score/);
 
+    const invalidScoreShapes: Array<[string, (score: Record<string, unknown>) => void]> = [
+      ['missing metric', score => { delete score.visualInterest; }],
+      ['NaN metric', score => { score.visualInterest = Number.NaN; }],
+      ['metric below zero', score => { score.visualInterest = -0.1; }],
+      ['metric above ten', score => { score.visualInterest = 10.1; }],
+      ['non-number metric', score => { score.visualInterest = '9'; }],
+      ['non-boolean disqualified', score => { score.disqualified = 'false'; }],
+      ['non-array critical defects', score => { score.criticalDefects = 'weather'; }],
+      ['non-string critical defect', score => { score.criticalDefects = [9]; }],
+      ['non-array reservations', score => { score.reservations = 'palette'; }],
+      ['non-string reservation', score => { score.reservations = [{ issue: 'palette' }]; }]
+    ];
+    invalidScoreShapes.forEach(([label, mutate]) => {
+      const invalidScore = structuredClone(critic);
+      mutate(invalidScore.scores[0]);
+      const scoreErrors = finalValidator(curated, finalSnapshot, weather, history, selected, invalidScore)
+        .filter(error => error.includes('has no eligible critic score'));
+      expect({ label, scoreErrors }).toEqual({
+        label,
+        scoreErrors: [
+          'recommendation[0] has no eligible critic score',
+          'recommendation[1] has no eligible critic score',
+          'recommendation[2] has no eligible critic score'
+        ]
+      });
+    });
+
     const reordered = structuredClone(curated);
     reordered.recommendations[0].itemIds.reverse();
     expect(finalValidator(reordered, finalSnapshot, weather, history, selected, critic).join(' '))

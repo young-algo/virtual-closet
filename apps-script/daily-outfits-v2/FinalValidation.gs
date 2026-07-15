@@ -2,14 +2,41 @@ function ownFinalValidationKeyV2_(value, key) {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
+var FINAL_VALIDATION_SCORE_METRICS_V2_ = [
+  'colorIntent',
+  'palette',
+  'weather',
+  'archetypeFit',
+  'visualInterest',
+  'wearability',
+  'freshness',
+  'silhouette',
+  'formality'
+];
+
+function validFinalValidationScoreV2_(score) {
+  return Boolean(score) && typeof score === 'object' && !Array.isArray(score) &&
+    typeof score.candidateId === 'string' && score.candidateId.length > 0 &&
+    typeof score.disqualified === 'boolean' &&
+    Array.isArray(score.criticalDefects) && score.criticalDefects.every(function(entry) {
+      return typeof entry === 'string';
+    }) &&
+    Array.isArray(score.reservations) && score.reservations.every(function(entry) {
+      return typeof entry === 'string';
+    }) &&
+    FINAL_VALIDATION_SCORE_METRICS_V2_.every(function(metric) {
+      return typeof score[metric] === 'number' && Number.isFinite(score[metric]) &&
+        score[metric] >= 0 && score[metric] <= 10;
+    });
+}
+
 function scoreMapV2_(critic) {
   var map = Object.create(null);
   var seen = Object.create(null);
   var valid = true;
   var scores = critic && Array.isArray(critic.scores) ? critic.scores : [];
   scores.forEach(function(score) {
-    if (!score || typeof score !== 'object' || Array.isArray(score) ||
-        typeof score.candidateId !== 'string' || !score.candidateId) {
+    if (!validFinalValidationScoreV2_(score)) {
       valid = false;
       return;
     }
