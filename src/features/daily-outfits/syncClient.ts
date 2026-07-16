@@ -21,7 +21,7 @@ export interface DailyServerResponse {
   action?: string;
   message?: string;
   error?: string;
-  bundle?: DailyBundleV2;
+  bundle?: DailyBundleV2 | null;
   diagnostics?: DailyOutfitDiagnosticsV2;
   complete?: boolean;
   stage?: string;
@@ -43,6 +43,9 @@ export const callDailyServer = async (
   if (!response.ok) throw new Error(`Daily server returned HTTP ${response.status}`);
   const body = await response.json() as DailyServerResponse;
   if (!body.ok) throw new Error(body.error || body.message || 'Daily server request failed');
+  if (action === 'generateDailyBundleStepV2' && body.complete === false && body.bundle === null) {
+    return body;
+  }
   if (body.bundle !== undefined) {
     const bundle = parseDailyBundleV2(body.bundle);
     saveLastDailyBundle(bundle);
