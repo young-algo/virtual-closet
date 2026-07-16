@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Sparkles, Key, Check, Loader2, AlertCircle } from 'lucide-react';
 import { removeBackground } from '@imgly/background-removal';
 import type { ClosetItem } from './ClosetGrid';
+import { resizeImageToDataUrl } from '../utils/image';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -63,50 +64,6 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
       setPreviewUrl(URL.createObjectURL(file));
       setError('');
     }
-  };
-
-  const processAndResizeImage = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(blob);
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 500;
-        let width = img.width;
-        let height = img.height;
-        
-        if (width > height) {
-          if (width > maxDim) {
-            height *= maxDim / width;
-            width = maxDim;
-          }
-        } else {
-          if (height > maxDim) {
-            width *= maxDim / height;
-            height = maxDim;
-          }
-        }
-        
-        canvas.width = maxDim;
-        canvas.height = maxDim;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Draw solid white background to match existing items
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, maxDim, maxDim);
-          
-          // Draw centered image
-          const xOffset = (maxDim - width) / 2;
-          const yOffset = (maxDim - height) / 2;
-          ctx.drawImage(img, xOffset, yOffset, width, height);
-          
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
-        } else {
-          reject(new Error('Canvas context failed'));
-        }
-      };
-      img.onerror = (e) => reject(e);
-    });
   };
 
   const tagImageWithGemini = async (base64Image: string, key: string): Promise<any> => {
@@ -201,7 +158,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
 
     try {
       // Step 1: Prep raw original image for AI analysis
-      const base64Raw = await processAndResizeImage(selectedFile);
+      const base64Raw = await resizeImageToDataUrl(selectedFile);
 
       // Step 2: Auto-Tagging & Prompt Generation
       if (apiKey.trim()) {
@@ -234,7 +191,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
         setStatusMessage('Flattening garment layout and smoothing wrinkles...');
         try {
           const generatedFlatLayBase64 = await generateFlatLay(base64Raw, apiKey.trim());
-          finalImage = generatedFlatLayBase64;
+          const generatedResponse = await fetch(generatedFlatLayBase64);
+          finalImage = await resizeImageToDataUrl(await generatedResponse.blob());
         } catch (genErr: any) {
           console.error(genErr);
           setError(`Flattening failed: ${genErr.message || genErr}. Proceeding with isolated photo.`);
@@ -249,7 +207,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAdd
           const cleanedBlob = await removeBackground(selectedFile, {
             device: 'cpu'
           });
-          finalImage = await processAndResizeImage(cleanedBlob);
+          finalImage = await resizeImageToDataUrl(cleanedBlob);
         } catch (cleanErr) {
           console.error(cleanErr);
           // If both AI and background removal fail, use the resized original photo

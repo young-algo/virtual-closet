@@ -1,3 +1,5 @@
+import { normalizeProductImagePixels } from './backgroundNormalization';
+
 // Resize an image file to a square white-backed JPEG data URL — the storage
 // format for user-provided imagery. White backgrounds blend into the grey
 // wells via mix-blend-mode: multiply, and the cap keeps localStorage small.
@@ -34,6 +36,12 @@ export const resizeImageToDataUrl = (blob: Blob, maxDim = 500): Promise<string> 
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, maxDim, maxDim);
       ctx.drawImage(img, (maxDim - width) / 2, (maxDim - height) / 2, width, height);
+
+      const imageData = ctx.getImageData(0, 0, maxDim, maxDim);
+      const normalized = normalizeProductImagePixels(imageData.data, maxDim, maxDim);
+      imageData.data.set(normalized.pixels);
+      ctx.putImageData(imageData, 0, 0);
+
       resolve(canvas.toDataURL('image/jpeg', 0.85));
     };
     img.onerror = (e) => {
