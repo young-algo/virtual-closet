@@ -1,19 +1,27 @@
 import { saveDailySyncStatus, saveLastDailyBundle } from './storage';
-import type { DailyBundleV2, DailyClosetSnapshotV2, DailyOutfitSettingsV2, DailySyncStatusV2 } from './types';
+import type {
+  DailyBundleV2,
+  DailyClosetSnapshotV2,
+  DailyOutfitDiagnosticsV2,
+  DailyOutfitSettingsV2,
+  DailySyncStatusV2,
+} from './types';
 
 export type DailyServerAction =
   | 'syncDailySnapshotV2'
   | 'validateStoredSnapshotV2'
+  | 'getDailyOutfitDiagnosticsV2'
   | 'generateDailyBundleNowV2'
   | 'generateDailyBundleStepV2'
   | 'sendDailyTestEmailV2';
 
-interface DailyServerResponse {
+export interface DailyServerResponse {
   ok: boolean;
   action?: string;
   message?: string;
   error?: string;
   bundle?: DailyBundleV2;
+  diagnostics?: DailyOutfitDiagnosticsV2;
   complete?: boolean;
   stage?: string;
   [key: string]: unknown;

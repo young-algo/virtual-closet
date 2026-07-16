@@ -15,7 +15,7 @@ const weights = {
 };
 const allNineComposite = Object.values(weights).reduce((total, weight) => total + 9 * weight, 0);
 const daily = {
-  QUALITY_POLICY_VERSION: 3,
+  QUALITY_POLICY_VERSION: 4,
   ARCHETYPES: archetypes,
   COMPOSITE_WEIGHTS: weights,
   GENERATION_CUTOFF_HOUR: 8,
@@ -72,9 +72,10 @@ const selectionFixture = () => {
     candidates,
     critic: criticFixture(planners),
     selectedCandidates: archetypes.map((_, index) => structuredClone(candidates[index * 5])),
+    replanRounds: [] as Array<unknown>,
     selection: {
       path: 'top2',
-      deliveryMode: 'complete' as const,
+      deliveryMode: 'complete' as 'complete' | 'partial',
       selectedCount: 3,
       selectedArchetypes: archetypes.slice(),
       omittedArchetypes: [] as string[],
@@ -146,7 +147,7 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
     weatherNote: 'Breathable and comfortable across the complete forecast window.',
   }));
   const pending = {
-    qualityPolicyVersion: 3,
+    qualityPolicyVersion: 4,
     localDate,
     wardrobeFingerprint: 'wardrobe-v3',
     weather,
@@ -155,7 +156,7 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
     ...selected,
     bundle: {
       version: 2,
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate,
       weather: structuredClone(weather),
       coverage: {
@@ -179,6 +180,30 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
     };
   }
   return pending;
+};
+
+const deterministicSelectionSelectors = {
+  finalists: evaluateAppsScript<(
+    candidates: Array<Record<string, unknown>>,
+    scores: Array<Record<string, unknown>>,
+    snapshot: Record<string, unknown>,
+    weather: Record<string, unknown>,
+    history: Record<string, unknown>,
+  ) => Record<string, unknown>>(
+    ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
+    'selectFinalistsV2_',
+    { DAILY_V2: daily },
+  ),
+  exhausted: evaluateAppsScript<(
+    eligibleByArchetype: Record<string, Array<Record<string, unknown>>>,
+    scores: Array<Record<string, unknown>>,
+    snapshot: Record<string, unknown>,
+    weather: Record<string, unknown>,
+  ) => { selectedCandidates: Array<Record<string, unknown>>; feasibleSetCount: number } | null>(
+    ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
+    'selectExhaustedFinalSetV2_',
+    { DAILY_V2: daily },
+  ),
 };
 
 const snapshotFixture = (pending: ReturnType<typeof pendingFixture>) => {
@@ -255,6 +280,87 @@ const snapshotFixture = (pending: ReturnType<typeof pendingFixture>) => {
   };
 };
 
+const partialPendingFixture = (count: 1 | 2, withEncore: boolean) => {
+  const pending = pendingFixture('2026-07-14', withEncore);
+  const selectedArchetypes = count === 2 ? ['easy', 'expressive'] : ['expressive'];
+  const omittedArchetypes = archetypes.filter(archetype => !selectedArchetypes.includes(archetype));
+  const targetArchetype = omittedArchetypes[0];
+  const targetPlanner = pending.planners.find(value => value.archetype === targetArchetype);
+  if (!targetPlanner) throw new Error('partial recovery fixture target planner is missing');
+  pending.critic.scores.forEach(score => {
+    const candidate = pending.candidates.find(value => value.candidateId === score.candidateId);
+    if (candidate && omittedArchetypes.includes(candidate.archetype)) {
+      score.disqualified = true;
+      score.criticalDefects = ['fixture forces targeted re-plan'];
+    }
+  });
+  pending.replanRounds = ([1, 2] as const).map(round => {
+    const returnedCandidates = targetPlanner.candidates.map((candidate, index) => ({
+      ...structuredClone(candidate),
+      candidateId: `${targetArchetype}-duplicate-r${round}-${index}`,
+    }));
+    return {
+      round,
+      targetArchetype,
+      structurallyValid: true,
+      returnedCandidates,
+      acceptedCandidateIds: [] as string[],
+      duplicateCandidateIds: returnedCandidates.map(candidate => candidate.candidateId),
+    };
+  });
+  const snapshot = snapshotFixture(pending);
+  const finalists = deterministicSelectionSelectors.finalists(
+    pending.candidates,
+    pending.critic.scores,
+    snapshot,
+    pending.weather,
+    pending.history,
+  ) as {
+    eligibleByArchetype: Record<string, Array<Record<string, unknown>>>;
+    eligibleCountByArchetype: Record<string, number>;
+    compositeById: Record<string, number>;
+  };
+  const exhausted = deterministicSelectionSelectors.exhausted(
+    finalists.eligibleByArchetype,
+    pending.critic.scores,
+    snapshot,
+    pending.weather,
+  );
+  if (!exhausted || exhausted.selectedCandidates.length !== count) {
+    throw new Error('partial recovery fixture winner is missing');
+  }
+  pending.selectedCandidates = structuredClone(exhausted.selectedCandidates) as typeof pending.selectedCandidates;
+  pending.selection = {
+    path: 'replan-2',
+    deliveryMode: 'partial',
+    selectedCount: count,
+    selectedArchetypes,
+    omittedArchetypes,
+    eligibleCountByArchetype: {
+      easy: finalists.eligibleCountByArchetype.easy,
+      'polished-casual': finalists.eligibleCountByArchetype['polished-casual'],
+      expressive: finalists.eligibleCountByArchetype.expressive,
+    },
+    compositeById: { ...finalists.compositeById },
+    feasibleSetCount: exhausted.feasibleSetCount,
+    replannedArchetypes: [targetArchetype, targetArchetype],
+  };
+  const recommendationById = new Map(
+    (pending.bundle.recommendations as Array<{ candidateId: string }>).map(value => [value.candidateId, value]),
+  );
+  pending.bundle.coverage = {
+    deliveryMode: 'partial',
+    selectedArchetypes: selectedArchetypes.slice(),
+    omittedArchetypes: omittedArchetypes.slice(),
+  };
+  pending.bundle.recommendations = pending.selectedCandidates.map(candidate => {
+    const recommendation = recommendationById.get(candidate.candidateId);
+    if (!recommendation) throw new Error('partial recovery fixture recommendation is missing');
+    return structuredClone(recommendation);
+  });
+  return { pending, snapshot };
+};
+
 const runtimeFiles = ['ItemIndex.gs', 'Taste.gs', 'Selection.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'];
 
 const runResolvedRecovery = (
@@ -267,6 +373,7 @@ const runResolvedRecovery = (
   };
   const events: string[] = [];
   let history: Array<Record<string, unknown>> = [];
+  let state: Record<string, unknown> | null = null;
   const properties = {
     getProperty: (key: string) => values[key] ?? null,
     setProperty: (key: string, value: string) => {
@@ -278,24 +385,35 @@ const runResolvedRecovery = (
       delete values[key];
     },
   };
+  const scope = {
+    DAILY_V2: daily,
+    getDailyPropertiesV2_: () => properties,
+    loadPendingV2_: () => structuredClone(pending),
+    loadJobStateV2_: () => structuredClone(state),
+    saveJobStateV2_: (next: Record<string, unknown>) => {
+      events.push(`state:${String(next.stage)}`);
+      state = structuredClone(next);
+    },
+    loadHistoryV2_: () => structuredClone(history),
+    saveHistoryV2_: (next: Array<Record<string, unknown>>) => {
+      events.push('history');
+      history = structuredClone(next);
+    },
+    MailApp: { sendEmail: () => events.push('mail') },
+  };
   const reconcile = evaluateAppsScript<(
     sentDate: string,
     snapshotValue: ReturnType<typeof snapshotFixture>,
   ) => Record<string, unknown>>(
     runtimeFiles,
     'reconcilePersistedSentBundleV2_',
-    {
-      DAILY_V2: daily,
-      getDailyPropertiesV2_: () => properties,
-      loadPendingV2_: () => structuredClone(pending),
-      loadHistoryV2_: () => structuredClone(history),
-      saveHistoryV2_: (next: Array<Record<string, unknown>>) => {
-        events.push('history');
-        history = structuredClone(next);
-      },
-      MailApp: { sendEmail: () => events.push('mail') },
-    },
+    scope,
   );
+  const finalizeAgain = evaluateAppsScript<(
+    bundle: Record<string, unknown>,
+    snapshotValue: ReturnType<typeof snapshotFixture>,
+    stateValue: Record<string, unknown> | null,
+  ) => Record<string, unknown>>(runtimeFiles, 'finalizeSentBundleV2_', scope);
   let result: Record<string, unknown> | undefined;
   let error: Error | null = null;
   try {
@@ -303,10 +421,67 @@ const runResolvedRecovery = (
   } catch (caught) {
     error = caught as Error;
   }
-  return { error, events, history, result, values };
+  return {
+    error,
+    events,
+    finalizeAgain: () => finalizeAgain(pending.bundle, snapshot, state),
+    getHistory: () => structuredClone(history),
+    history,
+    result,
+    state,
+    values,
+  };
 };
 
 describe('resolved send recovery', () => {
+  it.each([
+    [2, false],
+    [1, true],
+  ] as const)('reconciles and idempotently records a valid %i-look partial bundle', (count, withEncore) => {
+    const { pending, snapshot } = partialPendingFixture(count, withEncore);
+    snapshot.generatedAt = 75;
+    const existingFeedback = [{ candidateId: 'older-look', value: 'liked' }];
+    const recovered = runResolvedRecovery(pending, snapshot);
+
+    expect(recovered.error).toBeNull();
+    expect(recovered.events).not.toContain('mail');
+    expect(recovered.history).toEqual([expect.objectContaining({
+      localDate: '2026-07-14',
+      recommendations: pending.bundle.recommendations,
+      encore: withEncore ? pending.bundle.encore : null,
+    })]);
+    expect(recovered.history[0].recommendations).toHaveLength(count);
+    expect(recovered.state).toMatchObject({ stage: 'sent' });
+    if (withEncore) {
+      recovered.history[0].feedback = existingFeedback;
+    }
+
+    expect(recovered.finalizeAgain).not.toThrow();
+    const finalizedHistory = recovered.getHistory();
+    expect(finalizedHistory).toHaveLength(1);
+    expect(finalizedHistory[0]).toMatchObject({
+      recommendations: pending.bundle.recommendations,
+      ...(withEncore ? { encore: pending.bundle.encore, feedback: existingFeedback } : {}),
+    });
+  });
+
+  it('rejects a partial recovery when only bundle coverage is tampered', () => {
+    const { pending, snapshot } = partialPendingFixture(2, false);
+    pending.bundle.coverage = {
+      deliveryMode: 'complete',
+      selectedArchetypes: archetypes.slice(),
+      omittedArchetypes: [],
+    };
+    snapshot.generatedAt = 75;
+
+    const recovered = runResolvedRecovery(pending, snapshot);
+
+    expect(recovered.error?.message)
+      .toBe('Resolved sent date 2026-07-14 has no matching persisted bundle to reconcile');
+    expect(recovered.events).not.toContain('history');
+    expect(recovered.events).not.toContain('mail');
+  });
+
   it('reconciles a valid marker-date bundle after a harmless snapshot resync', () => {
     const pending = pendingFixture('2026-07-14', true);
     const snapshot = snapshotFixture(pending);
@@ -370,7 +545,7 @@ describe('resolved send recovery', () => {
       const snapshot = snapshotFixture(pending);
       const currentState = {
         stage: 'idle',
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: snapshot.wardrobeFingerprint,
         attemptCounts: {},

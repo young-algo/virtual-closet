@@ -21,6 +21,13 @@ function doPost(e) {
       if (!result.ok) throw new Error(result.errors.join('; '));
       return jsonResponseV2_(Object.assign({ action: request.action, message: 'Stored snapshot passes every structural check.' }, result));
     }
+    if (request.action === 'getDailyOutfitDiagnosticsV2') {
+      return jsonResponseV2_({
+        ok: true,
+        action: request.action,
+        diagnostics: getDailyOutfitDiagnosticsV2()
+      });
+    }
     if (request.action === 'generateDailyBundleNowV2') {
       var bundle = generateDailyBundleNowV2();
       return jsonResponseV2_({ ok: true, action: request.action, message: 'Bundle generated.', bundle: bundle });

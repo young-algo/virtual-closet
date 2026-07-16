@@ -24,6 +24,7 @@ function generationBundlePipelineV2_(snapshot, weather) {
     candidates: selected.candidates,
     critic: selected.critic,
     selectedCandidates: selected.selectedCandidates,
+    replanRounds: selected.replanRounds,
     selection: selected.selection,
     curated: curated,
     bundle: buildBundleV2_(curated, snapshot, weather, history, selected.selection)
@@ -93,6 +94,7 @@ function generateDailyBundleStepV2() {
       pending.candidates = selected.candidates;
       pending.critic = selected.critic;
       pending.selectedCandidates = selected.selectedCandidates;
+      pending.replanRounds = selected.replanRounds;
       pending.selection = selected.selection;
       pending.manualStage = 'selection-ready';
     } else if (pending.manualStage === 'selection-ready') {
@@ -156,6 +158,7 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
       pending.candidates = selected.candidates;
       pending.critic = selected.critic;
       pending.selectedCandidates = selected.selectedCandidates;
+      pending.replanRounds = selected.replanRounds;
       pending.selection = selected.selection;
       pending.updatedAt = Date.now();
       state.stage = 'selection-ready';
@@ -232,7 +235,11 @@ function runDailyOutfitScheduler() {
     }
     return { ok: true, stage: state.stage };
   } catch (error) {
-    logDailySchedulerErrorV2_('Daily scheduler failed: ' + error.message);
+    var failureReason = typeof error.message === 'string' &&
+      error.message.indexOf('quality-exhausted-zero:') === 0
+      ? 'quality-exhausted-zero'
+      : 'generation-failed';
+    logDailySchedulerErrorV2_('Daily scheduler failed [' + failureReason + ']: ' + error.message);
     try {
       var timezone = config && config.timezone;
       if (!timezone) {
@@ -250,7 +257,9 @@ function runDailyOutfitScheduler() {
         if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) state.stage = 'failed';
         saveJobStateV2_(state);
       }
-      if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) sendOperationalAlertV2_('recommendation quality gate failed', error.message);
+      if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) {
+        sendOperationalAlertV2_(failureReason, error.message);
+      }
     } catch (handlerError) {
       logDailySchedulerErrorV2_('Daily scheduler error handler failed: ' + handlerError.message);
     }

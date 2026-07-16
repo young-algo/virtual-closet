@@ -100,6 +100,54 @@ const candidate = (index = 0) => ({
   candidateId: `c${index}`, archetype: 'easy', topId: `top-${index}`, bottomId: `bottom-${index}`, shoeId: `shoe-${index}`, itemIds: [`top-${index}`, `bottom-${index}`, `shoe-${index}`], name: 'A look', styleSummary: 'Coherent proportions and formality', colorStrategy: 'The blue trim in the top is echoed precisely by the blue detail in the shoes.', weatherSummary: 'Safe for the forecast', potentialRisks: [], plannerConfidence: 0.9
 });
 
+describe('authenticated diagnostics web action', () => {
+  it('returns the safe diagnostics projection only for the configured secret', () => {
+    let diagnosticsCalls = 0;
+    let capturedText = '';
+    const output = {
+      setMimeType() { return this; },
+    };
+    const post = evaluateAppsScript<(event: { postData: { contents: string } }) => unknown>(
+      ['WebApp.gs'],
+      'doPost',
+      {
+        DAILY_V2: { MAX_POST_BYTES: 100_000 },
+        getRequiredPropertyV2_: () => 'test-secret-value',
+        getDailyOutfitDiagnosticsV2: () => {
+          diagnosticsCalls += 1;
+          return { selection: { bundleReadyValidationPassed: true } };
+        },
+        ContentService: {
+          MimeType: { JSON: 'application/json' },
+          createTextOutput: (text: string) => {
+            capturedText = text;
+            return output;
+          },
+        },
+      },
+    );
+    const request = (secret: string) => {
+      capturedText = '';
+      post({
+        postData: {
+          contents: JSON.stringify({ action: 'getDailyOutfitDiagnosticsV2', secret }),
+        },
+      });
+      return JSON.parse(capturedText) as Record<string, unknown>;
+    };
+
+    expect(request('test-secret-value')).toEqual({
+      ok: true,
+      action: 'getDailyOutfitDiagnosticsV2',
+      diagnostics: { selection: { bundleReadyValidationPassed: true } },
+    });
+    expect(diagnosticsCalls).toBe(1);
+
+    expect(request('wrong-secret')).toMatchObject({ ok: false });
+    expect(diagnosticsCalls).toBe(1);
+  });
+});
+
 const dailyArchetypes = ['easy', 'polished-casual', 'expressive'];
 const dailyCompositeWeights = {
   colorIntent: 0.20,
@@ -129,9 +177,17 @@ const persistedSelectionFixture = () => {
     candidates,
     critic,
     selectedCandidates,
+    replanRounds: [] as Array<{
+      round: number;
+      targetArchetype: string;
+      structurallyValid: boolean;
+      returnedCandidates: typeof candidates;
+      acceptedCandidateIds: string[];
+      duplicateCandidateIds: string[];
+    }>,
     selection: {
       path: 'top2',
-      deliveryMode: 'complete' as const,
+      deliveryMode: 'complete' as 'complete' | 'partial',
       selectedCount: 3,
       selectedArchetypes: dailyArchetypes.slice(),
       omittedArchetypes: [] as string[],
@@ -144,7 +200,7 @@ const persistedSelectionFixture = () => {
 };
 
 const currentPendingFixture = () => ({
-  qualityPolicyVersion: 3,
+  qualityPolicyVersion: 4,
   localDate: '2026-07-15',
   wardrobeFingerprint: 'wardrobe-v3',
   weather: persistedWeatherFixture(),
@@ -252,7 +308,7 @@ const sendablePendingFixture = () => {
     weatherNote: 'Breathable and comfortable across the complete forecast window.',
   }));
   return {
-    qualityPolicyVersion: 3,
+    qualityPolicyVersion: 4,
     localDate: '2026-07-15',
     wardrobeFingerprint: 'wardrobe-v3',
     weather,
@@ -261,7 +317,7 @@ const sendablePendingFixture = () => {
     ...selected,
     bundle: {
       version: 2,
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       weather: structuredClone(weather),
       coverage: {
@@ -371,8 +427,8 @@ const mutatePersistedMetadataDimension = (
   dimension: MetadataDimension,
 ) => {
   if (dimension === 'policy') {
-    pending.qualityPolicyVersion = 2;
-    pending.bundle.qualityPolicyVersion = 2;
+    pending.qualityPolicyVersion = 3;
+    pending.bundle.qualityPolicyVersion = 3;
   } else if (dimension === 'date') {
     pending.localDate = '2026-07-14';
     pending.weather.localDate = '2026-07-14';
@@ -422,7 +478,7 @@ const rewriteSelectedOpaqueIds = (pending: ReturnType<typeof currentPendingFixtu
 };
 
 const dailySelectionRuntime = {
-  QUALITY_POLICY_VERSION: 3,
+  QUALITY_POLICY_VERSION: 4,
   ARCHETYPES: dailyArchetypes,
   COMPOSITE_WEIGHTS: dailyCompositeWeights,
 };
@@ -487,9 +543,19 @@ const deterministicSelectionSelectors = evaluateAppsScript<{
     path: 'top2' | 'top3';
     feasibleSetCount: number;
   };
+  exhausted: (
+    pools: Record<string, ReturnType<typeof persistedPlannerCandidateFixture>[]>,
+    scores: ReturnType<typeof persistedCriticFixture>['scores'],
+    snapshot: ReturnType<typeof persistedSnapshotFixture>,
+    weather: ReturnType<typeof persistedWeatherFixture>,
+  ) => {
+    selectedCandidates: ReturnType<typeof persistedPlannerCandidateFixture>[];
+    deliveryMode: 'complete' | 'partial';
+    feasibleSetCount: number;
+  } | null;
 }>(
   ['Selection.gs'],
-  '({ finalists: selectFinalistsV2_, finalSet: selectFinalSetV2_ })',
+  '({ finalists: selectFinalistsV2_, finalSet: selectFinalSetV2_, exhausted: selectExhaustedFinalSetV2_ })',
   {
     DAILY_V2: dailySelectionRuntime,
     savedOutfitExactCopyV2_: () => null,
@@ -546,21 +612,232 @@ const persistedReplanFixture = (roundCount: 1 | 2) => {
     }
   });
   replannedArchetypes.forEach(archetype => {
-    Array.from({ length: 5 }, (_, offset) => persistedPlannerCandidateFixture(archetype, offset + 5))
-      .forEach(addition => {
-        pending.candidates.push(addition);
-        pending.critic.scores.push({
-          ...structuredClone(pending.critic.scores[0]),
-          candidateId: addition.candidateId,
-          disqualified: false,
-          criticalDefects: [],
-        });
+    const returnedCandidates = Array.from(
+      { length: 5 },
+      (_, offset) => persistedPlannerCandidateFixture(archetype, offset + 5),
+    );
+    returnedCandidates.forEach(addition => {
+      pending.candidates.push(addition);
+      pending.critic.scores.push({
+        ...structuredClone(pending.critic.scores[0]),
+        candidateId: addition.candidateId,
+        disqualified: false,
+        criticalDefects: [],
       });
+    });
+    pending.replanRounds.push({
+      round: pending.replanRounds.length + 1,
+      targetArchetype: archetype,
+      structurallyValid: true,
+      returnedCandidates: structuredClone(returnedCandidates),
+      acceptedCandidateIds: returnedCandidates.map(candidate => candidate.candidateId),
+      duplicateCandidateIds: [],
+    });
   });
   const snapshotValue = persistedSnapshotFixture(pending);
   recomputePersistedSelectionFixture(pending, snapshotValue, replannedArchetypes);
   return { pending, snapshot: snapshotValue };
 };
+
+const persistedDuplicateOnlyPartialFixture = (
+  selectedArchetypes: string[] = ['easy', 'expressive'],
+) => {
+  const pending = currentPendingFixture();
+  pending.qualityPolicyVersion = 4;
+  const omittedArchetypes = dailyArchetypes.filter(archetype => !selectedArchetypes.includes(archetype));
+  const targetArchetype = omittedArchetypes[0];
+  const targetPlanner = pending.planners.find(value => value.archetype === targetArchetype);
+  if (!targetPlanner || !targetArchetype) throw new Error('fixture re-plan target is missing');
+  pending.critic.scores.forEach(score => {
+    const candidateValue = pending.candidates.find(value => value.candidateId === score.candidateId);
+    if (candidateValue && omittedArchetypes.includes(candidateValue.archetype)) {
+      score.disqualified = true;
+      score.criticalDefects = ['fixture forces targeted re-plan'];
+    }
+  });
+  pending.replanRounds = ([1, 2] as const).map(round => {
+    const returnedCandidates = targetPlanner.candidates.map((candidateValue, index) => ({
+      ...structuredClone(candidateValue),
+      candidateId: `${targetArchetype}-duplicate-r${round}-${index}`,
+    }));
+    return {
+      round,
+      targetArchetype,
+      structurallyValid: true,
+      returnedCandidates,
+      acceptedCandidateIds: [] as string[],
+      duplicateCandidateIds: returnedCandidates.map(candidateValue => candidateValue.candidateId),
+    };
+  });
+  const snapshotValue = persistedSnapshotFixture(pending);
+  const finalists = deterministicSelectionSelectors.finalists(
+    pending.candidates,
+    pending.critic.scores,
+    snapshotValue,
+    pending.weather,
+    pending.history,
+  );
+  const exhausted = deterministicSelectionSelectors.exhausted(
+    finalists.eligibleByArchetype,
+    pending.critic.scores,
+    snapshotValue,
+    pending.weather,
+  );
+  if (!exhausted || exhausted.selectedCandidates.length !== selectedArchetypes.length) {
+    throw new Error('fixture partial winner is missing');
+  }
+  pending.selectedCandidates = structuredClone(exhausted.selectedCandidates);
+  pending.selection = {
+    deliveryMode: 'partial',
+    selectedCount: selectedArchetypes.length,
+    selectedArchetypes: selectedArchetypes.slice(),
+    omittedArchetypes,
+    eligibleCountByArchetype: {
+      easy: finalists.eligibleCountByArchetype.easy,
+      'polished-casual': finalists.eligibleCountByArchetype['polished-casual'],
+      expressive: finalists.eligibleCountByArchetype.expressive,
+    },
+    compositeById: { ...finalists.compositeById },
+    path: 'replan-2',
+    feasibleSetCount: exhausted.feasibleSetCount,
+    replannedArchetypes: [targetArchetype, targetArchetype],
+  };
+  return { pending, snapshot: snapshotValue };
+};
+
+const persistedExhaustiveTrioFixture = () => {
+  const pending = currentPendingFixture();
+  pending.qualityPolicyVersion = 4;
+  const replaceShoe = (candidateValue: ReturnType<typeof persistedPlannerCandidateFixture>, shoeId: string) => {
+    candidateValue.shoeId = shoeId;
+    candidateValue.itemIds = [candidateValue.topId, candidateValue.bottomId, shoeId];
+  };
+  pending.planners.flatMap(value => value.candidates).forEach(candidateValue => {
+    const shoeId = candidateValue.archetype === 'easy'
+      ? 'easy-shared'
+      : candidateValue.archetype === 'expressive'
+        ? 'expressive-shared'
+        : candidateValue.shoeId;
+    replaceShoe(candidateValue, shoeId);
+    const persisted = pending.candidates.find(value => value.candidateId === candidateValue.candidateId);
+    if (!persisted) throw new Error('fixture initial candidate is disconnected');
+    replaceShoe(persisted, shoeId);
+  });
+  pending.critic.scores.forEach(score => {
+    if (score.candidateId.startsWith('polished-casual-')) {
+      score.disqualified = true;
+      score.criticalDefects = ['fixture forces targeted re-plan'];
+    }
+  });
+  const roundOne = Array.from({ length: 5 }, (_, index) =>
+    persistedPlannerCandidateFixture('polished-casual', index + 5));
+  const roundTwo = Array.from({ length: 5 }, (_, index) => {
+    const candidateValue = persistedPlannerCandidateFixture('polished-casual', index + 10);
+    replaceShoe(
+      candidateValue,
+      index < 3 ? 'easy-shared' : index === 3 ? 'polished-unique' : 'expressive-shared',
+    );
+    return candidateValue;
+  });
+  const scoreFor = (
+    candidateValue: ReturnType<typeof persistedPlannerCandidateFixture>,
+    value: number,
+    disqualified: boolean,
+  ) => ({
+    ...structuredClone(pending.critic.scores[0]),
+    ...Object.fromEntries(Object.keys(dailyCompositeWeights).map(metric => [metric, value])),
+    candidateId: candidateValue.candidateId,
+    disqualified,
+    criticalDefects: disqualified ? ['fixture forces targeted re-plan'] : [],
+    reservations: [] as string[],
+  });
+  pending.candidates.push(...structuredClone(roundOne), ...structuredClone(roundTwo));
+  pending.critic.scores.push(
+    ...roundOne.map(candidateValue => scoreFor(candidateValue, 9, true)),
+    ...roundTwo.map((candidateValue, index) => scoreFor(candidateValue, index < 3 ? 9 : index === 3 ? 8 : 7, false)),
+  );
+  pending.replanRounds = [roundOne, roundTwo].map((returnedCandidates, index) => ({
+    round: index + 1,
+    targetArchetype: 'polished-casual',
+    structurallyValid: true,
+    returnedCandidates: structuredClone(returnedCandidates),
+    acceptedCandidateIds: returnedCandidates.map(candidateValue => candidateValue.candidateId),
+    duplicateCandidateIds: [] as string[],
+  }));
+  const snapshotValue = persistedSnapshotFixture(pending);
+  const finalists = deterministicSelectionSelectors.finalists(
+    pending.candidates,
+    pending.critic.scores,
+    snapshotValue,
+    pending.weather,
+    pending.history,
+  );
+  const bounded = deterministicSelectionSelectors.finalSet(
+    finalists.finalistPools,
+    pending.critic.scores,
+    snapshotValue,
+    pending.weather,
+  );
+  if (bounded.selectedCandidates) throw new Error('fixture unexpectedly has a bounded trio');
+  const exhausted = deterministicSelectionSelectors.exhausted(
+    finalists.eligibleByArchetype,
+    pending.critic.scores,
+    snapshotValue,
+    pending.weather,
+  );
+  if (!exhausted || exhausted.selectedCandidates.length !== 3) {
+    throw new Error('fixture exhaustive trio is missing');
+  }
+  pending.selectedCandidates = structuredClone(exhausted.selectedCandidates);
+  pending.selection = {
+    deliveryMode: 'complete',
+    selectedCount: 3,
+    selectedArchetypes: [...dailyArchetypes],
+    omittedArchetypes: [] as string[],
+    eligibleCountByArchetype: {
+      easy: finalists.eligibleCountByArchetype.easy,
+      'polished-casual': finalists.eligibleCountByArchetype['polished-casual'],
+      expressive: finalists.eligibleCountByArchetype.expressive,
+    },
+    compositeById: { ...finalists.compositeById },
+    path: 'replan-2',
+    feasibleSetCount: exhausted.feasibleSetCount,
+    replannedArchetypes: ['polished-casual', 'polished-casual'],
+  };
+  return { pending, snapshot: snapshotValue };
+};
+
+const ledgerTamperCases: Array<[
+  string,
+  (pending: ReturnType<typeof persistedDuplicateOnlyPartialFixture>['pending']) => void,
+]> = [
+  ['noncontiguous round', pending => { pending.replanRounds[1].round = 3; }],
+  ['wrong target', pending => { pending.replanRounds[0].targetArchetype = 'expressive'; }],
+  ['reused id', pending => {
+    pending.replanRounds[0].returnedCandidates[0].candidateId = pending.candidates[0].candidateId;
+  }],
+  ['overlapping disposition', pending => {
+    pending.replanRounds[0].acceptedCandidateIds.push(
+      pending.replanRounds[0].duplicateCandidateIds[0],
+    );
+  }],
+  ['missing disposition', pending => { pending.replanRounds[0].duplicateCandidateIds.pop(); }],
+  ['reordered disposition', pending => { pending.replanRounds[0].duplicateCandidateIds.reverse(); }],
+  ['candidate universe drift', pending => {
+    pending.candidates.push(structuredClone(pending.replanRounds[0].returnedCandidates[0]));
+  }],
+  ['targeted score drift', pending => {
+    pending.critic.scores.push({
+      ...structuredClone(pending.critic.scores[0]),
+      candidateId: pending.replanRounds[0].duplicateCandidateIds[0],
+    });
+  }],
+  ['partial before two rounds', pending => { pending.replanRounds.pop(); }],
+  ['coverage count drift', pending => { pending.selection.selectedCount = 1; }],
+  ['coverage order drift', pending => { pending.selection.selectedArchetypes.reverse(); }],
+  ['omission drift', pending => { pending.selection.omittedArchetypes = ['expressive']; }],
+  ['path drift', pending => { pending.selection.path = 'top2'; }],
+];
 
 describe('Apps Script contracts', () => {
   it('rejects invented ids, wrong slots, duplicate pieces, and wrong candidate counts', () => {
@@ -693,11 +970,11 @@ describe('Apps Script contracts', () => {
     expect(weatherSafety({ itemIds: ['top-w3', 'bottom', 'safe-shoe'] }, byId, { ...weather, middayFeelsLikeF: 92.1 }, snapshot).join(' ')).toMatch(/warmth-3 top/);
   });
 
-  it('contains policy-v3 selection resume and send-after-success duplicate protections', () => {
+  it('contains policy-v4 selection resume and send-after-success duplicate protections', () => {
     const scheduler = apps('Scheduler.gs');
     const config = apps('Config.gs');
     const diagnostics = apps('Diagnostics.gs');
-    expect(config).toMatch(/QUALITY_POLICY_VERSION:\s*3/);
+    expect(config).toMatch(/QUALITY_POLICY_VERSION:\s*4/);
     expect(scheduler).toMatch(/LockService\.getScriptLock/);
     expect(scheduler).toMatch(/weather-ready/);
     expect(scheduler).toMatch(/planners-ready/);
@@ -723,7 +1000,7 @@ describe('Apps Script contracts', () => {
     });
     const basePending = {
       workflow: 'manual-v2',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       manualStage: 'critic-ready',
       localDate: '2026-07-15',
       wardrobeFingerprint: snapshot.wardrobeFingerprint,
@@ -738,7 +1015,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'generateDailyBundleStepV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => snapshot,
         loadSnapshotV2_: () => snapshot,
@@ -761,6 +1038,7 @@ describe('Apps Script contracts', () => {
       candidates: selectedResult.candidates,
       critic: selectedResult.critic,
       selectedCandidates: selectedResult.selectedCandidates,
+      replanRounds: selectedResult.replanRounds,
       selection: selectedResult.selection,
     });
 
@@ -775,7 +1053,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'generateDailyBundleStepV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => snapshot,
         loadSnapshotV2_: () => snapshot,
@@ -829,7 +1107,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'generateDailyBundleStepV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => { released = true; } }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
         loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -840,7 +1118,7 @@ describe('Apps Script contracts', () => {
           events.push('load');
           return {
             workflow: 'manual-v2',
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             manualStage: 'selection-ready',
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
@@ -870,7 +1148,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'generateDailyBundleStepV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
         loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -881,7 +1159,7 @@ describe('Apps Script contracts', () => {
           events.push('load');
           return {
             workflow: 'manual-v2',
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             manualStage: 'idle',
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
@@ -915,7 +1193,7 @@ describe('Apps Script contracts', () => {
       candidates: planners.flatMap(response => response.candidates),
     });
     const pending = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       weather: persistedWeatherFixture(),
@@ -934,7 +1212,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'advanceDailyJobV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
         Date: { now: () => clock[clockIndex++] ?? 300_000 },
         loadPendingV2_: () => structuredClone(pending),
@@ -950,7 +1228,7 @@ describe('Apps Script contracts', () => {
     );
     const selected = advanceCritic({
       stage: 'critic-ready',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: {},
@@ -960,6 +1238,7 @@ describe('Apps Script contracts', () => {
       candidates: selectedResult.candidates,
       critic: selectedResult.critic,
       selectedCandidates: selectedResult.selectedCandidates,
+      replanRounds: selectedResult.replanRounds,
       selection: selectedResult.selection,
     }));
 
@@ -973,7 +1252,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'advanceDailyJobV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
         Date: { now: () => clock[clockIndex++] ?? 300_000 },
         loadPendingV2_: () => structuredClone({ ...pending, ...selectedResult }),
@@ -994,7 +1273,7 @@ describe('Apps Script contracts', () => {
     );
     const bundled = advanceSelection({
       stage: 'selection-ready',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: {},
@@ -1006,7 +1285,7 @@ describe('Apps Script contracts', () => {
   it('rejects shallow weather, planner, and critic content in both scheduled and manual resumes', () => {
     const planners = persistedPlannersFixture();
     const validBase = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       weather: persistedWeatherFixture(),
@@ -1045,7 +1324,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Scheduler.gs'],
         'advanceDailyJobV2_',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
           Date: { now: () => clock[clockIndex++] ?? 300_000 },
           loadPendingV2_: () => structuredClone(pending),
           runAllPlannersV2_: () => { scheduledBoundaries.push('planners'); return []; },
@@ -1060,7 +1339,7 @@ describe('Apps Script contracts', () => {
       );
       const scheduledResult = advance({
         stage,
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
         attemptCounts: {},
@@ -1078,7 +1357,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Scheduler.gs'],
         'generateDailyBundleStepV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
           loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -1134,10 +1413,10 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Scheduler.gs'],
         'advanceDailyJobV2_',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
           Date: { now: () => clock[clockIndex++] ?? 300_000 },
           loadPendingV2_: () => ({
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
             weather: persistedWeatherFixture(),
@@ -1153,7 +1432,7 @@ describe('Apps Script contracts', () => {
       );
       const result = advance({
         stage: 'weather-ready',
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
         attemptCounts,
@@ -1175,7 +1454,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'advanceDailyJobV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: { now: () => 0 },
         loadPendingV2_: () => null,
         mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('history'); },
@@ -1190,7 +1469,7 @@ describe('Apps Script contracts', () => {
 
     expect(() => advance({
       stage: 'idle',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: null,
@@ -1213,7 +1492,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'runDailyOutfitScheduler',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: SchedulerDate,
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -1229,7 +1508,7 @@ describe('Apps Script contracts', () => {
         getBooleanPropertyV2_: () => false,
         loadJobStateV2_: () => ({
           stage: 'sent',
-          qualityPolicyVersion: 3,
+          qualityPolicyVersion: 4,
           localDate: '2026-07-15',
           wardrobeFingerprint: 'wardrobe-v3',
           attemptCounts: null,
@@ -1258,7 +1537,7 @@ describe('Apps Script contracts', () => {
       const events: string[] = [];
       const state = {
         stage: 'bundle-ready',
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
         attemptCounts: {},
@@ -1271,7 +1550,7 @@ describe('Apps Script contracts', () => {
         ['Scheduler.gs'],
         'runDailyOutfitScheduler',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
           DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
           LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -1286,11 +1565,11 @@ describe('Apps Script contracts', () => {
           mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
           loadJobStateV2_: () => structuredClone(state),
           loadPendingV2_: () => ({
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
             bundle: {
-              qualityPolicyVersion: 3,
+              qualityPolicyVersion: 4,
               localDate: '2026-07-15',
               wardrobeFingerprint: 'wardrobe-v3',
             },
@@ -1325,6 +1604,86 @@ describe('Apps Script contracts', () => {
     const sent = runScheduler(false);
     expect(sent.result.ok).toBe(true);
     expect(sent.events).toEqual(['send', 'set:LAST_SENT_DATE_V2', 'record']);
+  });
+
+  it.each([
+    ['quality-exhausted-zero: no eligible daily outfit recommendation remains', 'quality-exhausted-zero'],
+    ['critic transport failed', 'generation-failed'],
+  ])('classifies scheduler failure %s without saving or sending a bundle', (errorMessage, expectedReason) => {
+    const planners = persistedPlannersFixture();
+    const pending = {
+      qualityPolicyVersion: 4,
+      localDate: '2026-07-15',
+      wardrobeFingerprint: 'wardrobe-v3',
+      weather: persistedWeatherFixture(),
+      history: persistedHistoryFixture(),
+      planners,
+      critic: persistedCriticFixture(planners),
+    };
+    const snapshotValue = persistedSnapshotFixture({
+      wardrobeFingerprint: pending.wardrobeFingerprint,
+      candidates: planners.flatMap(response => response.candidates),
+    });
+    const bundleSaves: unknown[] = [];
+    const alertReasons: string[] = [];
+    const mailCalls: unknown[] = [];
+    const scheduler = evaluateAppsScript<() => { ok: boolean; error: string; stage: string }>(
+      ['Scheduler.gs'],
+      'runDailyOutfitScheduler',
+      {
+        DAILY_V2: {
+          QUALITY_POLICY_VERSION: 4,
+          ARCHETYPES: dailyArchetypes,
+          GENERATION_CUTOFF_HOUR: 8,
+          MIN_EXECUTION_REMAINING_MS: 45_000,
+        },
+        DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
+        Date: class extends Date { static now() { return 0; } },
+        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+        assertFreshSnapshotV2_: () => snapshotValue,
+        loadSnapshotV2_: () => snapshotValue,
+        applySnapshotSettingsV2_: () => ({
+          timezone: 'UTC',
+          deliveryHour: 6,
+          deliveryMinute: 45,
+          generationLeadMinutes: 75,
+        }),
+        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        localDateV2_: () => pending.localDate,
+        localMinutesV2_: () => 600,
+        getDailyPropertiesV2_: () => ({ getProperty: () => null }),
+        assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
+        getBooleanPropertyV2_: () => false,
+        loadJobStateV2_: () => ({
+          stage: 'critic-ready',
+          qualityPolicyVersion: 4,
+          localDate: pending.localDate,
+          wardrobeFingerprint: pending.wardrobeFingerprint,
+          attemptCounts: {},
+        }),
+        loadPendingV2_: () => structuredClone(pending),
+        validScheduledJobStateV2_: () => true,
+        validScheduledStageResumeV2_: () => true,
+        incrementAttemptV2_: (state: { attemptCounts: Record<string, number> }, stage: string) => {
+          state.attemptCounts[stage] = (state.attemptCounts[stage] || 0) + 1;
+        },
+        runSelectionV2_: () => { throw new Error(errorMessage); },
+        savePendingV2_: (value: unknown) => {
+          bundleSaves.push(structuredClone(value));
+          return 'pending-file';
+        },
+        saveJobStateV2_: () => 'job-file',
+        sendDailyBundleNowV2_: () => { mailCalls.push('send'); },
+        MailApp: { sendEmail: (...args: unknown[]) => { mailCalls.push(args); } },
+        sendOperationalAlertV2_: (reason: string) => { alertReasons.push(reason); },
+        console: { error: () => undefined },
+      },
+    );
+
+    expect(scheduler()).toMatchObject({ ok: false, error: errorMessage, stage: 'failed' });
+    expect(alertReasons).toEqual([expectedReason]);
+    expect(bundleSaves).toEqual([]);
+    expect(mailCalls).toEqual([]);
   });
 
   it('sets the real-send marker immediately before MailApp while test delivery never touches it', () => {
@@ -1462,7 +1821,7 @@ describe('Apps Script contracts', () => {
       let history: unknown[] = [];
       let state = {
         stage: 'bundle-ready',
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: snapshotValue.wardrobeFingerprint,
         attemptCounts: {},
@@ -1547,7 +1906,7 @@ describe('Apps Script contracts', () => {
     const run = (values: Record<string, string>) => {
       const events: string[] = [];
       const state = {
-        stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: '2026-07-15',
+        stage: 'bundle-ready', qualityPolicyVersion: 4, localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3', attemptCounts: {},
       };
       const pending = { bundle: { localDate: '2026-07-15', wardrobeFingerprint: 'wardrobe-v3' } };
@@ -1555,7 +1914,7 @@ describe('Apps Script contracts', () => {
         ['Scheduler.gs'],
         'runDailyOutfitScheduler',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
           DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
           LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -1688,7 +2047,7 @@ describe('Apps Script contracts', () => {
         }),
         getBooleanPropertyV2_: () => false,
         loadJobStateV2_: () => ({
-          stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: '2026-07-15',
+          stage: 'bundle-ready', qualityPolicyVersion: 4, localDate: '2026-07-15',
           wardrobeFingerprint: 'wardrobe-v3', attemptCounts: {},
         }),
         loadPendingV2_: () => structuredClone(baselinePending),
@@ -1803,7 +2162,7 @@ describe('Apps Script contracts', () => {
       expect({ dimension, result: scheduler() }).toMatchObject({ dimension, result: { ok: true, stage: 'idle' } });
       expect(events).toEqual([]);
       expect(savedStates).toEqual([expect.objectContaining({
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
         stage: 'idle',
@@ -1815,7 +2174,7 @@ describe('Apps Script contracts', () => {
   it('never sends or records malformed stale-policy or prior-date content through public normal or test entry points', () => {
     const snapshotValue = { wardrobeFingerprint: 'wardrobe-v3', settings: {}, items: [] };
     const bundle = {
-      qualityPolicyVersion: 2,
+      qualityPolicyVersion: 3,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       recommendations: [],
@@ -1831,19 +2190,19 @@ describe('Apps Script contracts', () => {
       },
     };
     const stalePending = {
-      qualityPolicyVersion: 2,
+      qualityPolicyVersion: 3,
       localDate: bundle.localDate,
       wardrobeFingerprint: bundle.wardrobeFingerprint,
       bundle,
     };
 
     const priorDatePending = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-14',
       wardrobeFingerprint: bundle.wardrobeFingerprint,
       bundle: {
         ...bundle,
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-14',
       },
     };
@@ -1858,7 +2217,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Email.gs'],
         exported,
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
           loadPendingV2_: () => pendingValue,
@@ -1882,11 +2241,11 @@ describe('Apps Script contracts', () => {
     const events: string[] = [];
     const snapshotValue = { wardrobeFingerprint: 'wardrobe-current', settings: {}, items: [] };
     const pendingValue = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-stale',
       bundle: {
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-stale',
         recommendations: [],
@@ -1897,7 +2256,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Email.gs'],
       'sendDailyBundleNowV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         loadSnapshotV2_: () => snapshotValue,
         assertFreshSnapshotV2_: () => snapshotValue,
@@ -1927,7 +2286,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
       'sendDailyTestEmailV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         loadSnapshotV2_: () => snapshotValue,
         assertFreshSnapshotV2_: () => snapshotValue,
         loadPendingV2_: () => pendingValue,
@@ -1950,7 +2309,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'FinalValidation.gs'],
       "(typeof validFullBundleReadyV2_ === 'function' ? validFullBundleReadyV2_ : null)",
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
         savedOutfitExactCopyV2_: () => null,
       },
@@ -2029,7 +2388,7 @@ describe('Apps Script contracts', () => {
           ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
           exported,
           {
-            DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+            DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
             loadSnapshotV2_: () => snapshotValue,
             assertFreshSnapshotV2_: () => snapshotValue,
             loadPendingV2_: () => pendingValue,
@@ -2068,7 +2427,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'FinalValidation.gs', 'Email.gs'],
       'sendDailyBundleNowV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         getDailyPropertiesV2_: () => ({ getProperty: () => null }),
         getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
         applySnapshotSettingsV2_: (value: unknown) => value,
@@ -2098,17 +2457,17 @@ describe('Apps Script contracts', () => {
     }
     const state = {
       stage: 'bundle-ready',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: {},
     };
     const stalePending = {
-      qualityPolicyVersion: 2,
+      qualityPolicyVersion: 3,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       bundle: {
-        qualityPolicyVersion: 2,
+        qualityPolicyVersion: 3,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
       },
@@ -2117,7 +2476,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'runDailyOutfitScheduler',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: SchedulerDate,
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -2161,7 +2520,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs', 'Email.gs'],
       'runDailyOutfitScheduler',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: SchedulerDate,
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-current' }),
@@ -2178,13 +2537,13 @@ describe('Apps Script contracts', () => {
         mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
         loadJobStateV2_: () => ({
           stage: 'bundle-ready',
-          qualityPolicyVersion: 3,
+          qualityPolicyVersion: 4,
           localDate: '2026-07-15',
           wardrobeFingerprint: 'wardrobe-current',
           attemptCounts: {},
         }),
         loadPendingV2_: () => ({
-          qualityPolicyVersion: 3,
+          qualityPolicyVersion: 4,
           localDate: '2026-07-15',
           wardrobeFingerprint: 'wardrobe-current',
           weather: {},
@@ -2192,7 +2551,7 @@ describe('Apps Script contracts', () => {
           planners: dailyArchetypes.map(archetype => ({ archetype })),
           critic: { scores: [{ candidateId: 'selected-easy' }] },
           bundle: {
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-stale',
             weather: {},
@@ -2236,7 +2595,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'FinalValidation.gs', 'Scheduler.gs'],
         'runDailyOutfitScheduler',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
           Date: SchedulerDate,
           LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -2253,7 +2612,7 @@ describe('Apps Script contracts', () => {
           mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('history-merge'); },
           loadJobStateV2_: () => ({
             stage: 'bundle-ready',
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
             attemptCounts: {},
@@ -2293,7 +2652,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'runDailyOutfitScheduler',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: SchedulerDate,
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -2310,7 +2669,7 @@ describe('Apps Script contracts', () => {
         mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('history-merge'); },
         loadJobStateV2_: () => ({
           stage: 'bundle-ready',
-          qualityPolicyVersion: 3,
+          qualityPolicyVersion: 4,
           localDate: '2026-07-14',
           wardrobeFingerprint: 'wardrobe-v3',
           attemptCounts: {},
@@ -2333,19 +2692,19 @@ describe('Apps Script contracts', () => {
     const validator = evaluateAppsScript<((pending: unknown, bundle: unknown) => boolean) | null>(
       ['JobState.gs'],
       "(typeof validCurrentBundleV2_ === 'function' ? validCurrentBundleV2_ : null)",
-      { DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes } },
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes } },
     );
     expect(validator).toBeTypeOf('function');
     if (!validator) return;
 
     const pending = currentPendingFixture();
     const bundle = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: pending.localDate,
       wardrobeFingerprint: pending.wardrobeFingerprint,
     };
     expect(validator(pending, bundle)).toBe(true);
-    expect(validator(pending, { ...bundle, qualityPolicyVersion: 2 })).toBe(false);
+    expect(validator(pending, { ...bundle, qualityPolicyVersion: 3 })).toBe(false);
     expect(validator(pending, { ...bundle, localDate: '2026-07-14' })).toBe(false);
     expect(validator(pending, { ...bundle, wardrobeFingerprint: 'other-wardrobe' })).toBe(false);
     expect(validator({ ...pending, localDate: 'tomorrow' }, { ...bundle, localDate: 'tomorrow' })).toBe(false);
@@ -2428,6 +2787,80 @@ describe('Apps Script contracts', () => {
       expect(() => deterministicSelectionGuard(pending, pending.localDate, pending.wardrobeFingerprint, snapshotValue))
         .toThrowError('Deterministic selection must be ready');
     });
+  });
+
+  it.each([
+    [['easy', 'expressive'], 2, ['polished-casual']],
+    [['expressive'], 1, ['easy', 'polished-casual']],
+  ] as const)('replays a duplicate-only partial selection for %j', (selected, count, omitted) => {
+    const { pending, snapshot: snapshotValue } = persistedDuplicateOnlyPartialFixture([...selected]);
+    expect(pending.replanRounds.map(round => round.targetArchetype))
+      .toEqual([pending.replanRounds[0].targetArchetype, pending.replanRounds[0].targetArchetype]);
+    expect(pending.replanRounds[0].acceptedCandidateIds).toEqual([]);
+    expect(pending.selection).toMatchObject({
+      deliveryMode: 'partial',
+      selectedCount: count,
+      selectedArchetypes: [...selected],
+      omittedArchetypes: [...omitted],
+      path: 'replan-2',
+    });
+    expect(policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toBe(pending);
+  });
+
+  it.each(ledgerTamperCases)('rejects ledger tampering: %s', (_label, mutate) => {
+    const { pending, snapshot: snapshotValue } = persistedDuplicateOnlyPartialFixture();
+    mutate(pending);
+    expect(() => policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toThrow('Deterministic selection must be ready');
+  });
+
+  it('rejects ledger rounds appended after an initial bounded winner', () => {
+    const pending = currentPendingFixture();
+    pending.qualityPolicyVersion = 4;
+    const easy = pending.planners.find(value => value.archetype === 'easy');
+    if (!easy) throw new Error('fixture easy planner is missing');
+    pending.replanRounds = ([1, 2] as const).map(round => {
+      const returnedCandidates = easy.candidates.map((candidateValue, index) => ({
+        ...structuredClone(candidateValue),
+        candidateId: `easy-false-round-${round}-${index}`,
+      }));
+      return {
+        round,
+        targetArchetype: 'easy',
+        structurallyValid: true,
+        returnedCandidates,
+        acceptedCandidateIds: [] as string[],
+        duplicateCandidateIds: returnedCandidates.map(candidateValue => candidateValue.candidateId),
+      };
+    });
+    const snapshotValue = persistedSnapshotFixture(pending);
+    expect(() => policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toThrow('Deterministic selection must be ready');
+  });
+
+  it('replays a complete trio found only by the post-round-two exhaustive search', () => {
+    const { pending, snapshot: snapshotValue } = persistedExhaustiveTrioFixture();
+    expect(pending.selectedCandidates.map(candidateValue => candidateValue.candidateId))
+      .toContain('polished-casual-candidate-13');
+    expect(policyConsistentSelectionGuard(
+      pending,
+      pending.localDate,
+      pending.wardrobeFingerprint,
+      snapshotValue,
+    )).toBe(pending);
   });
 
   it('resumes an exact-three selection with one eligible candidate per archetype', () => {
@@ -2531,7 +2964,7 @@ describe('Apps Script contracts', () => {
     )).not.toThrow();
 
     const invalids: unknown[] = [];
-    invalids.push({ ...structuredClone(valid), qualityPolicyVersion: 2 });
+    invalids.push({ ...structuredClone(valid), qualityPolicyVersion: 3 });
 
     const emptySelection = structuredClone(valid);
     emptySelection.selectedCandidates = [];
@@ -2763,11 +3196,11 @@ describe('Apps Script contracts', () => {
     ) => boolean>(
       ['JobState.gs'],
       'validPersistedStagePrerequisitesV2_',
-      { DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes } },
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes } },
     );
     const planners = persistedPlannersFixture();
     const valid = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       weather: persistedWeatherFixture(),
@@ -2814,7 +3247,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'FinalValidation.gs'],
       'validFullBundleReadyV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
         savedOutfitExactCopyV2_: () => null,
       },
@@ -2829,7 +3262,7 @@ describe('Apps Script contracts', () => {
     ) => boolean>(
       ['JobState.gs'],
       'validPersistedStagePrerequisitesV2_',
-      { DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes } },
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes } },
     );
     expect(validateStage('selection-ready', pendingValue, '2026-07-15', 'wardrobe-v3', snapshotValue)).toBe(false);
 
@@ -2838,7 +3271,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Curator.gs'],
       'runCuratorV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         loadPendingV2_: () => structuredClone(pendingValue),
         loadSnapshotV2_: () => snapshotValue,
         assertFreshSnapshotV2_: () => snapshotValue,
@@ -2873,7 +3306,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'advanceDailyJobV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: { now: () => clock[clockIndex++] ?? 300_000 },
         loadPendingV2_: () => pending,
         incrementAttemptV2_: () => undefined,
@@ -2890,7 +3323,7 @@ describe('Apps Script contracts', () => {
     );
     const state = {
       stage: 'selection-ready',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: {},
@@ -2899,7 +3332,7 @@ describe('Apps Script contracts', () => {
     expect(advance(state, { wardrobeFingerprint: 'wardrobe-v3' }, 0)).toMatchObject({
       state: {
         stage: 'idle',
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
         attemptCounts: {},
@@ -2908,7 +3341,7 @@ describe('Apps Script contracts', () => {
     });
     expect(savedStates).toContainEqual(expect.objectContaining({
       stage: 'idle',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
     }));
@@ -2917,7 +3350,7 @@ describe('Apps Script contracts', () => {
 
   it('resets every non-idle scheduled stage with obviously malformed prerequisites', () => {
     const basePending = {
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
     };
@@ -2944,7 +3377,7 @@ describe('Apps Script contracts', () => {
           planners: dailyArchetypes.map(archetype => ({ archetype })),
           critic: { scores: [{ candidateId: 'selected-easy' }] },
           bundle: {
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
           },
@@ -2963,7 +3396,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Scheduler.gs'],
         'advanceDailyJobV2_',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
           Date: { now: () => 0 },
           loadPendingV2_: () => structuredClone(pending),
           incrementAttemptV2_: () => undefined,
@@ -2980,7 +3413,7 @@ describe('Apps Script contracts', () => {
 
       const result = advance({
         stage,
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
         attemptCounts: {},
@@ -2988,7 +3421,7 @@ describe('Apps Script contracts', () => {
       expect({ stage, result: result.state.stage, stageCalls }).toEqual({ stage, result: 'idle', stageCalls: [] });
       expect(savedStates).toContainEqual(expect.objectContaining({
         stage: 'idle',
-        qualityPolicyVersion: 3,
+        qualityPolicyVersion: 4,
         localDate: '2026-07-15',
         wardrobeFingerprint: 'wardrobe-v3',
       }));
@@ -3005,10 +3438,10 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'advanceDailyJobV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: { now: () => 0 },
         loadPendingV2_: () => ({
-          qualityPolicyVersion: 3,
+          qualityPolicyVersion: 4,
           localDate: '2026-07-15',
           wardrobeFingerprint: 'wardrobe-v3',
           weather: {},
@@ -3025,7 +3458,7 @@ describe('Apps Script contracts', () => {
 
     const result = advance({
       stage: 'weather-ready',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: null,
@@ -3047,7 +3480,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'runDailyOutfitScheduler',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, GENERATION_CUTOFF_HOUR: 8, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: SchedulerDate,
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -3074,7 +3507,7 @@ describe('Apps Script contracts', () => {
     expect(scheduler()).toMatchObject({ ok: true, stage: 'idle' });
     expect(savedStates).toContainEqual(expect.objectContaining({
       stage: 'idle',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       localDate: '2026-07-15',
       wardrobeFingerprint: 'wardrobe-v3',
       attemptCounts: {},
@@ -3088,7 +3521,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Scheduler.gs'],
       'generateDailyBundleStepV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
         loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
@@ -3106,7 +3539,7 @@ describe('Apps Script contracts', () => {
 
     expect(generate()).toEqual({ complete: false, stage: 'weather-ready', bundle: null });
     expect(curatorCalls).toBe(0);
-    expect(persisted).toMatchObject({ qualityPolicyVersion: 3, manualStage: 'weather-ready' });
+    expect(persisted).toMatchObject({ qualityPolicyVersion: 4, manualStage: 'weather-ready' });
   });
 
   it('returns only safe selection diagnostics and stage attempt counts', () => {
@@ -3120,7 +3553,7 @@ describe('Apps Script contracts', () => {
     });
     const state = {
       localDate: '2026-07-15',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       stage: 'selection-ready',
       startedAt: 100,
       updatedAt: 200,
@@ -3158,7 +3591,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Diagnostics.gs'],
       'getDailyOutfitDiagnosticsV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         loadSnapshotV2_: () => currentSnapshot,
         validateStoredSnapshotV2: () => snapshotValidation,
         loadJobStateV2_: () => state,
@@ -3179,17 +3612,26 @@ describe('Apps Script contracts', () => {
     expect(result.snapshot).not.toBe(snapshotValidation);
     expect(result.job).toEqual({
       localDate: '2026-07-15',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       stage: 'selection-ready',
       startedAt: 100,
       updatedAt: 200,
     });
     expect(result.job).not.toBe(state);
     expect(result.selection).toEqual({
+      deliveryMode: 'complete',
+      selectedCount: 3,
+      selectedArchetypes: dailyArchetypes,
+      omittedArchetypes: [],
       path: 'top2',
       eligibleCountByArchetype: { easy: 1, 'polished-casual': 1, expressive: 1 },
       feasibleSetCount: 1,
       replannedArchetypes: [],
+      replanRounds: [],
+      extremeHeatPolishedCasualActive: false,
+      bundleReadyValidationPassed: false,
+      recommendationSelectionOrderMatches: false,
+      coverageSelectionOrderMatches: false,
     });
     expect(result.attemptCounts).toEqual({ 'critic-ready': 2, 'selection-ready-error': 1 });
     expect(result.attemptCounts).not.toBe(attemptCounts);
@@ -3206,6 +3648,49 @@ describe('Apps Script contracts', () => {
     expect(serialized).not.toContain('bundleFileId');
   });
 
+  it('projects only redacted coverage and boolean bundle parity for a ready bundle', () => {
+    const pending = sendablePendingFixture();
+    const snapshotValue = sendableSnapshotFixture();
+    const diagnostics = evaluateAppsScript<() => Record<string, unknown>>(
+      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs', 'JobState.gs', 'Diagnostics.gs'],
+      'getDailyOutfitDiagnosticsV2',
+      {
+        DAILY_V2: dailySelectionRuntime,
+        loadSnapshotV2_: () => snapshotValue,
+        validateStoredSnapshotV2: () => ({ ok: true, generatedAt: 50, itemCount: 45, atlasPageCount: 5 }),
+        loadJobStateV2_: () => ({
+          localDate: pending.localDate,
+          qualityPolicyVersion: 4,
+          stage: 'bundle-ready',
+          wardrobeFingerprint: pending.wardrobeFingerprint,
+          attemptCounts: {},
+        }),
+        loadPendingV2_: () => pending,
+        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        applySnapshotSettingsV2_: (config: unknown) => config,
+        localDateV2_: () => pending.localDate,
+        getDailyPropertiesV2_: () => ({ getProperty: () => null }),
+      },
+    );
+
+    const result = diagnostics();
+    expect(result.selection).toMatchObject({
+      deliveryMode: 'complete',
+      selectedCount: 3,
+      selectedArchetypes: dailyArchetypes,
+      omittedArchetypes: [],
+      bundleReadyValidationPassed: true,
+      recommendationSelectionOrderMatches: true,
+      coverageSelectionOrderMatches: true,
+    });
+    const serialized = JSON.stringify(result.selection);
+    pending.selectedCandidates.forEach(candidateValue => {
+      expect(serialized).not.toContain(candidateValue.candidateId);
+    });
+    expect(serialized).not.toContain('returnedCandidates');
+    expect(serialized).not.toContain('scores');
+  });
+
   it('returns safe defaults when persisted diagnostics JSON is malformed', () => {
     const properties = {
       getProperty: (key: string) => key === 'DAILY_PLANNER_MODEL' ? 'configured' : null,
@@ -3214,7 +3699,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Diagnostics.gs'],
       'getDailyOutfitDiagnosticsV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         loadSnapshotV2_: () => { throw new Error('Unable to read SNAPSHOT_FILE_ID_V2: private raw JSON'); },
         validateStoredSnapshotV2: () => { throw new Error('private snapshot validation detail'); },
         loadJobStateV2_: () => { throw new Error('Unable to read JOB_STATE_FILE_ID_V2: private raw JSON'); },
@@ -3245,7 +3730,7 @@ describe('Apps Script contracts', () => {
   it('requires current policy, date, and wardrobe identity independently for job and selection diagnostics', () => {
     const validState = {
       localDate: '2026-07-15',
-      qualityPolicyVersion: 3,
+      qualityPolicyVersion: 4,
       stage: 'selection-ready',
       wardrobeFingerprint: 'wardrobe-v3',
       startedAt: 100,
@@ -3261,7 +3746,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Diagnostics.gs'],
       'getDailyOutfitDiagnosticsV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         loadSnapshotV2_: () => validSnapshot,
         validateStoredSnapshotV2: () => ({ ok: true, generatedAt: 50, itemCount: 42, atlasPageCount: 5 }),
         loadJobStateV2_: () => state,
@@ -3274,10 +3759,10 @@ describe('Apps Script contracts', () => {
     )();
 
     [
-      { ...validState, qualityPolicyVersion: 2 },
+      { ...validState, qualityPolicyVersion: 3 },
       { ...validState, localDate: '2026-07-14' },
       { ...validState, wardrobeFingerprint: 'wardrobe-stale' },
-      Object.assign(Object.create({ qualityPolicyVersion: 3 }), {
+      Object.assign(Object.create({ qualityPolicyVersion: 4 }), {
         localDate: validState.localDate,
         stage: validState.stage,
         wardrobeFingerprint: validState.wardrobeFingerprint,
@@ -3291,7 +3776,7 @@ describe('Apps Script contracts', () => {
     });
 
     [
-      { ...validPending, qualityPolicyVersion: 2 },
+      { ...validPending, qualityPolicyVersion: 3 },
       { ...validPending, localDate: '2026-07-14' },
       { ...validPending, wardrobeFingerprint: 'wardrobe-stale' },
     ].forEach(pending => {
@@ -3316,7 +3801,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Diagnostics.gs'],
         'getDailyOutfitDiagnosticsV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadSnapshotV2_: () => null,
           validateStoredSnapshotV2: () => validation,
           loadJobStateV2_: () => null,
@@ -3334,7 +3819,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Diagnostics.gs'],
         'getDailyOutfitDiagnosticsV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadSnapshotV2_: () => null,
           validateStoredSnapshotV2: () => null,
           loadJobStateV2_: () => null,
@@ -3351,7 +3836,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs', 'Diagnostics.gs'],
       'getDailyOutfitDiagnosticsV2',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         loadSnapshotV2_: () => null,
         validateStoredSnapshotV2: () => null,
         loadJobStateV2_: () => null,
@@ -3392,12 +3877,12 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Diagnostics.gs'],
         'getDailyOutfitDiagnosticsV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadSnapshotV2_: () => ({ generatedAt: Date.now(), wardrobeFingerprint: 'wardrobe-v3', settings: {} }),
           validateStoredSnapshotV2: () => ({ ok: true, generatedAt: 50, itemCount: 42, atlasPageCount: 5 }),
           loadJobStateV2_: () => null,
           loadPendingV2_: () => ({
-            qualityPolicyVersion: 3,
+            qualityPolicyVersion: 4,
             localDate: '2026-07-15',
             wardrobeFingerprint: 'wardrobe-v3',
             selection,
@@ -3415,7 +3900,7 @@ describe('Apps Script contracts', () => {
   it('fails closed before standalone curation, repair, or validation can use stale or malformed pending state', () => {
     const stalePending = {
       ...currentPendingFixture(),
-      qualityPolicyVersion: 2,
+      qualityPolicyVersion: 3,
       curated: { recommendations: [] },
     };
     const pendingSources = [
@@ -3430,7 +3915,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Curator.gs'],
         'runCuratorV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadPendingV2_,
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -3443,7 +3928,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Repair.gs'],
         'repairFinalBundleV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadPendingV2_,
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -3456,7 +3941,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'FinalValidation.gs'],
         'validateFinalBundleV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadPendingV2_,
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -3487,7 +3972,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Curator.gs'],
         'runCuratorV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadPendingV2_: () => structuredClone(pendingValue),
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -3515,7 +4000,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'Repair.gs'],
         'repairFinalBundleV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadPendingV2_: () => structuredClone(pendingValue),
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -3535,7 +4020,7 @@ describe('Apps Script contracts', () => {
         ['JobState.gs', 'FinalValidation.gs'],
         'validateFinalBundleV2',
         {
-          DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+          DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
           loadPendingV2_: () => structuredClone(pendingValue),
           loadSnapshotV2_: () => snapshotValue,
           assertFreshSnapshotV2_: () => snapshotValue,
@@ -3694,7 +4179,7 @@ describe('Apps Script contracts', () => {
       ['JobState.gs'],
       'buildBundleV2_',
       {
-        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
         newRunIdV2_: () => 'run-id',
       },
     );

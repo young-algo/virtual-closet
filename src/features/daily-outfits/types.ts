@@ -138,6 +138,19 @@ export interface DailyFinalRecommendationV2 {
   weatherNote: string;
 }
 
+export type DailyRecommendationSetV2 =
+  | [DailyFinalRecommendationV2]
+  | [DailyFinalRecommendationV2, DailyFinalRecommendationV2]
+  | [DailyFinalRecommendationV2, DailyFinalRecommendationV2, DailyFinalRecommendationV2];
+
+export type DailyDeliveryModeV2 = 'complete' | 'partial';
+
+export interface DailyBundleCoverageV2 {
+  deliveryMode: DailyDeliveryModeV2;
+  selectedArchetypes: DailyArchetype[];
+  omittedArchetypes: DailyArchetype[];
+}
+
 export interface DailyEncoreV2 {
   outfitId: string;
   name: string;
@@ -150,12 +163,48 @@ export interface DailyBundleV2 {
   qualityPolicyVersion: number;
   localDate: string;
   weather: DailyWeatherProfileV2;
-  recommendations: [DailyFinalRecommendationV2, DailyFinalRecommendationV2, DailyFinalRecommendationV2];
+  coverage: DailyBundleCoverageV2;
+  recommendations: DailyRecommendationSetV2;
   encore?: DailyEncoreV2;
   generatedAt: number;
   snapshotGeneratedAt: number;
   wardrobeFingerprint: string;
   modelRunId: string;
+}
+
+export interface DailyOutfitDiagnosticsV2 {
+  snapshot: { ok: boolean; generatedAt: number; itemCount: number; atlasPageCount: number } | null;
+  job: {
+    localDate: string;
+    qualityPolicyVersion: number;
+    stage: string;
+    startedAt?: number;
+    updatedAt?: number;
+  } | null;
+  selection: {
+    deliveryMode: DailyDeliveryModeV2;
+    selectedCount: 1 | 2 | 3;
+    selectedArchetypes: DailyArchetype[];
+    omittedArchetypes: DailyArchetype[];
+    eligibleCountByArchetype: Record<DailyArchetype, number>;
+    path: 'top2' | 'top3' | 'replan-1' | 'replan-2';
+    feasibleSetCount: number;
+    replannedArchetypes: DailyArchetype[];
+    replanRounds: Array<{
+      round: 1 | 2;
+      targetArchetype: DailyArchetype;
+      acceptedCandidateCount: number;
+      duplicateCandidateCount: number;
+    }>;
+    extremeHeatPolishedCasualActive: boolean;
+    bundleReadyValidationPassed: boolean;
+    recommendationSelectionOrderMatches: boolean;
+    coverageSelectionOrderMatches: boolean;
+  } | null;
+  attemptCounts: Record<string, number>;
+  lastSentDate: string | null;
+  modelsConfigured: Record<string, boolean>;
+  snapshotAgeHours: number | null;
 }
 
 export interface DailySyncStatusV2 {

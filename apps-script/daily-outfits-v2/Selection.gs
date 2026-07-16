@@ -676,11 +676,49 @@ function mergeReplannedCandidatesV2_(existing, additions) {
   return merged;
 }
 
+function classifyReplanCandidatesV2_(existing, priorRounds, returnedCandidates) {
+  var seenIds = Object.create(null);
+  var seenCombinations = Object.create(null);
+  existing.forEach(function(candidate) {
+    seenIds[candidate.candidateId] = true;
+    seenCombinations[canonicalSelectionIdListV2_(candidate.itemIds)] = true;
+  });
+  priorRounds.forEach(function(round) {
+    round.returnedCandidates.forEach(function(candidate) {
+      seenIds[candidate.candidateId] = true;
+      seenCombinations[canonicalSelectionIdListV2_(candidate.itemIds)] = true;
+    });
+  });
+  var acceptedCandidates = [];
+  var acceptedCandidateIds = [];
+  var duplicateCandidateIds = [];
+  returnedCandidates.forEach(function(candidate) {
+    if (seenIds[candidate.candidateId]) {
+      throw new Error('Targeted re-plan reused candidateId ' + candidate.candidateId);
+    }
+    seenIds[candidate.candidateId] = true;
+    var combination = canonicalSelectionIdListV2_(candidate.itemIds);
+    if (seenCombinations[combination]) {
+      duplicateCandidateIds.push(candidate.candidateId);
+    } else {
+      seenCombinations[combination] = true;
+      acceptedCandidates.push(candidate);
+      acceptedCandidateIds.push(candidate.candidateId);
+    }
+  });
+  return {
+    acceptedCandidates: acceptedCandidates,
+    acceptedCandidateIds: acceptedCandidateIds,
+    duplicateCandidateIds: duplicateCandidateIds
+  };
+}
+
 function runSelectionV2_(snapshot, weather, history, plannerResponses, critic) {
   var candidates = plannerCandidatesForSelectionV2_(plannerResponses);
   var scores = critic && Array.isArray(critic.scores) ? critic.scores.slice() : [];
   var initialErrors = selectionOrchestrationErrorsV2_(candidates, scores, 'Daily selection');
   if (initialErrors.length) throw new Error(initialErrors.join('; '));
+  var replanRounds = [];
   var replannedArchetypes = [];
   for (var round = 0; round <= 2; round += 1) {
     var finalists = selectFinalistsV2_(candidates, scores, snapshot, weather, history);
@@ -688,28 +726,55 @@ function runSelectionV2_(snapshot, weather, history, plannerResponses, critic) {
       ? { needsReplan: finalists.needsReplan, feasibleSetCount: 0 }
       : selectFinalSetV2_(finalists.finalistPools, scores, snapshot, weather);
     if (!setResult.needsReplan && setResult.selectedCandidates) {
-      var deliveryCoverage = deliveryCoverageForCandidatesV2_(setResult.selectedCandidates);
+      var boundedCoverage = deliveryCoverageForCandidatesV2_(setResult.selectedCandidates);
       return {
         candidates: candidates,
         critic: { scores: scores },
         selectedCandidates: setResult.selectedCandidates,
+        replanRounds: replanRounds,
         selection: Object.assign({
           eligibleCountByArchetype: finalists.eligibleCountByArchetype,
           compositeById: finalists.compositeById,
           path: round ? 'replan-' + round : setResult.path,
           feasibleSetCount: setResult.feasibleSetCount,
           replannedArchetypes: replannedArchetypes.slice()
-        }, deliveryCoverage)
+        }, boundedCoverage)
       };
     }
-    if (round === 2) throw new Error('Daily selection exhausted two targeted re-plan rounds');
+    if (round === 2) {
+      var exhausted = selectExhaustedFinalSetV2_(
+        finalists.eligibleByArchetype,
+        scores,
+        snapshot,
+        weather
+      );
+      if (!exhausted) {
+        throw new Error('quality-exhausted-zero: no eligible daily outfit recommendation remains');
+      }
+      var exhaustedCoverage = deliveryCoverageForCandidatesV2_(exhausted.selectedCandidates);
+      return {
+        candidates: candidates,
+        critic: { scores: scores },
+        selectedCandidates: exhausted.selectedCandidates,
+        replanRounds: replanRounds,
+        selection: Object.assign({
+          eligibleCountByArchetype: finalists.eligibleCountByArchetype,
+          compositeById: finalists.compositeById,
+          path: 'replan-2',
+          feasibleSetCount: exhausted.feasibleSetCount,
+          replannedArchetypes: replannedArchetypes.slice()
+        }, exhaustedCoverage)
+      };
+    }
     var archetype = setResult.needsReplan;
-    if (replannedArchetypes.indexOf(archetype) >= 0) {
-      archetype = chooseReplanArchetypeV2_(finalists.eligibleByArchetype, scores, replannedArchetypes);
-    }
     if (!archetype || DAILY_V2.ARCHETYPES.indexOf(archetype) < 0) {
-      throw new Error('No unreplanned archetype remains for targeted re-plan');
+      throw new Error('No archetype remains for targeted re-plan');
     }
+    var usedCandidateIds = Array.from(new Set(candidates.map(function(candidate) {
+      return candidate.candidateId;
+    }).concat(replanRounds.flatMap(function(record) {
+      return record.returnedCandidates.map(function(candidate) { return candidate.candidateId; });
+    }))));
     var scoreMap = selectionScoreMapV2_(scores);
     var failed = candidates.filter(function(candidate) {
       return candidate.archetype === archetype;
@@ -720,6 +785,18 @@ function runSelectionV2_(snapshot, weather, history, plannerResponses, critic) {
         criticalDefects: Array.isArray(score.criticalDefects) ? score.criticalDefects.slice() : [],
         reservations: Array.isArray(score.reservations) ? score.reservations.slice() : []
       };
+    });
+    replanRounds.forEach(function(record) {
+      record.returnedCandidates.forEach(function(candidate) {
+        if (candidate.archetype === archetype &&
+            record.duplicateCandidateIds.indexOf(candidate.candidateId) >= 0) {
+          failed.push({
+            candidateId: candidate.candidateId,
+            criticalDefects: ['duplicate item combination'],
+            reservations: []
+          });
+        }
+      });
     });
     var claimed = DAILY_V2.ARCHETYPES.filter(function(value) {
       return value !== archetype;
@@ -735,18 +812,33 @@ function runSelectionV2_(snapshot, weather, history, plannerResponses, critic) {
       history,
       failed,
       Array.from(new Set(claimed)),
+      usedCandidateIds,
       round + 1
     );
     validateReplanResponseV2_(replanned, archetype);
-    var priorLength = candidates.length;
-    candidates = mergeReplannedCandidatesV2_(candidates, replanned.candidates);
-    var additions = candidates.slice(priorLength);
-    if (!additions.length) throw new Error('Targeted re-plan returned only duplicate combinations');
-    var targetedCritic = runCriticCandidatesV2_(snapshot, weather, history, additions);
-    var targetedScores = targetedCritic && Array.isArray(targetedCritic.scores) ? targetedCritic.scores : [];
-    var targetedErrors = selectionOrchestrationErrorsV2_(additions, targetedScores, 'Targeted critic scores');
-    if (targetedErrors.length) throw new Error(targetedErrors.join('; '));
-    scores = scores.concat(targetedScores);
+    var classification = classifyReplanCandidatesV2_(candidates, replanRounds, replanned.candidates);
+    replanRounds.push({
+      round: round + 1,
+      targetArchetype: archetype,
+      structurallyValid: true,
+      returnedCandidates: replanned.candidates.slice(),
+      acceptedCandidateIds: classification.acceptedCandidateIds.slice(),
+      duplicateCandidateIds: classification.duplicateCandidateIds.slice()
+    });
+    if (classification.acceptedCandidates.length) {
+      var targetedCritic = runCriticCandidatesV2_(snapshot, weather, history, classification.acceptedCandidates);
+      var targetedScores = targetedCritic && Array.isArray(targetedCritic.scores)
+        ? targetedCritic.scores
+        : [];
+      var targetedErrors = selectionOrchestrationErrorsV2_(
+        classification.acceptedCandidates,
+        targetedScores,
+        'Targeted critic scores'
+      );
+      if (targetedErrors.length) throw new Error(targetedErrors.join('; '));
+      candidates = candidates.concat(classification.acceptedCandidates);
+      scores = scores.concat(targetedScores);
+    }
     replannedArchetypes.push(archetype);
   }
   throw new Error('Daily selection loop exited unexpectedly');

@@ -1592,6 +1592,7 @@ describe('prompt and response label boundary', () => {
         history: object,
         failureNotes: object[],
         avoidItemIds: string[],
+        usedCandidateIds: string[],
         round: number
       ) => { candidates: Array<{ topId: string }> };
     }>(
@@ -1628,8 +1629,10 @@ describe('prompt and response label boundary', () => {
         privateNested: { wardrobeId: sneakerId }
       }],
       [topId, sneakerId],
+      ['easy-initial-0', 'polished-casual-initial-0', 'expressive-initial-0'],
       1
     );
+    const roundOneReturnedIds = response.candidates.map(candidate => candidate.candidateId);
     const roundTwo = planner.replanArchetypeV2_(
       'polished-casual',
       richSnapshot,
@@ -1642,12 +1645,20 @@ describe('prompt and response label boundary', () => {
         privateNested: { wardrobeId: sneakerId }
       }],
       [topId, sneakerId],
+      [
+        'easy-initial-0',
+        'polished-casual-initial-0',
+        'expressive-initial-0',
+        ...roundOneReturnedIds,
+        'polished-casual-duplicate-disposition-0',
+      ],
       2
     );
 
     expect(calls.map(call => call.stage)).toEqual(['planner', 'planner']);
     calls.forEach(({ prompt }, index) => {
       expect(prompt).toContain(`TARGETED RE-PLAN ROUND ${index + 1}`);
+      expect(prompt).toContain('Do not reuse any candidateId from this run-wide list:');
       expect(prompt).toContain('T004, S009');
       expect(prompt).toContain('ordinary reservation');
       expect(prompt).not.toContain(topId);
@@ -1658,6 +1669,13 @@ describe('prompt and response label boundary', () => {
       expect(prompt.indexOf('WEATHER PROFILE:')).toBeLessThan(prompt.indexOf(EXACT_EXTREME_HEAT_CONTRACT));
       expect(prompt.indexOf(EXACT_EXTREME_HEAT_CONTRACT)).toBeLessThan(prompt.indexOf('DAILY ROTATION HISTORY:'));
     });
+    expect(calls[1].prompt).toContain(JSON.stringify([
+      'easy-initial-0',
+      'polished-casual-initial-0',
+      'expressive-initial-0',
+      ...roundOneReturnedIds,
+      'polished-casual-duplicate-disposition-0',
+    ]));
     expect(roundOne.candidates[0].topId).toBe(topId);
     expect(roundTwo.candidates[0].topId).toBe(topId);
   });

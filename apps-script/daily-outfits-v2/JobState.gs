@@ -280,6 +280,14 @@ function validPersistedCriticForCandidatesV2_(critic, candidates) {
 function validPersistedSelectionSummaryV2_(selection) {
   if (!validOwnDailyRecordV2_(selection) || !ownNonEmptyDailyStringV2_(selection, 'path') ||
       ['top2', 'top3', 'replan-1', 'replan-2'].indexOf(selection.path) < 0 ||
+      !ownNonEmptyDailyStringV2_(selection, 'deliveryMode') ||
+      ['complete', 'partial'].indexOf(selection.deliveryMode) < 0 ||
+      !ownDailyJobKeyV2_(selection, 'selectedCount') ||
+      !Number.isInteger(selection.selectedCount) || selection.selectedCount < 1 || selection.selectedCount > 3 ||
+      !ownDailyJobKeyV2_(selection, 'selectedArchetypes') ||
+      !validOwnDailyStringArrayV2_(selection.selectedArchetypes) ||
+      !ownDailyJobKeyV2_(selection, 'omittedArchetypes') ||
+      !validOwnDailyStringArrayV2_(selection.omittedArchetypes) ||
       !ownDailyJobKeyV2_(selection, 'eligibleCountByArchetype') ||
       !validOwnDailyRecordV2_(selection.eligibleCountByArchetype) ||
       Object.keys(selection.eligibleCountByArchetype).length !== DAILY_V2.ARCHETYPES.length ||
@@ -293,14 +301,28 @@ function validPersistedSelectionSummaryV2_(selection) {
   if (!DAILY_V2.ARCHETYPES.every(function(archetype) {
     var count = selection.eligibleCountByArchetype[archetype];
     return ownDailyJobKeyV2_(selection.eligibleCountByArchetype, archetype) &&
-      typeof count === 'number' && Number.isFinite(count) && Number.isInteger(count) && count >= 1;
+      typeof count === 'number' && Number.isFinite(count) && Number.isInteger(count) && count >= 0;
   })) return false;
-  var replanned = Object.create(null);
+
+  var configuredSelection = DAILY_V2.ARCHETYPES.filter(function(archetype) {
+    return selection.selectedArchetypes.indexOf(archetype) >= 0;
+  });
+  var configuredOmissions = DAILY_V2.ARCHETYPES.filter(function(archetype) {
+    return selection.selectedArchetypes.indexOf(archetype) < 0;
+  });
+  if (selection.selectedArchetypes.length !== selection.selectedCount ||
+      !exactPersistedDailyValueV2_(selection.selectedArchetypes, configuredSelection) ||
+      !exactPersistedDailyValueV2_(selection.omittedArchetypes, configuredOmissions)) return false;
+  if (selection.deliveryMode === 'complete') {
+    if (selection.selectedCount !== 3 || selection.omittedArchetypes.length !== 0) return false;
+  } else if (selection.selectedCount >= 3 || selection.path !== 'replan-2') {
+    return false;
+  }
+
   for (var index = 0; index < selection.replannedArchetypes.length; index += 1) {
     var archetype = selection.replannedArchetypes[index];
-    if (typeof archetype !== 'string' || DAILY_V2.ARCHETYPES.indexOf(archetype) < 0 ||
-        ownDailyJobKeyV2_(replanned, archetype)) return false;
-    replanned[archetype] = true;
+    if (!ownDailyJobKeyV2_(selection.replannedArchetypes, index) ||
+        typeof archetype !== 'string' || DAILY_V2.ARCHETYPES.indexOf(archetype) < 0) return false;
   }
   var expectedReplans = selection.path === 'replan-1' ? 1 : selection.path === 'replan-2' ? 2 : 0;
   return selection.replannedArchetypes.length === expectedReplans;
@@ -313,14 +335,10 @@ function persistedSelectionCandidatesV2_(pending, plannerCandidates, snapshot) {
           DAILY_V2.ARCHETYPES.indexOf(candidate.archetype) >= 0;
       }) || pending.candidates.length < plannerCandidates.length) return null;
   var candidateById = Object.create(null);
-  var combinations = Object.create(null);
   for (var index = 0; index < pending.candidates.length; index += 1) {
     var candidate = pending.candidates[index];
-    var combination = canonicalSelectionIdListV2_(candidate.itemIds);
-    if (combination === null || ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
-        ownDailyJobKeyV2_(combinations, combination)) return null;
+    if (ownDailyJobKeyV2_(candidateById, candidate.candidateId)) return null;
     candidateById[candidate.candidateId] = candidate;
-    combinations[combination] = true;
   }
   for (var plannerIndex = 0; plannerIndex < plannerCandidates.length; plannerIndex += 1) {
     var plannerCandidate = plannerCandidates[plannerIndex];
@@ -329,32 +347,46 @@ function persistedSelectionCandidatesV2_(pending, plannerCandidates, snapshot) {
   return pending.candidates;
 }
 
-function persistedReplanRoundsV2_(candidates, plannerCandidates, snapshot) {
-  var rounds = [];
-  var roundCandidates = [];
-  var seenArchetypes = Object.create(null);
-  for (var index = plannerCandidates.length; index < candidates.length; index += 1) {
-    var candidate = candidates[index];
-    if (!rounds.length || rounds[rounds.length - 1].archetype !== candidate.archetype) {
-      if (ownDailyJobKeyV2_(seenArchetypes, candidate.archetype)) return null;
-      if (roundCandidates.length && !validPersistedCandidateGroupQualityV2_(
-        roundCandidates,
-        rounds[rounds.length - 1].archetype,
-        snapshot
-      )) return null;
-      rounds.push({ archetype: candidate.archetype, candidates: [] });
-      seenArchetypes[candidate.archetype] = true;
-      roundCandidates = rounds[rounds.length - 1].candidates;
+function persistedReplanRoundsV2_(pending, plannerCandidates, snapshot) {
+  if (!ownDailyJobKeyV2_(pending, 'replanRounds') || !Array.isArray(pending.replanRounds) ||
+      pending.replanRounds.length > 2) return null;
+  var replayCandidates = plannerCandidates.slice();
+  var replayRounds = [];
+  for (var index = 0; index < pending.replanRounds.length; index += 1) {
+    if (!ownDailyJobKeyV2_(pending.replanRounds, index)) return null;
+    var record = pending.replanRounds[index];
+    if (!validOwnDailyRecordV2_(record) || record.round !== index + 1 ||
+        DAILY_V2.ARCHETYPES.indexOf(record.targetArchetype) < 0 ||
+        record.structurallyValid !== true ||
+        !validOwnDailyArrayV2_(record.returnedCandidates, 5) ||
+        !validPersistedCandidateGroupQualityV2_(
+          record.returnedCandidates,
+          record.targetArchetype,
+          snapshot
+        ) ||
+        !validOwnDailyStringArrayV2_(record.acceptedCandidateIds) ||
+        !validOwnDailyStringArrayV2_(record.duplicateCandidateIds)) return null;
+    var classification;
+    try {
+      classification = classifyReplanCandidatesV2_(
+        replayCandidates,
+        replayRounds,
+        record.returnedCandidates
+      );
+    } catch (_ignored) {
+      return null;
     }
-    roundCandidates.push(candidate);
-    if (roundCandidates.length > 5) return null;
+    if (!exactPersistedDailyValueV2_(
+      record.acceptedCandidateIds,
+      classification.acceptedCandidateIds
+    ) || !exactPersistedDailyValueV2_(
+      record.duplicateCandidateIds,
+      classification.duplicateCandidateIds
+    )) return null;
+    replayRounds.push(record);
+    replayCandidates = replayCandidates.concat(classification.acceptedCandidates);
   }
-  if (roundCandidates.length && !validPersistedCandidateGroupQualityV2_(
-    roundCandidates,
-    rounds[rounds.length - 1].archetype,
-    snapshot
-  )) return null;
-  return rounds.length <= 2 ? rounds : null;
+  return { rounds: replayRounds, candidates: replayCandidates };
 }
 
 function exactPersistedSelectionMapV2_(persisted, recomputed) {
@@ -397,19 +429,42 @@ function exactPersistedCandidateArrayV2_(left, right) {
   return true;
 }
 
-function validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandidates, snapshot) {
+function validRecomputedPersistedSelectionV2_(pending, plannerCandidates, snapshot) {
   if (!validPersistedSelectionSummaryV2_(pending.selection) ||
-      typeof selectFinalistsV2_ !== 'function' || typeof selectFinalSetV2_ !== 'function' ||
-      typeof chooseReplanArchetypeV2_ !== 'function') return false;
-  var rounds = persistedReplanRoundsV2_(candidates, plannerCandidates, snapshot);
-  var actualReplans = rounds && rounds.map(function(round) { return round.archetype; });
-  if (actualReplans === null || !exactPersistedDailyValueV2_(pending.selection.replannedArchetypes, actualReplans)) {
-    return false;
-  }
+      typeof selectFinalistsV2_ !== 'function' ||
+      typeof selectFinalSetV2_ !== 'function' ||
+      typeof selectExhaustedFinalSetV2_ !== 'function') return false;
+  var ledger = persistedReplanRoundsV2_(pending, plannerCandidates, snapshot);
+  if (!ledger || !exactPersistedCandidateArrayV2_(pending.candidates, ledger.candidates) ||
+      !validPersistedCriticForCandidatesV2_(pending.critic, ledger.candidates)) return false;
+
   var replayCandidates = plannerCandidates.slice();
   var replayScores = pending.critic.scores.slice(0, plannerCandidates.length);
-  var replayedArchetypes = [];
-  for (var attempt = 0; attempt <= rounds.length; attempt += 1) {
+  var scoreCursor = plannerCandidates.length;
+  var replayRounds = [];
+  var targets = [];
+
+  function matches(finalists, result, path) {
+    if (!result || !Array.isArray(result.selectedCandidates)) return false;
+    var coverage;
+    try { coverage = deliveryCoverageForCandidatesV2_(result.selectedCandidates); }
+    catch (_ignoredCoverage) { return false; }
+    return pending.selection.path === path &&
+      pending.selection.feasibleSetCount === result.feasibleSetCount &&
+      pending.selection.deliveryMode === coverage.deliveryMode &&
+      pending.selection.selectedCount === coverage.selectedCount &&
+      exactPersistedDailyValueV2_(pending.selection.selectedArchetypes, coverage.selectedArchetypes) &&
+      exactPersistedDailyValueV2_(pending.selection.omittedArchetypes, coverage.omittedArchetypes) &&
+      exactPersistedDailyValueV2_(pending.selection.replannedArchetypes, targets) &&
+      exactPersistedSelectionMapV2_(
+        pending.selection.eligibleCountByArchetype,
+        finalists.eligibleCountByArchetype
+      ) &&
+      exactPersistedSelectionMapV2_(pending.selection.compositeById, finalists.compositeById) &&
+      exactPersistedCandidateArrayV2_(pending.selectedCandidates, result.selectedCandidates);
+  }
+
+  for (var attempt = 0; attempt <= ledger.rounds.length; attempt += 1) {
     var finalists = selectFinalistsV2_(
       replayCandidates,
       replayScores,
@@ -417,42 +472,45 @@ function validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandid
       pending.weather,
       pending.history
     );
-    if (!finalists) return false;
-    var finalSet = finalists.needsReplan
+    var bounded = finalists.needsReplan
       ? { needsReplan: finalists.needsReplan, feasibleSetCount: 0 }
-      : selectFinalSetV2_(
-        finalists.finalistPools,
+      : selectFinalSetV2_(finalists.finalistPools, replayScores, snapshot, pending.weather);
+    if (!bounded.needsReplan && bounded.selectedCandidates) {
+      return attempt === ledger.rounds.length && matches(
+        finalists,
+        bounded,
+        attempt ? 'replan-' + attempt : bounded.path
+      );
+    }
+    if (attempt === ledger.rounds.length) {
+      if (ledger.rounds.length !== 2) return false;
+      var exhausted = selectExhaustedFinalSetV2_(
+        finalists.eligibleByArchetype,
         replayScores,
         snapshot,
         pending.weather
       );
-    if (!finalSet) return false;
-    if (!finalSet.needsReplan && Array.isArray(finalSet.selectedCandidates)) {
-      if (attempt !== rounds.length) return false;
-      var expectedPath = rounds.length ? 'replan-' + rounds.length : finalSet.path;
-      return pending.selection.path === expectedPath &&
-        pending.selection.feasibleSetCount === finalSet.feasibleSetCount &&
-        exactPersistedSelectionMapV2_(pending.selection.eligibleCountByArchetype, finalists.eligibleCountByArchetype) &&
-        exactPersistedSelectionMapV2_(pending.selection.compositeById, finalists.compositeById) &&
-        exactPersistedCandidateArrayV2_(pending.selectedCandidates, finalSet.selectedCandidates);
+      return Boolean(exhausted) && matches(finalists, exhausted, 'replan-2');
     }
-    if (attempt >= rounds.length) return false;
-    var requestedArchetype = finalSet.needsReplan;
-    if (replayedArchetypes.indexOf(requestedArchetype) >= 0) {
-      requestedArchetype = chooseReplanArchetypeV2_(
-        finalists.eligibleByArchetype,
-        replayScores,
-        replayedArchetypes
-      );
-    }
-    if (!requestedArchetype || requestedArchetype !== rounds[attempt].archetype) return false;
-    var scoreStart = replayCandidates.length;
-    replayCandidates = replayCandidates.concat(rounds[attempt].candidates);
-    replayScores = replayScores.concat(pending.critic.scores.slice(
-      scoreStart,
-      scoreStart + rounds[attempt].candidates.length
-    ));
-    replayedArchetypes.push(requestedArchetype);
+    var record = ledger.rounds[attempt];
+    if (!bounded.needsReplan || record.targetArchetype !== bounded.needsReplan) return false;
+    var classification = classifyReplanCandidatesV2_(
+      replayCandidates,
+      replayRounds,
+      record.returnedCandidates
+    );
+    var acceptedScores = pending.critic.scores.slice(
+      scoreCursor,
+      scoreCursor + classification.acceptedCandidates.length
+    );
+    if (!validPersistedCriticForCandidatesV2_(acceptedScores.length
+      ? { scores: acceptedScores }
+      : { scores: [] }, classification.acceptedCandidates)) return false;
+    replayCandidates = replayCandidates.concat(classification.acceptedCandidates);
+    replayScores = replayScores.concat(acceptedScores);
+    scoreCursor += classification.acceptedCandidates.length;
+    replayRounds.push(record);
+    targets.push(record.targetArchetype);
   }
   return false;
 }
@@ -568,28 +626,30 @@ function assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, wardro
     ownDailyJobKeyV2_(pending, 'planners') &&
     ownDailyJobKeyV2_(pending, 'candidates') &&
     ownDailyJobKeyV2_(pending, 'selectedCandidates') &&
-    validOwnDailyArrayV2_(pending.selectedCandidates, 3) &&
-    pending.selectedCandidates.length === 3 && DAILY_V2.ARCHETYPES.length === 3 &&
+    validOwnDailyArrayV2_(pending.selectedCandidates) &&
+    pending.selectedCandidates.length >= 1 && pending.selectedCandidates.length <= 3 &&
+    DAILY_V2.ARCHETYPES.length === 3 &&
     ownDailyJobKeyV2_(pending, 'critic') && validOwnDailyRecordV2_(pending.critic) &&
-    ownDailyJobKeyV2_(pending, 'selection') && validOwnDailyRecordV2_(pending.selection);
+    ownDailyJobKeyV2_(pending, 'selection') && validPersistedSelectionSummaryV2_(pending.selection) &&
+    pending.selectedCandidates.length === pending.selection.selectedCount &&
+    (pending.selection.deliveryMode !== 'partial' ||
+      (pending.selection.path === 'replan-2' && validOwnDailyArrayV2_(pending.replanRounds, 2)));
   if (!valid) throw new Error('Deterministic selection must be ready');
 
   var plannerCandidates = persistedPlannerCandidatesV2_(pending.planners, snapshot);
-  var candidates = plannerCandidates && persistedSelectionCandidatesV2_(pending, plannerCandidates, snapshot);
-  if (!plannerCandidates || !candidates ||
-      !validPersistedCriticForCandidatesV2_(pending.critic, candidates) ||
-      !validRecomputedPersistedSelectionV2_(pending, candidates, plannerCandidates, snapshot)) {
+  if (!plannerCandidates ||
+      !validRecomputedPersistedSelectionV2_(pending, plannerCandidates, snapshot)) {
     throw new Error('Deterministic selection must be ready');
   }
 
   var candidateById = Object.create(null);
-  candidates.forEach(function(candidate) { candidateById[candidate.candidateId] = candidate; });
+  pending.candidates.forEach(function(candidate) { candidateById[candidate.candidateId] = candidate; });
   for (var candidateIndex = 0; candidateIndex < pending.selectedCandidates.length; candidateIndex += 1) {
     if (!ownDailyJobKeyV2_(pending.selectedCandidates, candidateIndex)) {
       throw new Error('Deterministic selection must be ready');
     }
     var candidate = pending.selectedCandidates[candidateIndex];
-    if (!validPersistedPlannerCandidateV2_(candidate, DAILY_V2.ARCHETYPES[candidateIndex]) ||
+    if (!validPersistedPlannerCandidateV2_(candidate, pending.selection.selectedArchetypes[candidateIndex]) ||
         !ownDailyJobKeyV2_(candidateById, candidate.candidateId) ||
         !exactPersistedCandidateV2_(candidate, candidateById[candidate.candidateId])) {
       throw new Error('Deterministic selection must be ready');
@@ -650,7 +710,8 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
           omittedArchetypes: pending.selection.omittedArchetypes
         }) ||
         !ownDailyJobKeyV2_(bundle, 'recommendations') ||
-        !validOwnDailyArrayV2_(bundle.recommendations, DAILY_V2.ARCHETYPES.length)) return false;
+        !validOwnDailyArrayV2_(bundle.recommendations, pending.selection.selectedCount) ||
+        bundle.recommendations.length !== pending.selectedCandidates.length) return false;
     for (var index = 0; index < bundle.recommendations.length; index += 1) {
       if (!validPersistedRecommendationV2_(bundle.recommendations[index], pending.selectedCandidates[index])) return false;
     }

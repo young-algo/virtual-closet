@@ -12,6 +12,26 @@ function archetypeEmailLabelV2_(value) {
   return value === 'polished-casual' ? 'POLISHED CASUAL' : value.toUpperCase();
 }
 
+function generatedOutfitCountCopyV2_(count) {
+  if (count === 1) return "Today's outfit";
+  if (count === 2 || count === 3) return "Today's " + count + " outfits";
+  throw new Error('Generated recommendation count must be between one and three');
+}
+
+function humanArchetypeLabelV2_(value) {
+  return value === 'polished-casual'
+    ? 'Polished casual'
+    : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function coverageNoteV2_(coverage) {
+  if (!coverage || coverage.deliveryMode !== 'partial') return '';
+  var labels = coverage.omittedArchetypes.map(humanArchetypeLabelV2_);
+  var subject = labels.length === 1 ? labels[0] : labels.join(' and ');
+  return subject + (labels.length === 1 ? ' was' : ' were') +
+    " omitted after today's quality, weather, and outfit-distinctness checks.";
+}
+
 function renderEncoreEmailV2_(bundle, snapshot, plain, inlineImages) {
   if (!bundle.encore) return '';
   var items = itemMapV2_(snapshot);
@@ -49,9 +69,14 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
   if (!validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) || pending.bundle !== bundle) {
     throw new Error('No current quality-gated bundle is ready');
   }
+  var generatedCopy = generatedOutfitCountCopyV2_(bundle.recommendations.length);
+  var omissionCopy = coverageNoteV2_(bundle.coverage);
   var itemMap = itemMapV2_(snapshot);
   var inlineImages = {};
   var plain = ['WARDROBE', bundle.localDate + ' · ' + bundle.weather.locationLabel, '', Math.round(bundle.weather.morningFeelsLikeF) + '° morning · ' + Math.round(bundle.weather.highTemperatureF) + '° high · ' + Math.round(bundle.weather.maxRainProbability) + '% rain', bundle.weather.plainEnglishSummary, ''];
+  plain.push(generatedCopy);
+  if (omissionCopy) plain.push(omissionCopy);
+  plain.push('');
   var sections = bundle.recommendations.map(function(rec, index) {
     var pieces = rec.itemIds.map(function(id) { return itemMap[id]; }).filter(Boolean);
     var images = pieces.map(function(item, itemIndex) {
@@ -83,7 +108,13 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
     (testMode ? '<div style="padding:9px 12px;background:#111;color:#fff;font:600 10px monospace;letter-spacing:2px">TEST DELIVERY</div>' : '') +
     '<div style="padding:26px 0 32px"><div style="font:600 11px monospace;letter-spacing:4px">WARDROBE</div><p style="margin:10px 0 24px;color:#666;font-size:13px">' + escapeHtmlV2_(dateLabel + ' · ' + bundle.weather.locationLabel) + '</p>' +
     '<h1 style="margin:0 0 10px;font:400 36px/1.08 Arial,sans-serif">' + Math.round(bundle.weather.morningFeelsLikeF) + '° morning · ' + Math.round(bundle.weather.highTemperatureF) + '° high</h1>' +
-    '<p style="margin:0;color:#666;font:400 14px/1.6 Arial,sans-serif">' + Math.round(bundle.weather.maxRainProbability) + '% rain · ' + escapeHtmlV2_(bundle.weather.windy ? 'windy' : 'light wind') + '<br>' + escapeHtmlV2_(bundle.weather.plainEnglishSummary) + '</p></div>' +
+    '<p style="margin:0;color:#666;font:400 14px/1.6 Arial,sans-serif">' + Math.round(bundle.weather.maxRainProbability) + '% rain · ' + escapeHtmlV2_(bundle.weather.windy ? 'windy' : 'light wind') + '<br>' + escapeHtmlV2_(bundle.weather.plainEnglishSummary) + '</p>' +
+    '<h2 style="margin:24px 0 8px;font:400 24px Arial,sans-serif">' +
+      escapeHtmlV2_(generatedCopy) + '</h2>' +
+    (omissionCopy
+      ? '<p style="margin:0 0 24px;color:#666;font:400 13px/1.6 Arial,sans-serif">' +
+          escapeHtmlV2_(omissionCopy) + '</p>'
+      : '') + '</div>' +
     sections + encoreSection + appLink + '<p style="margin:42px 0 0;color:#aaa;font:400 10px monospace">Generated from the complete synchronized wardrobe. Daily history remains separate from the on-demand stylist.</p></div></body></html>';
   return { html: html, plain: plain.join('\n'), inlineImages: inlineImages };
 }
@@ -101,7 +132,10 @@ function sendDailyBundleNowV2_(bundle, snapshot, testMode, pending, expectedLoca
   if (!testMode && sendState.lastSentDate === bundle.localDate) throw new Error('A daily outfit email was already sent for ' + bundle.localDate);
   if (bundle.wardrobeFingerprint !== snapshot.wardrobeFingerprint) throw new Error('Bundle wardrobe fingerprint no longer matches the snapshot');
   var rendered = renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalDate);
-  var subject = (testMode ? '[TEST] ' : '') + "Today's 3 outfits — " + Math.round(bundle.weather.highTemperatureF) + '° / ' + (bundle.weather.weatherPhrase || 'daily forecast');
+  var subject = (testMode ? '[TEST] ' : '') +
+    generatedOutfitCountCopyV2_(bundle.recommendations.length) + ' — ' +
+    Math.round(bundle.weather.highTemperatureF) + '° / ' +
+    (bundle.weather.weatherPhrase || 'daily forecast');
   if (!testMode) properties.setProperty('SEND_IN_PROGRESS_DATE_V2', bundle.localDate);
   MailApp.sendEmail({
     to: config.recipientEmail,

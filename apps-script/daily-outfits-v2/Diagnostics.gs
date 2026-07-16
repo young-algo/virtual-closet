@@ -100,44 +100,36 @@ function safeDailySelectionProjectionV2_(pending, context, snapshot) {
     return null;
   }
   var selection = pending.selection;
-  if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return null;
-  var required = ['path', 'eligibleCountByArchetype', 'feasibleSetCount', 'replannedArchetypes'];
-  if (required.some(function(key) { return !Object.prototype.hasOwnProperty.call(selection, key); })) return null;
-  if (['top2', 'top3', 'replan-1', 'replan-2'].indexOf(selection.path) < 0 ||
-      !selection.eligibleCountByArchetype || typeof selection.eligibleCountByArchetype !== 'object' ||
-      Array.isArray(selection.eligibleCountByArchetype) ||
-      !Number.isInteger(selection.feasibleSetCount) || selection.feasibleSetCount <= 0 ||
-      !Array.isArray(selection.replannedArchetypes)) return null;
-
-  var replanCountByPath = { top2: 0, top3: 0, 'replan-1': 1, 'replan-2': 2 };
-  if (selection.replannedArchetypes.length !== replanCountByPath[selection.path]) return null;
-
-  var countKeys = Object.keys(selection.eligibleCountByArchetype);
-  if (countKeys.length !== DAILY_V2.ARCHETYPES.length || countKeys.some(function(key) {
-    return DAILY_V2.ARCHETYPES.indexOf(key) < 0;
-  })) return null;
-  var eligibleCountByArchetype = {};
-  for (var index = 0; index < DAILY_V2.ARCHETYPES.length; index += 1) {
-    var archetype = DAILY_V2.ARCHETYPES[index];
-    if (!Object.prototype.hasOwnProperty.call(selection.eligibleCountByArchetype, archetype) ||
-        !Number.isInteger(selection.eligibleCountByArchetype[archetype]) ||
-        selection.eligibleCountByArchetype[archetype] < 1) return null;
-    eligibleCountByArchetype[archetype] = selection.eligibleCountByArchetype[archetype];
-  }
-
-  var seenReplans = Object.create(null);
-  for (var replanIndex = 0; replanIndex < selection.replannedArchetypes.length; replanIndex += 1) {
-    if (!Object.prototype.hasOwnProperty.call(selection.replannedArchetypes, replanIndex)) return null;
-    var replanned = selection.replannedArchetypes[replanIndex];
-    if (typeof replanned !== 'string' || DAILY_V2.ARCHETYPES.indexOf(replanned) < 0 ||
-        Object.prototype.hasOwnProperty.call(seenReplans, replanned)) return null;
-    seenReplans[replanned] = true;
-  }
+  var bundleReady = Boolean(pending.bundle) &&
+    validFullBundleReadyV2_(pending, snapshot, pending.localDate);
+  var recommendationSelectionOrderMatches = bundleReady &&
+    pending.bundle.recommendations.every(function(value, index) {
+      return value.candidateId === pending.selectedCandidates[index].candidateId;
+    });
+  var coverageSelectionOrderMatches = bundleReady &&
+    JSON.stringify(pending.bundle.coverage.selectedArchetypes) ===
+      JSON.stringify(selection.selectedArchetypes);
   return {
+    deliveryMode: selection.deliveryMode,
+    selectedCount: selection.selectedCount,
+    selectedArchetypes: selection.selectedArchetypes.slice(),
+    omittedArchetypes: selection.omittedArchetypes.slice(),
     path: selection.path,
-    eligibleCountByArchetype: eligibleCountByArchetype,
+    eligibleCountByArchetype: Object.assign({}, selection.eligibleCountByArchetype),
     feasibleSetCount: selection.feasibleSetCount,
-    replannedArchetypes: selection.replannedArchetypes.slice()
+    replannedArchetypes: selection.replannedArchetypes.slice(),
+    replanRounds: pending.replanRounds.map(function(round) {
+      return {
+        round: round.round,
+        targetArchetype: round.targetArchetype,
+        acceptedCandidateCount: round.acceptedCandidateIds.length,
+        duplicateCandidateCount: round.duplicateCandidateIds.length
+      };
+    }),
+    extremeHeatPolishedCasualActive: pending.weather.middayFeelsLikeF > 90,
+    bundleReadyValidationPassed: bundleReady,
+    recommendationSelectionOrderMatches: recommendationSelectionOrderMatches,
+    coverageSelectionOrderMatches: coverageSelectionOrderMatches
   };
 }
 

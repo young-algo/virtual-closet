@@ -189,14 +189,17 @@ function modelFacingReplanFailureNotesV2_(failureNotes, snapshot) {
   });
 }
 
-function replanArchetypeV2_(archetype, snapshot, weather, history, failureNotes, avoidItemIds, round) {
+function replanArchetypeV2_(archetype, snapshot, weather, history, failureNotes, avoidItemIds, usedCandidateIds, round) {
   if (DAILY_V2.ARCHETYPES.indexOf(archetype) < 0) throw new Error('Unknown targeted re-plan archetype');
   if (round !== 1 && round !== 2) throw new Error('Targeted re-plan round must be 1 or 2');
   var avoidLabels = (Array.isArray(avoidItemIds) ? avoidItemIds : []).map(function(id) {
     return requiredItemLabelV2_(id, snapshot, 'Targeted re-plan avoid list');
   });
   var guidance = [
-    'TARGETED RE-PLAN ROUND ' + round + ': Return five new ' + archetype + ' candidates with candidateIds not used in the prior response.',
+    'TARGETED RE-PLAN ROUND ' + round + ': Return five new ' + archetype + ' candidates.',
+    'Do not reuse any candidateId from this run-wide list: ' + JSON.stringify(
+      Array.from(new Set(Array.isArray(usedCandidateIds) ? usedCandidateIds : []))
+    ),
     'Your previous five candidates failed because:\n' + JSON.stringify(modelFacingReplanFailureNotesV2_(failureNotes, snapshot)),
     'Other looks in today\'s set already use these items; prefer alternatives:\n' + avoidLabels.join(', ')
   ].join('\n\n');

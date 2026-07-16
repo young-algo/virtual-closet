@@ -4,7 +4,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import DailyBundlePreview from '../DailyBundlePreview';
 import DailyFeedbackControls from '../DailyFeedbackControls';
-import type { DailyBundleV2, DailyFeedbackV2, DailySourceItem } from '../types';
+import type {
+  DailyBundleCoverageV2,
+  DailyBundleV2,
+  DailyFeedbackV2,
+  DailySourceItem,
+} from '../types';
 
 const items: DailySourceItem[] = [
   { id: 'top', name: 'Top <One>', category: 'T-Shirts', color: 'navy', brand: 'Test', image: '/top.jpg', description: '' },
@@ -18,6 +23,16 @@ const weather = {
   maxRainProbability: 0,
   plainEnglishSummary: 'Light pieces.',
 };
+
+const recommendation = (archetype: 'easy' | 'polished-casual' | 'expressive', index: number) => ({
+  candidateId: `look-${index}`,
+  archetype,
+  name: `Look ${index + 1}`,
+  itemIds: ['top', 'bottom', 'shoe'],
+  colorHook: 'Navy against cream.',
+  whyItWorks: 'The proportions and colors work together.',
+  weatherNote: 'Comfortable for the forecast.',
+});
 
 const bundle = (patch: Record<string, unknown> = {}) => ({
   localDate: '2026-07-14',
@@ -59,6 +74,97 @@ const contrastRatio = (foreground: string, background: string) => {
 };
 
 describe('DailyBundlePreview Encore', () => {
+  it('renders a two-look partial bundle with honest copy and an intentional grid', () => {
+    const recommendations = [recommendation('easy', 0), recommendation('expressive', 1)] as const;
+    const coverage: DailyBundleCoverageV2 = {
+      deliveryMode: 'partial',
+      selectedArchetypes: ['easy', 'expressive'],
+      omittedArchetypes: ['polished-casual'],
+    };
+
+    const html = render(bundle({ recommendations, coverage }));
+
+    expect(html.match(/<article class="daily-look">/g)).toHaveLength(2);
+    expect(html).toContain("Today&#x27;s 2 outfits");
+    expect(html).toContain('class="daily-looks is-2"');
+    expect(html).toContain(
+      "Polished casual was omitted after today&#x27;s quality, weather, and outfit-distinctness checks.",
+    );
+  });
+
+  it('renders a singular partial bundle and places Encore after its generated look', () => {
+    const recommendations = [recommendation('expressive', 0)] as const;
+    const coverage: DailyBundleCoverageV2 = {
+      deliveryMode: 'partial',
+      selectedArchetypes: ['expressive'],
+      omittedArchetypes: ['easy', 'polished-casual'],
+    };
+    const html = render(bundle({
+      recommendations,
+      coverage,
+      encore: {
+        outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: [],
+      },
+    }));
+
+    expect(html).toContain("Today&#x27;s outfit");
+    expect(html).toContain('class="daily-looks is-1"');
+    expect(html.indexOf('01 Expressive')).toBeLessThan(html.indexOf('Encore — from your saved outfits'));
+  });
+
+  it('renders complete three-look coverage without an omission note', () => {
+    const complete = bundle({
+      recommendations: [
+        recommendation('easy', 0),
+        recommendation('polished-casual', 1),
+        recommendation('expressive', 2),
+      ],
+      coverage: {
+        deliveryMode: 'complete',
+        selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+        omittedArchetypes: [],
+      },
+    });
+
+    const html = render(complete);
+
+    expect(html.match(/<article class="daily-look">/g)).toHaveLength(3);
+    expect(html).toContain("Today&#x27;s 3 outfits");
+    expect(html).toContain('class="daily-looks is-3"');
+    expect(html).not.toContain('daily-coverage-note');
+  });
+
+  it('tolerates a legacy cached three-look bundle without coverage', () => {
+    const complete = bundle({
+      recommendations: [
+        recommendation('easy', 0),
+        recommendation('polished-casual', 1),
+        recommendation('expressive', 2),
+      ],
+      coverage: {
+        deliveryMode: 'complete',
+        selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+        omittedArchetypes: [],
+      },
+    });
+    const legacy = structuredClone(complete) as Omit<DailyBundleV2, 'coverage'> & {
+      coverage?: DailyBundleCoverageV2;
+    };
+    delete legacy.coverage;
+
+    expect(() => render(legacy as DailyBundleV2)).not.toThrow();
+    expect(render(legacy as DailyBundleV2)).not.toContain('daily-coverage-note');
+  });
+
+  it('defines intentional one-, two-, three-, and mobile-grid CSS contracts', () => {
+    const css = readFileSync(new URL('../daily-outfits.css', import.meta.url), 'utf8');
+
+    expect(css).toMatch(/\.daily-looks\.is-1\s*\{/);
+    expect(css).toMatch(/\.daily-looks\.is-2\s*\{/);
+    expect(css).toMatch(/\.daily-looks\.is-3\s*\{/);
+    expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.daily-looks\.is-1,\.daily-looks\.is-2,\.daily-looks\.is-3\s*\{[^}]*grid-template-columns:\s*1fr/);
+  });
+
   it('uses an accessible small-text color on the Encore background', () => {
     const css = readFileSync(new URL('../daily-outfits.css', import.meta.url), 'utf8');
     const labelColor = css.match(/\.daily-encore \.daily-look-label\s*\{[^}]*color:\s*(#[a-f\d]{6})/i)?.[1];

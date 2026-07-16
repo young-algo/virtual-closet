@@ -11,6 +11,14 @@ interface Props {
 }
 
 export default function DailyBundlePreview({ bundle, items, feedback, onFeedback }: Props) {
+  const generatedCountCopy = bundle.recommendations.length === 1
+    ? "Today's outfit"
+    : `Today's ${bundle.recommendations.length} outfits`;
+  const omittedLabels = (bundle.coverage?.omittedArchetypes ?? [])
+    .map(archetype => ARCHETYPE_LABELS[archetype]);
+  const coverageNote = bundle.coverage?.deliveryMode === 'partial' && omittedLabels.length
+    ? `${omittedLabels.join(' and ')} ${omittedLabels.length === 1 ? 'was' : 'were'} omitted after today's quality, weather, and outfit-distinctness checks.`
+    : '';
   const byId = new Map(items.map(item => [item.id, item]));
   const encoreItems = Array.isArray(bundle.encore?.itemIds)
     ? bundle.encore.itemIds.map(id => byId.get(id)).filter((item): item is DailySourceItem => Boolean(item))
@@ -28,7 +36,9 @@ export default function DailyBundlePreview({ bundle, items, feedback, onFeedback
         <p>{Math.round(bundle.weather.morningFeelsLikeF)}° morning · {Math.round(bundle.weather.highTemperatureF)}° high · {Math.round(bundle.weather.maxRainProbability)}% rain</p>
       </div>
       <p className="daily-weather-copy">{bundle.weather.plainEnglishSummary}</p>
-      <div className="daily-looks">
+      <h4 className="daily-generated-count">{generatedCountCopy}</h4>
+      {coverageNote && <p className="daily-coverage-note">{coverageNote}</p>}
+      <div className={`daily-looks is-${bundle.recommendations.length}`}>
         {bundle.recommendations.map((recommendation, index) => {
           const recommendationItems = recommendation.itemIds.map(id => byId.get(id)).filter((item): item is DailySourceItem => Boolean(item));
           const selectedFeedback = feedback.find(entry => entry.localDate === bundle.localDate && entry.candidateId === recommendation.candidateId);

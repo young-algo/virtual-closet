@@ -12,7 +12,15 @@ import {
   saveDailySyncStatus
 } from './storage';
 import { callDailyServer, syncDailySnapshot, type DailyServerAction } from './syncClient';
-import type { DailyBundleV2, DailyFeedbackV2, DailyOutfitSettingsV2, DailySourceItem, DailySyncStatusV2, DailyTasteSource } from './types';
+import type {
+  DailyBundleV2,
+  DailyFeedbackV2,
+  DailyOutfitDiagnosticsV2,
+  DailyOutfitSettingsV2,
+  DailySourceItem,
+  DailySyncStatusV2,
+  DailyTasteSource,
+} from './types';
 import DailyBundlePreview from './DailyBundlePreview';
 import './daily-outfits.css';
 
@@ -37,6 +45,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
   const [progress, setProgress] = useState<SnapshotBuildProgress | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string>('');
+  const [diagnostics, setDiagnostics] = useState<DailyOutfitDiagnosticsV2 | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -95,6 +104,11 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
         setBundle(generatedBundle);
         setStatus(loadDailySyncStatus());
         setNotice('A quality-gated test bundle was generated.');
+      } else if (action === 'getDailyOutfitDiagnosticsV2') {
+        const response = await callDailyServer(action, settings);
+        if (!response.diagnostics) throw new Error('Server diagnostics were unavailable.');
+        setDiagnostics(response.diagnostics);
+        setNotice('Diagnostics refreshed.');
       } else {
         const response = await callDailyServer(action, settings);
         setNotice(String(response.message ?? 'Server action completed.'));
@@ -170,7 +184,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
           <div>
             <span className="daily-kicker"><CloudSun size={14} /> Scheduled sidecar</span>
             <h2>Daily email</h2>
-            <p>Three full-wardrobe, weather-aware looks—built before the day begins.</p>
+            <p>Up to three distinct looks: Easy, Polished casual, and Expressive. If a complete set cannot meet the day's quality, weather, and outfit-distinctness bars after re-planning, the safe looks are still delivered.</p>
           </div>
           <button type="button" onClick={() => dialogRef.current?.close()} aria-label="Close daily email settings"><X size={20} /></button>
         </header>
@@ -223,11 +237,13 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
             <button type="button" onClick={() => runAction('build')} disabled={Boolean(busyAction)}>Build visual inventory</button>
             <button type="button" onClick={() => runAction('syncDailySnapshotV2')} disabled={Boolean(busyAction) || !configured}>Sync now</button>
             <button type="button" onClick={() => runAction('validateStoredSnapshotV2')} disabled={Boolean(busyAction) || !configured}>Validate server snapshot</button>
+            <button type="button" onClick={() => runAction('getDailyOutfitDiagnosticsV2')} disabled={Boolean(busyAction) || !configured}>Inspect diagnostics</button>
             <button type="button" onClick={() => runAction('generateDailyBundleNowV2')} disabled={Boolean(busyAction) || !configured}>Generate test bundle</button>
             <button type="button" onClick={() => runAction('sendDailyTestEmailV2')} disabled={Boolean(busyAction) || !configured || !bundle}>Send test email</button>
           </div>
           {busyAction && <p className="daily-busy"><LoaderCircle size={14} /> Working through the quality gates…</p>}
           {notice && <p className="daily-notice" role="status">{notice}</p>}
+          {diagnostics && <pre className="daily-diagnostics">{JSON.stringify(diagnostics, null, 2)}</pre>}
         </section>
 
         {bundle && <DailyBundlePreview bundle={bundle} items={items} feedback={feedback} onFeedback={handleFeedback} />}

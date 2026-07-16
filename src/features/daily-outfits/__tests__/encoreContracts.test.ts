@@ -390,6 +390,41 @@ describe('Encore selection', () => {
 });
 
 describe('Encore email rendering', () => {
+  const recommendation = (archetype: 'easy' | 'polished-casual' | 'expressive', index: number) => ({
+    candidateId: `look-${index}`,
+    archetype,
+    name: `Look ${index + 1}`,
+    itemIds: ['top', 'bottom', 'shoe'],
+    colorHook: 'Navy against cream.',
+    whyItWorks: 'The proportions and colors work together.',
+    weatherNote: 'Comfortable for the forecast.',
+  });
+  const recommendationSets = {
+    1: [recommendation('expressive', 0)],
+    2: [recommendation('easy', 0), recommendation('expressive', 1)],
+    3: [
+      recommendation('easy', 0),
+      recommendation('polished-casual', 1),
+      recommendation('expressive', 2),
+    ],
+  };
+  const coverageByCount = {
+    1: {
+      deliveryMode: 'partial',
+      selectedArchetypes: ['expressive'],
+      omittedArchetypes: ['easy', 'polished-casual'],
+    },
+    2: {
+      deliveryMode: 'partial',
+      selectedArchetypes: ['easy', 'expressive'],
+      omittedArchetypes: ['polished-casual'],
+    },
+    3: {
+      deliveryMode: 'complete',
+      selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+      omittedArchetypes: [],
+    },
+  };
   const render = evaluateAppsScript<(
     bundle: Record<string, unknown>,
     snapshotValue: object,
@@ -425,6 +460,7 @@ describe('Encore email rendering', () => {
     highTemperatureF: 82,
     maxRainProbability: 0,
     plainEnglishSummary: 'Light pieces.',
+    weatherPhrase: 'clear skies',
     windy: false,
   };
 
@@ -435,11 +471,107 @@ describe('Encore email rendering', () => {
     const bundle = {
       localDate: '2026-07-14',
       weather: weatherForEmail,
-      recommendations: [],
+      coverage: coverageByCount[1],
+      recommendations: recommendationSets[1],
       ...bundlePatch,
     };
     return render(bundle, snapshotValue, true, { bundle }, '2026-07-14');
   };
+
+  const sendBundle = (count: 1 | 2 | 3, bundlePatch: Record<string, unknown> = {}) => {
+    const deliveries: Array<Record<string, unknown>> = [];
+    const send = evaluateAppsScript<(
+      bundle: Record<string, unknown>,
+      snapshotValue: object,
+      testMode: boolean,
+      pending: object,
+      expectedLocalDate: string,
+    ) => void>(
+      ['ItemIndex.gs', 'Email.gs'],
+      'sendDailyBundleNowV2_',
+      {
+        Utilities: {
+          newBlob: (_bytes: unknown, mime: string, name: string) => ({ mime, name }),
+          base64Decode: () => [],
+          formatDate: () => 'Tuesday, July 14',
+        },
+        getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '' }),
+        applySnapshotSettingsV2_: (value: unknown) => value,
+        validFullBundleReadyV2_: () => true,
+        MailApp: { sendEmail: (value: Record<string, unknown>) => deliveries.push(value) },
+        console,
+      },
+    );
+    const bundle = {
+      localDate: '2026-07-14',
+      weather: weatherForEmail,
+      wardrobeFingerprint: 'wardrobe-v3',
+      coverage: coverageByCount[count],
+      recommendations: recommendationSets[count],
+      ...bundlePatch,
+    };
+    send(bundle, { ...emailSnapshot, wardrobeFingerprint: 'wardrobe-v3' }, true, { bundle }, '2026-07-14');
+    return deliveries[0];
+  };
+
+  it.each([
+    [1, "Today's outfit"],
+    [2, "Today's 2 outfits"],
+    [3, "Today's 3 outfits"],
+  ] as const)('renders and sends honest copy for %i generated look(s)', (count, countCopy) => {
+    const rendered = renderBundle({
+      recommendations: recommendationSets[count],
+      coverage: coverageByCount[count],
+    });
+    const delivery = sendBundle(count);
+
+    expect(delivery.subject).toBe(
+      `[TEST] ${countCopy} — ${Math.round(weatherForEmail.highTemperatureF)}° / ${weatherForEmail.weatherPhrase || 'daily forecast'}`,
+    );
+    expect(rendered.html.replace(/&#039;/g, "'")).toContain(`>${countCopy}</h2>`);
+    expect(rendered.plain.split('\n')).toContain(countCopy);
+  });
+
+  it('uses one identical cause-neutral omission sentence in HTML and plain text', () => {
+    const rendered = renderBundle({
+      recommendations: recommendationSets[2],
+      coverage: coverageByCount[2],
+    });
+    const omission = "Polished casual was omitted after today's quality, weather, and outfit-distinctness checks.";
+
+    expect(rendered.html.replace(/&#039;/g, "'").split(omission)).toHaveLength(2);
+    expect(rendered.plain.split(omission)).toHaveLength(2);
+  });
+
+  it('joins two configured-order omissions and omits the note for complete coverage', () => {
+    const partial = renderBundle({
+      recommendations: recommendationSets[1],
+      coverage: coverageByCount[1],
+    });
+    const complete = renderBundle({
+      recommendations: recommendationSets[3],
+      coverage: coverageByCount[3],
+    });
+    const omission = "Easy and Polished casual were omitted after today's quality, weather, and outfit-distinctness checks.";
+
+    expect(partial.html.replace(/&#039;/g, "'")).toContain(omission);
+    expect(partial.plain).toContain(omission);
+    expect(complete.html).not.toContain('omitted after today');
+    expect(complete.plain).not.toContain('omitted after today');
+  });
+
+  it('keeps one-look copy singular and places Encore after its generated card', () => {
+    const encore = {
+      outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: [],
+    };
+    const rendered = renderBundle({ encore });
+    const delivery = sendBundle(1, { encore });
+
+    expect(delivery.subject).toContain("[TEST] Today's outfit —");
+    expect(rendered.html.replace(/&#039;/g, "'")).toContain(">Today's outfit</h2>");
+    expect(rendered.html.indexOf('01 EXPRESSIVE'))
+      .toBeLessThan(rendered.html.indexOf('ENCORE — FROM YOUR SAVED OUTFITS'));
+  });
 
   it('renders a distinct escaped Encore in HTML and plain text with deterministic inline images', () => {
     const rendered = renderBundle({
@@ -458,7 +590,10 @@ describe('Encore email rendering', () => {
     expect(rendered.html).toContain('color:#665d49">TOP — ACG &lt;Tee&gt;');
     expect(rendered.plain).toContain('Saved <One> & "Two"');
     expect(rendered.plain).toContain("One of yours, back in rotation for today's weather.");
-    expect(Object.keys(rendered.inlineImages)).toEqual(['encoreitem0', 'encoreitem1', 'encoreitem2']);
+    expect(Object.keys(rendered.inlineImages)).toEqual([
+      'look0item0', 'look0item1', 'look0item2',
+      'encoreitem0', 'encoreitem1', 'encoreitem2',
+    ]);
     expect(rendered.html).toContain('cid:encoreitem0');
     expect(rendered.html).toContain('cid:encoreitem2');
   });
@@ -481,7 +616,8 @@ describe('Encore email rendering', () => {
 
     expect(rendered.html).toContain('Visible layer');
     expect(rendered.html).not.toContain('missing');
-    expect(Object.keys(rendered.inlineImages)).toEqual(['encoreitem0', 'encoreitem1']);
+    expect(Object.keys(rendered.inlineImages).filter(key => key.startsWith('encoreitem')))
+      .toEqual(['encoreitem0', 'encoreitem1']);
     expect(rendered.html).not.toContain('cid:encoreitem2');
   });
 
@@ -491,7 +627,7 @@ describe('Encore email rendering', () => {
     expect(rendered.html).not.toContain('ENCORE — FROM YOUR SAVED OUTFITS');
     expect(rendered.html).not.toContain('encoreitem');
     expect(rendered.plain).not.toContain('ENCORE — FROM YOUR SAVED OUTFITS');
-    expect(rendered.inlineImages).toEqual({});
+    expect(Object.keys(rendered.inlineImages)).toEqual(['look0item0', 'look0item1', 'look0item2']);
   });
 
   it('renders a named Encore safely when its item-id payload is malformed', () => {
@@ -503,21 +639,13 @@ describe('Encore email rendering', () => {
 
     expect(rendered.html).toContain('Saved One');
     expect(rendered.plain).toContain("One of yours, back in rotation for today's weather.");
-    expect(rendered.inlineImages).toEqual({});
+    expect(Object.keys(rendered.inlineImages).filter(key => key.startsWith('encoreitem'))).toEqual([]);
   });
 
   it('preserves the ordinary three generated email sections and their image identities', () => {
-    const recommendations = (['easy', 'polished-casual', 'expressive'] as const).map((archetype, index) => ({
-      candidateId: `look-${index}`,
-      archetype,
-      name: `Look ${index + 1}`,
-      itemIds: ['top', 'bottom', 'shoe'],
-      colorHook: 'Navy against cream.',
-      whyItWorks: 'The proportions and colors work together.',
-      weatherNote: 'Comfortable for the forecast.',
-    }));
+    const recommendations = recommendationSets[3];
 
-    const rendered = renderBundle({ recommendations });
+    const rendered = renderBundle({ recommendations, coverage: coverageByCount[3] });
 
     expect(rendered.html.match(/<section style="padding:32px 0/g)).toHaveLength(3);
     expect(rendered.html).toContain('01 EASY');
@@ -537,6 +665,7 @@ describe('Encore email rendering', () => {
     }));
     const rendered = renderBundle({
       recommendations,
+      coverage: coverageByCount[3],
       encore: {
         outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: [],
       },
@@ -547,7 +676,7 @@ describe('Encore email rendering', () => {
 });
 
 describe('Encore bundle assembly and persistence', () => {
-  const daily = { QUALITY_POLICY_VERSION: 3, ARCHETYPES: ['easy', 'polished-casual', 'expressive'] };
+  const daily = { QUALITY_POLICY_VERSION: 4, ARCHETYPES: ['easy', 'polished-casual', 'expressive'] };
   const curated = { recommendations: [{ candidateId: 'one' }, { candidateId: 'two' }, { candidateId: 'three' }] };
   const bundleSnapshot = { ...snapshot, generatedAt: 100, wardrobeFingerprint: 'wardrobe-v3' };
   const completeSelection = {
@@ -765,7 +894,7 @@ describe('Encore bundle assembly and persistence', () => {
         getDailyConfigV2_: () => ({}),
         localDateV2_: () => weather.localDate,
         loadPendingV2_: () => ({
-          workflow: 'manual-v2', qualityPolicyVersion: 3, manualStage: 'selection-ready',
+          workflow: 'manual-v2', qualityPolicyVersion: 4, manualStage: 'selection-ready',
           localDate: weather.localDate, wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint,
           weather, history: pendingHistory, selectedCandidates: [], critic: {}, selection: completeSelection,
         }),
@@ -795,7 +924,7 @@ describe('Encore bundle assembly and persistence', () => {
         DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
         Date: { now: () => [0, 1, 300_000][nowCall++] ?? 300_000 },
         loadPendingV2_: () => ({
-          localDate: weather.localDate, qualityPolicyVersion: 3,
+          localDate: weather.localDate, qualityPolicyVersion: 4,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, weather,
           history: pendingHistory, selectedCandidates: [], critic: {}, selection: completeSelection,
         }),
@@ -812,7 +941,7 @@ describe('Encore bundle assembly and persistence', () => {
       },
     );
     advance({
-      stage: 'selection-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
+      stage: 'selection-ready', qualityPolicyVersion: 4, localDate: weather.localDate,
       wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
     }, bundleSnapshot, 0);
     expect(scheduledArgs[0]).toHaveLength(5);
@@ -972,7 +1101,7 @@ describe('Encore bundle assembly and persistence', () => {
         getBooleanPropertyV2_: () => false,
         assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         loadJobStateV2_: () => ({
-          stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
+          stage: 'bundle-ready', qualityPolicyVersion: 4, localDate: weather.localDate,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
         }),
         validScheduledJobStateV2_: () => true,
@@ -1037,7 +1166,7 @@ describe('Encore bundle assembly and persistence', () => {
         getBooleanPropertyV2_: () => false,
         assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         loadJobStateV2_: () => ({
-          stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
+          stage: 'bundle-ready', qualityPolicyVersion: 4, localDate: weather.localDate,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
         }),
         validScheduledJobStateV2_: () => true,
@@ -1129,7 +1258,7 @@ describe('Encore bundle assembly and persistence', () => {
         getBooleanPropertyV2_: (key: string) => key === 'SHADOW_MODE',
         assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         loadJobStateV2_: () => ({
-          stage: 'bundle-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
+          stage: 'bundle-ready', qualityPolicyVersion: 4, localDate: weather.localDate,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
         }),
         validScheduledJobStateV2_: () => true,
