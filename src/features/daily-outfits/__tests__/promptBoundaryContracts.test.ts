@@ -152,6 +152,68 @@ const internalCandidate = (archetype = 'easy') => ({
   plannerConfidence: 0.9
 });
 
+const selectionCoverageFor = (selectedCandidates: Array<{ archetype: string }>) => {
+  const selectedArchetypes = selectedCandidates.map(candidate => candidate.archetype);
+  return {
+    path: 'top2',
+    deliveryMode: selectedCandidates.length === 3 ? 'complete' : 'partial',
+    selectedCount: selectedCandidates.length,
+    selectedArchetypes,
+    omittedArchetypes: ['easy', 'polished-casual', 'expressive']
+      .filter(archetype => !selectedArchetypes.includes(archetype))
+  };
+};
+
+const cardinalityBoundaryFixture = () => {
+  const secondIds = ['curator-top-2', 'curator-bottom-2', 'curator-shoe-2'];
+  const thirdIds = ['curator-top-3', 'curator-bottom-3', 'curator-shoe-3'];
+  const second = {
+    ...internalCandidate('polished-casual'),
+    candidateId: 'polished-casual-2',
+    topId: secondIds[0],
+    bottomId: secondIds[1],
+    shoeId: secondIds[2],
+    itemIds: secondIds.slice()
+  };
+  const third = {
+    ...internalCandidate('expressive'),
+    candidateId: 'expressive-3',
+    topId: thirdIds[0],
+    bottomId: thirdIds[1],
+    shoeId: thirdIds[2],
+    itemIds: thirdIds.slice()
+  };
+  const cloneItem = (sourceId: string, id: string, shortLabel: string) => ({
+    ...richSnapshot.items.find(item => item.id === sourceId)!,
+    id,
+    shortLabel
+  });
+  const selectedCandidates = [internalCandidate(), second, third];
+  return {
+    snapshot: {
+      ...richSnapshot,
+      items: richSnapshot.items.concat([
+        cloneItem(topId, secondIds[0], 'T005'),
+        cloneItem(bottomId, secondIds[1], 'B003'),
+        cloneItem(sneakerId, secondIds[2], 'S010'),
+        cloneItem(topId, thirdIds[0], 'T006'),
+        cloneItem(bottomId, thirdIds[1], 'B004'),
+        cloneItem(sneakerId, thirdIds[2], 'S011')
+      ])
+    },
+    selectedCandidates,
+    labelItemIds: [
+      ['T004', 'B002', 'S009'],
+      ['T005', 'B003', 'S010'],
+      ['T006', 'B004', 'S011']
+    ],
+    critic: {
+      scores: selectedCandidates.concat([{ ...internalCandidate(), candidateId: 'overflow-4' }])
+        .map(candidate => criticScore(candidate.candidateId))
+    }
+  };
+};
+
 const labelCandidate = (archetype = 'easy') => ({
   ...internalCandidate(archetype),
   topId: 'T004',
@@ -508,7 +570,8 @@ describe('model boundary views', () => {
       weather: object,
       history: object,
       candidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => object>(
       ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
@@ -524,7 +587,16 @@ describe('model boundary views', () => {
       .toThrow(/unsafe candidateId/);
     expect(() => runCurator(richSnapshot, richWeather, richHistory, [unsafeCandidate], unsafeCritic))
       .toThrow(/unsafe candidateId/);
-    expect(() => runRepair({ recommendations: [] }, ['copy needs repair'], richSnapshot, richWeather, richHistory, [unsafeCandidate], unsafeCritic))
+    expect(() => runRepair(
+      { recommendations: [] },
+      ['copy needs repair'],
+      richSnapshot,
+      richWeather,
+      richHistory,
+      [unsafeCandidate],
+      unsafeCritic,
+      selectionCoverageFor([unsafeCandidate]),
+    ))
       .toThrow(/unsafe candidateId/);
     expect(modelCalls).toBe(0);
   });
@@ -2044,7 +2116,8 @@ describe('prompt and response label boundary', () => {
       weather: object,
       history: object,
       selectedCandidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => object>(
       ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
@@ -2067,7 +2140,8 @@ describe('prompt and response label boundary', () => {
       richWeather,
       richHistory,
       selectedCandidates,
-      leakingCritic
+      leakingCritic,
+      selectionCoverageFor(selectedCandidates),
     );
 
     expect(Object.keys(captured).sort()).toEqual(['critic', 'criticRepair', 'curator', 'finalRepair']);
@@ -2139,7 +2213,8 @@ describe('prompt and response label boundary', () => {
       weather: object,
       history: object,
       selectedCandidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => object>(
       ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
@@ -2160,7 +2235,8 @@ describe('prompt and response label boundary', () => {
       richWeather,
       richHistory,
       [internalCandidate()],
-      { scores: [] }
+      { scores: [] },
+      selectionCoverageFor([internalCandidate()]),
     );
 
     expect(Object.keys(captured).sort()).toEqual(['final', 'planner']);
@@ -2196,7 +2272,8 @@ describe('prompt and response label boundary', () => {
       weather: object,
       history: object,
       selectedCandidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => object>(
       ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
@@ -2218,7 +2295,8 @@ describe('prompt and response label boundary', () => {
       richWeather,
       richHistory,
       [internalCandidate()],
-      { scores: [] }
+      { scores: [] },
+      selectionCoverageFor([internalCandidate()]),
     );
 
     expect(captured).toContain('ITEM T004 | slot=top');
@@ -2230,7 +2308,11 @@ describe('prompt and response label boundary', () => {
   });
 
   it('uses only the immutable selected set and its compact scores, then resolves curator output immediately', () => {
-    let capturedParts: Array<{ text?: string }> = [];
+    const captured: Array<{
+      parts: Array<{ text?: string }>;
+      schema: { properties: { recommendations: { minItems: number; maxItems: number } } };
+    }> = [];
+    const fixture = cardinalityBoundaryFixture();
     const curator = evaluateAppsScript<(
       snapshot: object,
       weather: object,
@@ -2243,35 +2325,63 @@ describe('prompt and response label boundary', () => {
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
         console,
-        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
-          capturedParts = parts;
+        callGeminiV2_: (
+          _stage: string,
+          parts: Array<{ text?: string }>,
+          schema: { properties: { recommendations: { minItems: number; maxItems: number } } },
+        ) => {
+          captured.push({ parts, schema });
+          const count = schema.properties.recommendations.minItems;
           return {
-            recommendations: [{
-              candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
-              itemIds: ['T004', 'B002', 'S009'], colorHook: 'Cream, olive, and brown connect.',
+            recommendations: fixture.selectedCandidates.slice(0, count).map((candidate, index) => ({
+              candidateId: candidate.candidateId, archetype: candidate.archetype, name: 'Utility Neutral',
+              itemIds: fixture.labelItemIds[index], colorHook: 'Cream, olive, and brown connect.',
               whyItWorks: 'The relaxed proportions align.', weatherNote: 'Breathable today.'
-            }]
+            }))
           };
         }
       }
     );
-    const critic = {
-      scores: [criticScore('easy-1'), { ...criticScore('unselected-private'), criticalDefects: [sneakerId] }],
-      privateWardrobeId: sneakerId
-    };
+    const results: Array<{ recommendations: Array<{ itemIds: string[] }> }> = [];
+    [1, 2, 3].forEach(count => {
+      const result = curator(
+        fixture.snapshot,
+        richWeather,
+        richHistory,
+        fixture.selectedCandidates.slice(0, count),
+        fixture.critic,
+      );
+      results.push(result);
+      expect(captured.at(-1)?.schema.properties.recommendations).toMatchObject({
+        minItems: count,
+        maxItems: count,
+      });
+      const prompt = captured.at(-1)?.parts.map(part => part.text || '').join('\n') || '';
+      expect(prompt).toContain(
+        `The ${count} selected outfit${count === 1 ? ' is' : 's are'} final and validated upstream.`,
+      );
+      expect(prompt).toContain(
+        `Return exactly ${count} recommendation record${count === 1 ? '' : 's'} in the same order.`,
+      );
+    });
+    const captureCount = captured.length;
+    expect(() => curator(fixture.snapshot, richWeather, richHistory, [], fixture.critic))
+      .toThrow(/Curator selected count must be between one and three/);
+    const overflow = fixture.selectedCandidates.concat([{ ...internalCandidate(), candidateId: 'overflow-4' }]);
+    expect(() => curator(fixture.snapshot, richWeather, richHistory, overflow, fixture.critic))
+      .toThrow(/Curator selected count must be between one and three/);
+    expect(captured).toHaveLength(captureCount);
 
-    const result = curator(richSnapshot, richWeather, richHistory, [internalCandidate()], critic);
-    const serialized = JSON.stringify(capturedParts);
-    expect(serialized).toContain('These three outfits are final');
-    expect(serialized).toContain('Do not swap, reorder, or modify them');
+    const serialized = JSON.stringify(captured[0].parts);
+    expect(serialized).toContain('The 1 selected outfit is final');
+    expect(serialized).toContain('Do not swap, reorder, add, remove, or modify any outfit or item');
     expect(serialized).toContain('S009');
     expect(serialized).toContain('easy-1');
-    expect(serialized).not.toContain('unselected-private');
     expect(serialized).not.toContain(sneakerId);
     expect(serialized).not.toContain(topId);
     expect(serialized).not.toContain('hourly');
     expect(serialized).not.toContain('cooldownItemIds');
-    expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+    expect(results[0].recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
   });
 
   it.each([
@@ -2284,8 +2394,12 @@ describe('prompt and response label boundary', () => {
     let curatorCritic: unknown;
     let validationSelection: unknown;
     let validationCritic: unknown;
+    let validationCoverage: unknown;
+    let repairCoverage: unknown;
+    let bundleCoverage: unknown;
     const selectedCandidates = [internalCandidate()];
     const selectedCritic = { scores: [criticScore('easy-1')], selectionMarker: 'selected-critic' };
+    const selectedCoverage = selectionCoverageFor(selectedCandidates);
     const pipeline = evaluateAppsScript<(snapshot: object, weather: object) => { curated: { recommendations: unknown[] } }>(
       ['Scheduler.gs'],
       'generationBundlePipelineV2_',
@@ -2299,24 +2413,30 @@ describe('prompt and response label boundary', () => {
           candidates: selectedCandidates,
           critic: selectedCritic,
           selectedCandidates,
-          selection: { path: 'top2' }
+          selection: selectedCoverage
         }),
         runCuratorV2_: (_snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
           curatorSelection = selected;
           curatorCritic = critic;
           return malformedCurated;
         },
-        validateFinalBundleV2_: (curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
+        validateFinalBundleV2_: (curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown, selection: unknown) => {
           validated = curated;
           validationSelection = selected;
           validationCritic = critic;
+          validationCoverage = selection;
           return ['exactly three final recommendations are required'];
         },
-        repairFinalBundleV2_: (curated: unknown) => {
+        repairFinalBundleV2_: (_curated: unknown, _errors: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, _selected: unknown, _critic: unknown, selection: unknown) => {
+          repairCoverage = selection;
+          const curated = _curated;
           repaired = curated;
           return { recommendations: [] };
         },
-        buildBundleV2_: () => ({})
+        buildBundleV2_: (_curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selection: unknown) => {
+          bundleCoverage = selection;
+          return {};
+        }
       }
     );
 
@@ -2325,6 +2445,9 @@ describe('prompt and response label boundary', () => {
     expect(curatorCritic).toEqual(selectedCritic);
     expect(validationSelection).toEqual(selectedCandidates);
     expect(validationCritic).toEqual(selectedCritic);
+    expect(validationCoverage).toEqual(selectedCoverage);
+    expect(repairCoverage).toEqual(selectedCoverage);
+    expect(bundleCoverage).toEqual(selectedCoverage);
     expect(validated).toEqual(malformedCurated);
     expect(repaired).toEqual(malformedCurated);
     expect(result.curated).toEqual({ recommendations: [] });
@@ -2340,8 +2463,12 @@ describe('prompt and response label boundary', () => {
     let curatorCritic: unknown;
     let validationSelection: unknown;
     let validationCritic: unknown;
+    let validationCoverage: unknown;
+    let repairCoverage: unknown;
+    let bundleCoverage: unknown;
     const selectedCandidates = [internalCandidate()];
     const selectedCritic = { ...validCriticResponse(), selectionMarker: 'selected-critic' };
+    const selectedCoverage = selectionCoverageFor(selectedCandidates);
     const pipeline = evaluateAppsScript<(snapshot: object, weather: object) => { curated: { recommendations: unknown[] } }>(
       ['Scheduler.gs'],
       'generationBundlePipelineV2_',
@@ -2355,24 +2482,29 @@ describe('prompt and response label boundary', () => {
           candidates: criticCandidates(),
           critic: selectedCritic,
           selectedCandidates,
-          selection: { path: 'top2' }
+          selection: selectedCoverage
         }),
         runCuratorV2_: (_snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
           curatorSelection = selected;
           curatorCritic = critic;
           return malformedCurated;
         },
-        validateFinalBundleV2_: (_curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown) => {
+        validateFinalBundleV2_: (_curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selected: unknown, critic: unknown, selection: unknown) => {
           validationSelection = selected;
           validationCritic = critic;
+          validationCoverage = selection;
           return ['final recommendations must be object records with array itemIds'];
         },
-        repairFinalBundleV2_: (curated: unknown, errors: string[]) => {
+        repairFinalBundleV2_: (curated: unknown, errors: string[], _snapshot: unknown, _weather: unknown, _history: unknown, _selected: unknown, _critic: unknown, selection: unknown) => {
           repaired = curated;
           validationErrors = errors;
+          repairCoverage = selection;
           return { recommendations: [] };
         },
-        buildBundleV2_: () => ({})
+        buildBundleV2_: (_curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, selection: unknown) => {
+          bundleCoverage = selection;
+          return {};
+        }
       }
     );
 
@@ -2382,14 +2514,21 @@ describe('prompt and response label boundary', () => {
     expect(curatorCritic).toEqual(selectedCritic);
     expect(validationSelection).toEqual(selectedCandidates);
     expect(validationCritic).toEqual(selectedCritic);
+    expect(validationCoverage).toEqual(selectedCoverage);
+    expect(repairCoverage).toEqual(selectedCoverage);
+    expect(bundleCoverage).toEqual(selectedCoverage);
     expect(validationErrors.length).toBeGreaterThan(0);
     expect(repaired).toEqual(malformedCurated);
     expect(result.curated).toEqual({ recommendations: [] });
   });
 
   it('captures final repair prompts on compact views and resolves before validation', () => {
-    let capturedParts: Array<{ text?: string }> = [];
+    const captured: Array<{
+      parts: Array<{ text?: string }>;
+      schema: { properties: { recommendations: { minItems: number; maxItems: number } } };
+    }> = [];
     let validatedResolvedResponse = false;
+    const fixture = cardinalityBoundaryFixture();
     const repairFinal = evaluateAppsScript<(
       curated: object,
       errors: string[],
@@ -2397,21 +2536,27 @@ describe('prompt and response label boundary', () => {
       weather: object,
       history: object,
       selectedCandidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => { recommendations: Array<{ itemIds: string[] }> }>(
       ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
       {
         DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
         console,
-        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
-          capturedParts = parts;
+        callGeminiV2_: (
+          _stage: string,
+          parts: Array<{ text?: string }>,
+          schema: { properties: { recommendations: { minItems: number; maxItems: number } } },
+        ) => {
+          captured.push({ parts, schema });
+          const count = schema.properties.recommendations.minItems;
           return {
-            recommendations: [{
-              candidateId: 'easy-1', archetype: 'easy', name: 'Utility Neutral',
-              itemIds: ['T004', 'B002', 'S009'], colorHook: 'Cream, olive, and brown connect.',
+            recommendations: fixture.selectedCandidates.slice(0, count).map((candidate, index) => ({
+              candidateId: candidate.candidateId, archetype: candidate.archetype, name: 'Utility Neutral',
+              itemIds: fixture.labelItemIds[index], colorHook: 'Cream, olive, and brown connect.',
               whyItWorks: 'The relaxed proportions align.', weatherNote: 'Breathable today.'
-            }]
+            }))
           };
         },
         validateFinalBundleV2_: (response: { recommendations: Array<{ itemIds: string[] }> }) => {
@@ -2428,11 +2573,44 @@ describe('prompt and response label boundary', () => {
       }],
       privateNested: { wardrobeId: sneakerId }
     };
-    const critic = { scores: [criticScore('easy-1')], privateWardrobeId: sneakerId };
+    const results: Array<{ recommendations: Array<{ itemIds: string[] }> }> = [];
+    [1, 2, 3].forEach(count => {
+      const selectedCandidates = fixture.selectedCandidates.slice(0, count);
+      const result = repairFinal(
+        current,
+        ['recommendation[0].colorHook is too short'],
+        fixture.snapshot,
+        richWeather,
+        richHistory,
+        selectedCandidates,
+        fixture.critic,
+        selectionCoverageFor(selectedCandidates),
+      );
+      results.push(result);
+      expect(captured.at(-1)?.schema.properties.recommendations).toMatchObject({
+        minItems: count,
+        maxItems: count,
+      });
+      const prompt = captured.at(-1)?.parts.map(part => part.text || '').join('\n') || '';
+      expect(prompt).toContain(
+        `The ${count} selected outfit${count === 1 ? ' is' : 's are'} final and validated upstream.`,
+      );
+      expect(prompt).toContain(
+        `Return exactly ${count} recommendation record${count === 1 ? '' : 's'} in the same order.`,
+      );
+    });
+    const captureCount = captured.length;
+    expect(() => repairFinal(current, ['invalid'], fixture.snapshot, richWeather, richHistory, [], fixture.critic, {}))
+      .toThrow(/Curator selected count must be between one and three/);
+    const overflow = fixture.selectedCandidates.concat([{ ...internalCandidate(), candidateId: 'overflow-4' }]);
+    expect(() => repairFinal(current, ['invalid'], fixture.snapshot, richWeather, richHistory, overflow, fixture.critic, {}))
+      .toThrow(/Curator selected count must be between one and three/);
+    expect(captured).toHaveLength(captureCount);
 
-    const result = repairFinal(current, ['recommendation[0].colorHook is too short'], richSnapshot, richWeather, richHistory, [internalCandidate()], critic);
-    const serialized = JSON.stringify(capturedParts);
+    const serialized = JSON.stringify(captured[0].parts);
     expect(serialized).toContain('candidate ids, archetypes, item ids, and order are immutable');
+    expect(serialized).toContain('The 1 selected outfit is final');
+    expect(serialized).toContain('Return exactly 1 recommendation record');
     expect(serialized).toContain('S009');
     expect(serialized).not.toContain(sneakerId);
     expect(serialized).not.toContain(topId);
@@ -2442,7 +2620,7 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain('SAVED OUTFIT SIGNATURES:');
     expect(serialized).not.toContain('DAILY HISTORY:');
     expect(validatedResolvedResponse).toBe(true);
-    expect(result.recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
+    expect(results[0].recommendations[0].itemIds).toEqual([topId, bottomId, sneakerId]);
   });
 
   it('repairs unknown final item labels through a closed invalid-curated prompt', () => {
@@ -2455,7 +2633,8 @@ describe('prompt and response label boundary', () => {
       weather: object,
       history: object,
       selectedCandidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => { recommendations: Array<{ itemIds: string[] }> }>(
       ['Weather.gs', 'ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
@@ -2494,7 +2673,8 @@ describe('prompt and response label boundary', () => {
       richWeather,
       richHistory,
       [internalCandidate()],
-      critic
+      critic,
+      selectionCoverageFor([internalCandidate()]),
     );
 
     expect(capturedPrompt).toContain('INVALID_LABEL');
@@ -2517,7 +2697,8 @@ describe('prompt and response label boundary', () => {
       weather: object,
       history: object,
       selectedCandidates: object[],
-      critic: object
+      critic: object,
+      selection: object
     ) => unknown>(
       ['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Selection.gs', 'FinalValidation.gs', 'Repair.gs'],
       'repairFinalBundleV2_',
@@ -2541,7 +2722,8 @@ describe('prompt and response label boundary', () => {
       richWeather,
       richHistory,
       criticCandidates().filter(candidate => candidate.candidateId.endsWith('-0')),
-      validCriticResponse()
+      validCriticResponse(),
+      selectionCoverageFor(criticCandidates().filter(candidate => candidate.candidateId.endsWith('-0'))),
     )).toThrow(/^Final repair failed quality gates:/);
     expect(repairCalls).toBe(2);
   });

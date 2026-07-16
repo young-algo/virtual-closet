@@ -16,8 +16,8 @@ function generationBundlePipelineV2_(snapshot, weather) {
   var initialCritic = runCriticV2_(snapshot, weather, history, planners);
   var selected = runSelectionV2_(snapshot, weather, history, planners, initialCritic);
   var curated = runCuratorV2_(snapshot, weather, history, selected.selectedCandidates, selected.critic);
-  var errors = validateFinalBundleV2_(curated, snapshot, weather, history, selected.selectedCandidates, selected.critic);
-  if (errors.length) curated = repairFinalBundleV2_(curated, errors, snapshot, weather, history, selected.selectedCandidates, selected.critic);
+  var errors = validateFinalBundleV2_(curated, snapshot, weather, history, selected.selectedCandidates, selected.critic, selected.selection);
+  if (errors.length) curated = repairFinalBundleV2_(curated, errors, snapshot, weather, history, selected.selectedCandidates, selected.critic, selected.selection);
   return {
     history: history,
     planners: planners,
@@ -26,7 +26,7 @@ function generationBundlePipelineV2_(snapshot, weather) {
     selectedCandidates: selected.selectedCandidates,
     selection: selected.selection,
     curated: curated,
-    bundle: buildBundleV2_(curated, snapshot, weather, history)
+    bundle: buildBundleV2_(curated, snapshot, weather, history, selected.selection)
   };
 }
 
@@ -99,9 +99,9 @@ function generateDailyBundleStepV2() {
       assertDeterministicSelectionReadyV2_(pending, localDate, snapshot.wardrobeFingerprint, snapshot);
       assertPersistedSelectionContextV2_(pending);
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather, pending.history);
+      var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
+      if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
+      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selection);
       pending.manualStage = 'bundle-ready';
     }
     pending.updatedAt = Date.now();
@@ -163,9 +163,9 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
       assertDeterministicSelectionReadyV2_(pending, state.localDate, snapshot.wardrobeFingerprint, snapshot);
       assertPersistedSelectionContextV2_(pending);
       pending.curated = runCuratorV2_(snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
-      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather, pending.history);
+      var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
+      if (errors.length) pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
+      pending.bundle = buildBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selection);
       pending.updatedAt = Date.now();
       state.stage = 'bundle-ready';
       state.bundleFileId = savePendingV2_(pending);

@@ -75,7 +75,8 @@ const finalValidator = new Function(`
   weather: unknown,
   history: unknown,
   selectedCandidates: unknown[],
-  critic: unknown
+  critic: unknown,
+  selection: unknown
 ) => string[];
 
 const snapshot = {
@@ -263,6 +264,11 @@ const sendablePendingFixture = () => {
       qualityPolicyVersion: 3,
       localDate: '2026-07-15',
       weather: structuredClone(weather),
+      coverage: {
+        deliveryMode: selected.selection.deliveryMode,
+        selectedArchetypes: selected.selection.selectedArchetypes.slice(),
+        omittedArchetypes: selected.selection.omittedArchetypes.slice(),
+      },
       recommendations,
       generatedAt: 200,
       snapshotGeneratedAt: 50,
@@ -351,6 +357,10 @@ const finalPolicyFixture = () => {
     history: structuredClone(pending.history),
     selected: structuredClone(pending.selectedCandidates),
     critic: structuredClone(pending.critic),
+    selection: {
+      ...structuredClone(pending.selection),
+      deliveryMode: pending.selection.deliveryMode as 'complete' | 'partial',
+    },
   };
 };
 
@@ -785,19 +795,30 @@ describe('Apps Script contracts', () => {
           return [];
         },
         repairFinalBundleV2_: () => { throw new Error('unexpected repair'); },
-        buildBundleV2_: () => ({ localDate: '2026-07-15' }),
         newRunIdV2_: () => 'run-id',
         savePendingV2_: () => 'pending-file',
       },
     );
 
-    expect(runSelectionReady()).toEqual({
+    const selectionReadyResult = runSelectionReady();
+    expect(selectionReadyResult).toEqual({
       complete: true,
       stage: 'bundle-ready',
       bundle: expect.objectContaining({ localDate: '2026-07-15' }),
     });
     expect(curatorInputs[0]?.slice(-2)).toEqual([selectedResult.selectedCandidates, selectedResult.critic]);
-    expect(validationInputs[0]?.slice(-2)).toEqual([selectedResult.selectedCandidates, selectedResult.critic]);
+    expect(validationInputs[0]?.slice(-3)).toEqual([
+      selectedResult.selectedCandidates,
+      selectedResult.critic,
+      selectedResult.selection,
+    ]);
+    expect(selectionReadyResult.bundle).toEqual(expect.objectContaining({
+      coverage: {
+        deliveryMode: 'complete',
+        selectedArchetypes: dailyArchetypes,
+        omittedArchetypes: [],
+      },
+    }));
     expect(mergeCalls).toBe(0);
   });
 
@@ -1957,6 +1978,14 @@ describe('Apps Script contracts', () => {
     const changedCandidate = structuredClone(valid);
     changedCandidate.bundle.recommendations[0].candidateId = 'changed-candidate';
     invalids.push(changedCandidate);
+
+    const missingCoverage = structuredClone(valid);
+    delete (missingCoverage.bundle as Partial<typeof missingCoverage.bundle>).coverage;
+    invalids.push(missingCoverage);
+
+    const mismatchedCoverage = structuredClone(valid);
+    mismatchedCoverage.bundle.coverage.selectedArchetypes.reverse();
+    invalids.push(mismatchedCoverage);
 
     const reorderedItems = structuredClone(valid);
     reorderedItems.bundle.recommendations[0].itemIds.reverse();
@@ -3552,6 +3581,136 @@ describe('Apps Script contracts', () => {
     expect(() => criticValidator({ scores: [null] }, [candidates[0]])).not.toThrow();
   });
 
+  it.each([1, 2, 3])('accepts an exact %i-look final payload', count => {
+    const fixture = finalPolicyFixture();
+    fixture.selected = fixture.selected.slice(0, count);
+    fixture.curated.recommendations = fixture.curated.recommendations.slice(0, count);
+    const selectedArchetypes = fixture.selected.map(candidate => candidate.archetype);
+    fixture.selection = {
+      ...fixture.selection,
+      deliveryMode: count === 3 ? 'complete' : 'partial',
+      selectedCount: count,
+      selectedArchetypes,
+      omittedArchetypes: dailyArchetypes.filter(archetype => !selectedArchetypes.includes(archetype)),
+    };
+    expect(finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+      fixture.selection,
+    )).toEqual([]);
+  });
+
+  it('rejects mismatched partial coverage, order, identity, count, and unnecessary shoe reuse', () => {
+    const base = finalPolicyFixture();
+    const fixture = finalPolicyFixture();
+    fixture.selected = fixture.selected.slice(0, 2);
+    fixture.curated.recommendations = fixture.curated.recommendations.slice(0, 2);
+    const selectedArchetypes = fixture.selected.map(candidate => candidate.archetype);
+    fixture.selection = {
+      ...fixture.selection,
+      deliveryMode: 'partial',
+      selectedCount: 2,
+      selectedArchetypes,
+      omittedArchetypes: dailyArchetypes.filter(archetype => !selectedArchetypes.includes(archetype)),
+    };
+    const validate = (value = fixture) => finalValidator(
+      value.curated,
+      value.snapshot,
+      value.weather,
+      value.history,
+      value.selected,
+      value.critic,
+      value.selection,
+    );
+
+    const oneRecommendation = structuredClone(fixture);
+    oneRecommendation.curated.recommendations = oneRecommendation.curated.recommendations.slice(0, 1);
+    expect(validate(oneRecommendation)).toContain('final recommendation count must equal selected candidate count');
+
+    const threeRecommendations = structuredClone(fixture);
+    threeRecommendations.curated.recommendations.push(structuredClone(base.curated.recommendations[2]));
+    expect(validate(threeRecommendations)).toContain('final recommendation count must equal selected candidate count');
+
+    const reversedSelected = structuredClone(fixture);
+    reversedSelected.selected.reverse();
+    expect(validate(reversedSelected).length).toBeGreaterThan(0);
+
+    const duplicateArchetype = structuredClone(fixture);
+    duplicateArchetype.selected[1].archetype = duplicateArchetype.selected[0].archetype;
+    expect(validate(duplicateArchetype).length).toBeGreaterThan(0);
+
+    const swappedSelectionOrder = structuredClone(fixture);
+    swappedSelectionOrder.selection.selectedArchetypes.reverse();
+    expect(validate(swappedSelectionOrder).length).toBeGreaterThan(0);
+
+    const changedCandidateId = structuredClone(fixture);
+    changedCandidateId.curated.recommendations[0].candidateId = 'changed-candidate';
+    expect(validate(changedCandidateId).length).toBeGreaterThan(0);
+
+    const changedOmission = structuredClone(fixture);
+    changedOmission.selection.omittedArchetypes[0] = 'easy';
+    expect(validate(changedOmission).length).toBeGreaterThan(0);
+
+    const repeatedShoe = structuredClone(fixture);
+    const retainedShoeId = repeatedShoe.selected[0].shoeId;
+    const replacedShoeId = repeatedShoe.selected[1].shoeId;
+    repeatedShoe.selected[1].shoeId = retainedShoeId;
+    repeatedShoe.selected[1].itemIds = repeatedShoe.selected[1].itemIds
+      .map(id => id === replacedShoeId ? retainedShoeId : id);
+    repeatedShoe.curated.recommendations[1].itemIds = repeatedShoe.curated.recommendations[1].itemIds
+      .map(id => id === replacedShoeId ? retainedShoeId : id);
+    expect(validate(repeatedShoe)).toContain('shoes must be unique when enough weather-safe options exist');
+    repeatedShoe.snapshot.items.forEach(item => {
+      if (item.slot === 'shoes' && item.id !== retainedShoeId) {
+        item.profile = { ...item.profile, available: false };
+      }
+    });
+    expect(validate(repeatedShoe)).not.toContain('shoes must be unique when enough weather-safe options exist');
+  });
+
+  it.each([1, 2, 3])('persists exact coverage for a %i-look bundle', count => {
+    const fixture = finalPolicyFixture();
+    fixture.selected = fixture.selected.slice(0, count);
+    fixture.curated.recommendations = fixture.curated.recommendations.slice(0, count);
+    const selectedArchetypes = fixture.selected.map(candidate => candidate.archetype);
+    fixture.selection = {
+      ...fixture.selection,
+      deliveryMode: count === 3 ? 'complete' : 'partial',
+      selectedCount: count,
+      selectedArchetypes,
+      omittedArchetypes: dailyArchetypes.filter(archetype => !selectedArchetypes.includes(archetype)),
+    };
+    const buildBundle = evaluateAppsScript<(
+      curated: object,
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object,
+      selection: typeof fixture.selection,
+    ) => { coverage: object }>(
+      ['JobState.gs'],
+      'buildBundleV2_',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 3, ARCHETYPES: dailyArchetypes },
+        newRunIdV2_: () => 'run-id',
+      },
+    );
+    expect(buildBundle(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selection,
+    ).coverage).toEqual({
+      deliveryMode: fixture.selection.deliveryMode,
+      selectedArchetypes: fixture.selection.selectedArchetypes,
+      omittedArchetypes: fixture.selection.omittedArchetypes,
+    });
+  });
+
   it('uses the deterministic usable-shoe threshold and permits necessary reuse without a legacy setting', () => {
     const fixture = finalPolicyFixture();
     const sharedShoeId = fixture.selected[0].shoeId;
@@ -3575,6 +3734,7 @@ describe('Apps Script contracts', () => {
       fixture.history,
       fixture.selected,
       fixture.critic,
+      fixture.selection,
     )).toEqual([]);
   });
 
@@ -3610,6 +3770,7 @@ describe('Apps Script contracts', () => {
       fixture.history,
       fixture.selected,
       fixture.critic,
+      fixture.selection,
     )).toEqual([]);
   });
 
@@ -3629,6 +3790,7 @@ describe('Apps Script contracts', () => {
       fixture.history,
       fixture.selected,
       fixture.critic,
+      fixture.selection,
     )).toEqual([]);
 
     fixture.history.exactOutfitsPrevious14Days[0].itemIds = fixture.selected[0].itemIds.slice().reverse();
@@ -3639,6 +3801,7 @@ describe('Apps Script contracts', () => {
       fixture.history,
       fixture.selected,
       fixture.critic,
+      fixture.selection,
     ).join(' ')).toMatch(/exactly repeats a prior-14-day outfit/);
   });
 
@@ -3662,6 +3825,7 @@ describe('Apps Script contracts', () => {
       fixture.history,
       fixture.selected,
       fixture.critic,
+      fixture.selection,
     )).toEqual([]);
   });
 
@@ -3707,32 +3871,38 @@ describe('Apps Script contracts', () => {
     };
     const weather = { morningFeelsLikeF: 60, middayFeelsLikeF: 70, eveningFeelsLikeF: 60, rainExpected: false, layerGuidance: 'none' };
     const history = { exactOutfitsPrevious14Days: [], cooldownItemIds: [] };
-    expect(finalValidator(curated, finalSnapshot, weather, history, selected, critic)).toEqual([]);
+    const selection = {
+      deliveryMode: 'complete',
+      selectedCount: 3,
+      selectedArchetypes: archetypes.slice(),
+      omittedArchetypes: [] as string[],
+    };
+    expect(finalValidator(curated, finalSnapshot, weather, history, selected, critic, selection)).toEqual([]);
 
     const twoCoreSavedSnapshot = {
       ...finalSnapshot,
       tasteExamples: [{ id: 'saved-two', name: 'Two Core', itemIds: [selected[0].topId, selected[0].bottomId, selected[1].shoeId] }]
     };
-    expect(finalValidator(curated, twoCoreSavedSnapshot, weather, history, selected, critic)).toEqual([]);
+    expect(finalValidator(curated, twoCoreSavedSnapshot, weather, history, selected, critic, selection)).toEqual([]);
 
     const exactManualSnapshot = {
       ...finalSnapshot,
       tasteExamples: [{ id: 'saved-exact', name: 'Exact Manual', itemIds: selected[0].itemIds.slice() }]
     };
-    expect(finalValidator(curated, exactManualSnapshot, weather, history, selected, critic).join(' '))
+    expect(finalValidator(curated, exactManualSnapshot, weather, history, selected, critic, selection).join(' '))
       .toMatch(/recommendation\[0\] exactly copies manual saved outfit "Exact Manual"/);
 
     const exactAiSnapshot = {
       ...finalSnapshot,
       tasteExamples: [{ id: 'saved-ai', name: 'Exact AI', source: 'ai', itemIds: selected[0].itemIds.slice() }]
     };
-    expect(finalValidator(curated, exactAiSnapshot, weather, history, selected, critic)).toEqual([]);
+    expect(finalValidator(curated, exactAiSnapshot, weather, history, selected, critic, selection)).toEqual([]);
 
     const duplicateSelected = structuredClone(selected);
     const duplicateCurated = structuredClone(curated);
     duplicateSelected[1].candidateId = duplicateSelected[0].candidateId;
     duplicateCurated.recommendations[1].candidateId = duplicateCurated.recommendations[0].candidateId;
-    expect(finalValidator(duplicateCurated, finalSnapshot, weather, history, duplicateSelected, critic).join(' '))
+    expect(finalValidator(duplicateCurated, finalSnapshot, weather, history, duplicateSelected, critic, selection).join(' '))
       .toMatch(/duplicates a final candidate/);
 
     const duplicateItemsSelected = structuredClone(selected);
@@ -3740,16 +3910,16 @@ describe('Apps Script contracts', () => {
     duplicateItemsSelected[1].topId = duplicateItemsSelected[0].topId;
     duplicateItemsSelected[1].itemIds[0] = duplicateItemsSelected[0].itemIds[0];
     duplicateItemsCurated.recommendations[1].itemIds[0] = duplicateItemsCurated.recommendations[0].itemIds[0];
-    expect(finalValidator(duplicateItemsCurated, finalSnapshot, weather, history, duplicateItemsSelected, critic).join(' '))
+    expect(finalValidator(duplicateItemsCurated, finalSnapshot, weather, history, duplicateItemsSelected, critic, selection).join(' '))
       .toMatch(/tops must be unique/);
 
     const duplicateScore = { scores: critic.scores.concat(structuredClone(critic.scores[0])) };
-    expect(finalValidator(curated, finalSnapshot, weather, history, selected, duplicateScore).join(' '))
+    expect(finalValidator(curated, finalSnapshot, weather, history, selected, duplicateScore, selection).join(' '))
       .toMatch(/no eligible critic score/);
 
     const malformedScore = structuredClone(critic);
     malformedScore.scores[0].candidateId = '';
-    expect(finalValidator(curated, finalSnapshot, weather, history, selected, malformedScore).join(' '))
+    expect(finalValidator(curated, finalSnapshot, weather, history, selected, malformedScore, selection).join(' '))
       .toMatch(/no eligible critic score/);
 
     const invalidScoreShapes: Array<[string, (score: Record<string, unknown>) => void]> = [
@@ -3767,7 +3937,7 @@ describe('Apps Script contracts', () => {
     invalidScoreShapes.forEach(([label, mutate]) => {
       const invalidScore = structuredClone(critic);
       mutate(invalidScore.scores[0]);
-      const scoreErrors = finalValidator(curated, finalSnapshot, weather, history, selected, invalidScore)
+      const scoreErrors = finalValidator(curated, finalSnapshot, weather, history, selected, invalidScore, selection)
         .filter(error => error.includes('has no eligible critic score'));
       expect({ label, scoreErrors }).toEqual({
         label,
@@ -3781,16 +3951,16 @@ describe('Apps Script contracts', () => {
 
     const reordered = structuredClone(curated);
     reordered.recommendations[0].itemIds.reverse();
-    expect(finalValidator(reordered, finalSnapshot, weather, history, selected, critic)).toEqual([]);
+    expect(finalValidator(reordered, finalSnapshot, weather, history, selected, critic, selection)).toEqual([]);
 
     const swapped = structuredClone(curated);
     [swapped.recommendations[0], swapped.recommendations[1]] = [swapped.recommendations[1], swapped.recommendations[0]];
-    expect(finalValidator(swapped, finalSnapshot, weather, history, selected, critic).join(' '))
+    expect(finalValidator(swapped, finalSnapshot, weather, history, selected, critic, selection).join(' '))
       .toMatch(/changed or reordered the selected candidateId/);
 
     expect(finalValidator(curated, finalSnapshot, weather, {
       ...history,
       cooldownItemIds: [selected[0].topId, selected[1].shoeId]
-    }, selected, critic).join(' ')).toMatch(/yesterday top\/bottom cooldown/);
+    }, selected, critic, selection).join(' ')).toMatch(/yesterday top\/bottom cooldown/);
   });
 });

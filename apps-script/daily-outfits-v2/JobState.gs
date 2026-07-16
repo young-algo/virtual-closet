@@ -643,6 +643,12 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
         (typeof validPersistedEncoreV2_ !== 'function' || !validPersistedEncoreV2_(bundle.encore, snapshot, bundle.weather))) return false;
     assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, snapshot.wardrobeFingerprint, snapshot);
     if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection) ||
+        !validOwnDailyObjectV2_(bundle, 'coverage') ||
+        JSON.stringify(bundle.coverage) !== JSON.stringify({
+          deliveryMode: pending.selection.deliveryMode,
+          selectedArchetypes: pending.selection.selectedArchetypes,
+          omittedArchetypes: pending.selection.omittedArchetypes
+        }) ||
         !ownDailyJobKeyV2_(bundle, 'recommendations') ||
         !validOwnDailyArrayV2_(bundle.recommendations, DAILY_V2.ARCHETYPES.length)) return false;
     for (var index = 0; index < bundle.recommendations.length; index += 1) {
@@ -655,7 +661,8 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
       bundle.weather,
       pending.history,
       pending.selectedCandidates,
-      pending.critic
+      pending.critic,
+      pending.selection
     ).length === 0;
   } catch (_ignored) {
     return false;
@@ -683,12 +690,17 @@ function incrementAttemptV2_(state, stage) {
   return state;
 }
 
-function buildBundleV2_(curated, snapshot, weather, history) {
+function buildBundleV2_(curated, snapshot, weather, history, selection) {
   var bundle = {
     version: 2,
     qualityPolicyVersion: DAILY_V2.QUALITY_POLICY_VERSION,
     localDate: weather.localDate,
     weather: weather,
+    coverage: {
+      deliveryMode: selection.deliveryMode,
+      selectedArchetypes: selection.selectedArchetypes.slice(),
+      omittedArchetypes: selection.omittedArchetypes.slice()
+    },
     recommendations: curated.recommendations,
     generatedAt: Date.now(),
     snapshotGeneratedAt: snapshot.generatedAt,

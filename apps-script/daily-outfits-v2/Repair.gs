@@ -27,31 +27,34 @@ function closedCuratedForRepairV2_(curated, snapshot) {
   return resolved;
 }
 
-function validateFinalBundleSafelyV2_(curated, snapshot, weather, history, selectedCandidates, critic) {
+function validateFinalBundleSafelyV2_(curated, snapshot, weather, history, selectedCandidates, critic, selection) {
   if (curated && typeof curated === 'object' && !Array.isArray(curated) && Array.isArray(curated.recommendations)) {
     var recordsAreSafe = curated.recommendations.every(function(recommendation) {
       return recommendation && typeof recommendation === 'object' && !Array.isArray(recommendation) && Array.isArray(recommendation.itemIds);
     });
     if (!recordsAreSafe) return ['final recommendations must be object records with array itemIds'];
   }
-  return validateFinalBundleV2_(curated, snapshot, weather, history, selectedCandidates, critic);
+  return validateFinalBundleV2_(curated, snapshot, weather, history, selectedCandidates, critic, selection);
 }
 
-function repairFinalBundleV2_(curated, errors, snapshot, weather, history, selectedCandidates, critic) {
+function repairFinalBundleV2_(curated, errors, snapshot, weather, history, selectedCandidates, critic, selection) {
   selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
+  var selectedCount = selectedCandidates.length;
   var current = curated;
   var currentErrors = errors;
   for (var attempt = 1; attempt <= 2; attempt += 1) {
     var prompt = [
       'Repair only the customer-facing copy in this invalid final-curator response. The candidate ids, archetypes, item ids, and order are immutable. Do not select, swap, reorder, add, remove, or alter any outfit or item.',
+      'The ' + selectedCount + ' selected outfit' + (selectedCount === 1 ? ' is' : 's are') + ' final and validated upstream.',
+      'Return exactly ' + selectedCount + ' recommendation record' + (selectedCount === 1 ? '' : 's') + ' in the same order. Do not swap, reorder, add, remove, or modify any outfit or item.',
       'Every recommendation needs a specific colorHook naming the visible relationship between at least two items. Do not explain the repair or expose chain-of-thought.',
       'VALIDATION ERRORS:\n' + repairPromptErrorsV2_(currentErrors, snapshot).join('\n'),
       'INVALID RESPONSE:\n' + JSON.stringify(modelFacingCuratedV2_(closedCuratedForRepairV2_(current, snapshot), snapshot)),
       'IMMUTABLE SELECTED OUTFITS:\n' + JSON.stringify(modelFacingCandidatesV2_(selectedCandidates, snapshot))
     ].join('\n\n');
-    var raw = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, selectedCandidates)), CURATOR_SCHEMA_V2, 0.25);
+    var raw = callGeminiV2_('repair', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, selectedCandidates)), curatorSchemaV2_(selectedCount), 0.25);
     current = resolveCuratorResponseForValidationV2_(raw, snapshot);
-    currentErrors = validateFinalBundleSafelyV2_(current, snapshot, weather, history, selectedCandidates, critic);
+    currentErrors = validateFinalBundleSafelyV2_(current, snapshot, weather, history, selectedCandidates, critic, selection);
     if (!currentErrors.length) return current;
   }
   throw new Error('Final repair failed quality gates: ' + currentErrors.join('; '));
@@ -69,9 +72,9 @@ function repairFinalBundleV2() {
     throw new Error('Deterministic selection must be ready');
   }
   if (!ownDailyJobKeyV2_(pending, 'curated') || !pending.curated) throw new Error('No invalid curated response is ready');
-  var errors = validateFinalBundleSafelyV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
+  var errors = validateFinalBundleSafelyV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
   if (!errors.length) return pending.curated;
-  pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
+  pending.curated = repairFinalBundleV2_(pending.curated, errors, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
   pending.updatedAt = Date.now();
   savePendingV2_(pending);
   return pending.curated;

@@ -550,6 +550,13 @@ describe('Encore bundle assembly and persistence', () => {
   const daily = { QUALITY_POLICY_VERSION: 3, ARCHETYPES: ['easy', 'polished-casual', 'expressive'] };
   const curated = { recommendations: [{ candidateId: 'one' }, { candidateId: 'two' }, { candidateId: 'three' }] };
   const bundleSnapshot = { ...snapshot, generatedAt: 100, wardrobeFingerprint: 'wardrobe-v3' };
+  const completeSelection = {
+    path: 'top2',
+    deliveryMode: 'complete',
+    selectedCount: 3,
+    selectedArchetypes: daily.ARCHETYPES.slice(),
+    omittedArchetypes: [] as string[],
+  };
 
   it('loads retained history once for compact Scheduler context but not for an explicit retained array', () => {
     const retained = [{ localDate: '2020-01-01', recommendations: [], feedback: [{ candidateId: 'encore:older', value: 'disliked' }] }];
@@ -558,7 +565,13 @@ describe('Encore bundle assembly and persistence', () => {
       getProperty: (key: string) => key === 'LAST_ENCORE_DATE_V2' ? null : null,
       setProperty: () => undefined,
     };
-    const buildBundle = evaluateAppsScript<(curatedValue: object, snapshotValue: object, weatherValue: object, historyValue: unknown) => Record<string, unknown>>(
+    const buildBundle = evaluateAppsScript<(
+      curatedValue: object,
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: unknown,
+      selectionValue: typeof completeSelection,
+    ) => Record<string, unknown>>(
       ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'],
       'buildBundleV2_',
       {
@@ -569,12 +582,17 @@ describe('Encore bundle assembly and persistence', () => {
       },
     );
 
-    const fromCompact = buildBundle(curated, bundleSnapshot, weather, { feedback: [] });
+    const fromCompact = buildBundle(curated, bundleSnapshot, weather, { feedback: [] }, completeSelection);
     expect(loads).toBe(1);
     expect(fromCompact.encore).toEqual(expect.objectContaining({ outfitId: 'newer' }));
     expect(fromCompact.recommendations).toEqual(curated.recommendations);
+    expect(fromCompact.coverage).toEqual({
+      deliveryMode: 'complete',
+      selectedArchetypes: daily.ARCHETYPES,
+      omittedArchetypes: [],
+    });
 
-    const explicit = buildBundle(curated, bundleSnapshot, weather, []);
+    const explicit = buildBundle(curated, bundleSnapshot, weather, [], completeSelection);
     expect(loads).toBe(1);
     expect(explicit.encore).toEqual(expect.objectContaining({ outfitId: 'older' }));
     expect(explicit.recommendations).toEqual(curated.recommendations);
@@ -707,9 +725,9 @@ describe('Encore bundle assembly and persistence', () => {
     expect(apps('Encore.gs')).toMatch(/function selectEncoreV2_\(snapshot, weather, history, lastEncoreDate\)/);
   });
 
-  it('passes the existing history to all synchronous, manual, and scheduled bundle builds', () => {
+  it('passes history and selection to all synchronous, manual, and scheduled bundle builds', () => {
     const schedulerSource = apps('Scheduler.gs');
-    expect(schedulerSource.match(/buildBundleV2_\([^)]*,\s*snapshot,\s*(?:pending\.)?weather,\s*(?:pending\.)?history\)/g))
+    expect(schedulerSource.match(/buildBundleV2_\([^)]*,\s*snapshot,\s*(?:pending\.)?weather,\s*(?:pending\.)?history,\s*(?:selected|pending)\.selection\)/g))
       .toHaveLength(3);
 
     const syncHistory = { kind: 'sync-history' };
@@ -721,7 +739,7 @@ describe('Encore bundle assembly and persistence', () => {
         dailyHistoryContextV2_: () => syncHistory,
         runAllPlannersV2_: () => [],
         runCriticV2_: () => ({}),
-        runSelectionV2_: () => ({ candidates: [], critic: {}, selectedCandidates: [], selection: {} }),
+        runSelectionV2_: () => ({ candidates: [], critic: {}, selectedCandidates: [], selection: completeSelection }),
         runCuratorV2_: () => curated,
         validateFinalBundleV2_: () => [],
         repairFinalBundleV2_: () => { throw new Error('unexpected repair'); },
@@ -729,7 +747,9 @@ describe('Encore bundle assembly and persistence', () => {
       },
     );
     generateSync(bundleSnapshot, weather);
+    expect(syncArgs[0]).toHaveLength(5);
     expect(syncArgs[0]?.[3]).toBe(syncHistory);
+    expect(syncArgs[0]?.[4]).toEqual(completeSelection);
 
     const pendingHistory = { kind: 'persisted-history' };
     const manualArgs: unknown[][] = [];
@@ -747,7 +767,7 @@ describe('Encore bundle assembly and persistence', () => {
         loadPendingV2_: () => ({
           workflow: 'manual-v2', qualityPolicyVersion: 3, manualStage: 'selection-ready',
           localDate: weather.localDate, wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint,
-          weather, history: pendingHistory, selectedCandidates: [], critic: {}, selection: {},
+          weather, history: pendingHistory, selectedCandidates: [], critic: {}, selection: completeSelection,
         }),
         validCurrentPendingV2_: () => true,
         validPersistedStagePrerequisitesV2_: () => true,
@@ -761,7 +781,9 @@ describe('Encore bundle assembly and persistence', () => {
       },
     );
     generateManual();
+    expect(manualArgs[0]).toHaveLength(5);
     expect(manualArgs[0]?.[3]).toBe(pendingHistory);
+    expect(manualArgs[0]?.[4]).toEqual(completeSelection);
 
     const scheduledArgs: unknown[][] = [];
     let nowCall = 0;
@@ -775,7 +797,7 @@ describe('Encore bundle assembly and persistence', () => {
         loadPendingV2_: () => ({
           localDate: weather.localDate, qualityPolicyVersion: 3,
           wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, weather,
-          history: pendingHistory, selectedCandidates: [], critic: {}, selection: {},
+          history: pendingHistory, selectedCandidates: [], critic: {}, selection: completeSelection,
         }),
         validScheduledStageResumeV2_: () => true,
         incrementAttemptV2_: () => undefined,
@@ -793,7 +815,9 @@ describe('Encore bundle assembly and persistence', () => {
       stage: 'selection-ready', qualityPolicyVersion: 3, localDate: weather.localDate,
       wardrobeFingerprint: bundleSnapshot.wardrobeFingerprint, attemptCounts: {},
     }, bundleSnapshot, 0);
+    expect(scheduledArgs[0]).toHaveLength(5);
     expect(scheduledArgs[0]?.[3]).toBe(pendingHistory);
+    expect(scheduledArgs[0]?.[4]).toEqual(completeSelection);
   });
 
   it('persists Encore and advances cadence only after history save succeeds', () => {

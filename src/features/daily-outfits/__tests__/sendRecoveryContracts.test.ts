@@ -74,6 +74,10 @@ const selectionFixture = () => {
     selectedCandidates: archetypes.map((_, index) => structuredClone(candidates[index * 5])),
     selection: {
       path: 'top2',
+      deliveryMode: 'complete' as const,
+      selectedCount: 3,
+      selectedArchetypes: archetypes.slice(),
+      omittedArchetypes: [] as string[],
       eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
       compositeById: Object.fromEntries(candidates.map(({ candidateId }) => [candidateId, allNineComposite])),
       feasibleSetCount: 8,
@@ -154,6 +158,11 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
       qualityPolicyVersion: 3,
       localDate,
       weather: structuredClone(weather),
+      coverage: {
+        deliveryMode: selected.selection.deliveryMode,
+        selectedArchetypes: selected.selection.selectedArchetypes.slice(),
+        omittedArchetypes: selected.selection.omittedArchetypes.slice(),
+      },
       recommendations,
       generatedAt: 200,
       snapshotGeneratedAt: 50,

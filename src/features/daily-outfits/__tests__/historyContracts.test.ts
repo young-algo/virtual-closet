@@ -654,10 +654,18 @@ describe('history prompt contracts', () => {
       }
     });
     const selectedCandidates = candidates.filter(candidate => candidate.candidateId.endsWith('-0'));
+    const selection = {
+      path: 'top2',
+      deliveryMode: 'complete',
+      selectedCount: 3,
+      selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+      omittedArchetypes: [] as string[],
+    };
     curatorApi.runCuratorV2_(snapshot, weather, history, selectedCandidates, critic);
 
+    let finalValidationSelection: unknown;
     const repairApi = evaluateAppsScript<{
-      repairFinalBundleV2_: (curated: object, errors: string[], snapshotValue: HistorySnapshot, weather: object, history: object, selectedCandidates: object[], critic: object) => object;
+      repairFinalBundleV2_: (curated: object, errors: string[], snapshotValue: HistorySnapshot, weather: object, history: object, selectedCandidates: object[], critic: object, selection: object) => object;
     }>(['ItemIndex.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Curator.gs', 'Repair.gs'], '({ repairFinalBundleV2_ })', {
       ...common,
       loadHistoryV2_: () => [],
@@ -666,9 +674,13 @@ describe('history prompt contracts', () => {
         captured.push(parts.map(part => part.text || '').join('\n'));
         return { recommendations: labelRecommendations };
       },
-      validateFinalBundleV2_: () => []
+      validateFinalBundleV2_: (_curated: unknown, _snapshot: unknown, _weather: unknown, _history: unknown, _selected: unknown, _critic: unknown, selectionValue: unknown) => {
+        finalValidationSelection = selectionValue;
+        return [];
+      }
     });
-    repairApi.repairFinalBundleV2_({ recommendations: [] }, ['invalid'], snapshot, weather, history, selectedCandidates, critic);
+    repairApi.repairFinalBundleV2_({ recommendations: [] }, ['invalid'], snapshot, weather, history, selectedCandidates, critic, selection);
+    expect(finalValidationSelection).toEqual(selection);
 
     expect(captured).toHaveLength(6);
     captured.slice(0, 5).forEach(prompt => {

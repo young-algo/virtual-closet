@@ -12,13 +12,23 @@ var FINAL_RECOMMENDATION_SCHEMA_V2 = {
   required: ['candidateId', 'archetype', 'name', 'itemIds', 'colorHook', 'whyItWorks', 'weatherNote']
 };
 
-var CURATOR_SCHEMA_V2 = {
-  type: 'OBJECT',
-  properties: {
-    recommendations: { type: 'ARRAY', items: FINAL_RECOMMENDATION_SCHEMA_V2, minItems: 3, maxItems: 3 }
-  },
-  required: ['recommendations']
-};
+function curatorSchemaV2_(selectedCount) {
+  if ([1, 2, 3].indexOf(selectedCount) < 0) {
+    throw new Error('Curator selected count must be between one and three');
+  }
+  return {
+    type: 'OBJECT',
+    properties: {
+      recommendations: {
+        type: 'ARRAY',
+        items: FINAL_RECOMMENDATION_SCHEMA_V2,
+        minItems: selectedCount,
+        maxItems: selectedCount
+      }
+    },
+    required: ['recommendations']
+  };
+}
 
 function curatorResponseCanResolveLabelsV2_(response) {
   if (!response || typeof response !== 'object' || Array.isArray(response) || !Array.isArray(response.recommendations)) return false;
@@ -48,6 +58,7 @@ function resolveCuratorResponseForValidationV2_(response, snapshot) {
 
 function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
   selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
+  var selectedCount = selectedCandidates.length;
   var scoreMap = selectionScoreMapV2_(critic && critic.scores);
   var selectedScores = selectedCandidates.map(function(candidate) {
     return candidate && scoreMap[candidate.candidateId];
@@ -56,7 +67,9 @@ function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
     throw new Error('Curator selected set is missing a unique critic score');
   }
   var prompt = [
-    'These three outfits are final — selected and validated upstream. Do not swap, reorder, or modify them. Write the customer-facing copy for each.',
+    'The ' + selectedCount + ' selected outfit' + (selectedCount === 1 ? ' is' : 's are') + ' final and validated upstream.',
+    'Return exactly ' + selectedCount + ' recommendation record' + (selectedCount === 1 ? '' : 's') + ' in the same order. Do not swap, reorder, add, remove, or modify any outfit or item.',
+    'Write the customer-facing copy for each selected outfit.',
     'Copy each candidateId, archetype, and itemIds exactly in the same order. In colorHook, name the exact visible colors/details and at least two items that create the relationship.',
     'Do not use generic language such as "keeps it clean," "lets the top pop," or "ties everything together." Produce concise customer-facing explanations only; do not reveal chain-of-thought.',
     'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
@@ -65,7 +78,7 @@ function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
     'FINAL SELECTED OUTFITS:\n' + JSON.stringify(modelFacingCandidatesV2_(selectedCandidates, snapshot)),
     'CRITIC SCORES:\n' + JSON.stringify(modelFacingCriticResponseV2_({ scores: selectedScores }, snapshot).scores)
   ].join('\n\n');
-  var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, selectedCandidates)), CURATOR_SCHEMA_V2, 0.4);
+  var raw = callGeminiV2_('curator', [{ text: prompt }].concat(candidateImagePartsV2_(snapshot, selectedCandidates)), curatorSchemaV2_(selectedCount), 0.4);
   return resolveCuratorResponseForValidationV2_(raw, snapshot);
 }
 

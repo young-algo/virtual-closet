@@ -82,9 +82,34 @@ function weatherSafetyErrorsV2_(recommendation, itemMap, weather, snapshot) {
   return errors;
 }
 
-function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCandidates, critic) {
+function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCandidates, critic, selection) {
   var errors = [];
-  if (!curated || !Array.isArray(curated.recommendations) || curated.recommendations.length !== 3) return ['exactly three final recommendations are required'];
+  var selectedCount = Array.isArray(selectedCandidates) ? selectedCandidates.length : 0;
+  if (selectedCount < 1 || selectedCount > 3) {
+    errors.push('selected recommendation count must be between one and three');
+  }
+  var recommendations = curated && Array.isArray(curated.recommendations)
+    ? curated.recommendations
+    : [];
+  if (recommendations.length !== selectedCount) {
+    errors.push('final recommendation count must equal selected candidate count');
+  }
+  var selectedArchetypes = Array.isArray(selectedCandidates)
+    ? selectedCandidates.map(function(candidate) { return candidate.archetype; })
+    : [];
+  var configuredSubsequence = DAILY_V2.ARCHETYPES.filter(function(archetype) {
+    return selectedArchetypes.indexOf(archetype) >= 0;
+  });
+  var omittedArchetypes = DAILY_V2.ARCHETYPES.filter(function(archetype) {
+    return selectedArchetypes.indexOf(archetype) < 0;
+  });
+  if (!selection || selection.selectedCount !== selectedCount ||
+      JSON.stringify(selectedArchetypes) !== JSON.stringify(configuredSubsequence) ||
+      JSON.stringify(selection.selectedArchetypes) !== JSON.stringify(selectedArchetypes) ||
+      JSON.stringify(selection.omittedArchetypes) !== JSON.stringify(omittedArchetypes) ||
+      selection.deliveryMode !== (selectedCount === 3 ? 'complete' : 'partial')) {
+    errors.push('selection coverage does not match selected candidates');
+  }
   var itemMap = itemMapV2_(snapshot);
   selectedCandidates = Array.isArray(selectedCandidates) ? selectedCandidates : [];
   var scoreMap = scoreMapV2_(critic);
@@ -97,7 +122,7 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
   var layerUse = Object.create(null);
   var historyKeys = exactHistoryKeysV2_(history);
 
-  curated.recommendations.forEach(function(rec, index) {
+  recommendations.forEach(function(rec, index) {
     var path = 'recommendation[' + index + ']';
     var candidate = selectedCandidates[index];
     if (!candidate || rec.candidateId !== candidate.candidateId) errors.push(path + ' changed or reordered the selected candidateId');
@@ -159,9 +184,9 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     }
     errors = errors.concat(weatherSafetyErrorsV2_(rec, itemMap, weather, snapshot).map(function(error) { return path + ': ' + error; }));
   });
-  DAILY_V2.ARCHETYPES.forEach(function(archetype) { if (!ownFinalValidationKeyV2_(seenArchetype, archetype)) errors.push('missing archetype: ' + archetype); });
-  if (Object.keys(shoes).length < 3 && usableWeatherSafeShoeCountV2_(snapshot, weather) >= 3) {
-    errors.push('shoes must be unique when at least three weather-safe options exist');
+  if (Object.keys(shoes).length < selectedCount &&
+      usableWeatherSafeShoeCountV2_(snapshot, weather) >= selectedCount) {
+    errors.push('shoes must be unique when enough weather-safe options exist');
   }
   Object.keys(layerUse).forEach(function(id) {
     if (layerUse[id] > 1 &&
@@ -169,9 +194,9 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
       errors.push('a layer may repeat only when weather requires it and alternatives are too limited');
     }
   });
-  for (var i = 0; i < curated.recommendations.length; i += 1) {
-    for (var j = i + 1; j < curated.recommendations.length; j += 1) {
-      var shared = curated.recommendations[i].itemIds.filter(function(id) { return curated.recommendations[j].itemIds.indexOf(id) >= 0; });
+  for (var i = 0; i < recommendations.length; i += 1) {
+    for (var j = i + 1; j < recommendations.length; j += 1) {
+      var shared = recommendations[i].itemIds.filter(function(id) { return recommendations[j].itemIds.indexOf(id) >= 0; });
       if (shared.length > 1) errors.push('no two final outfits may share more than one item');
     }
   }
@@ -190,6 +215,6 @@ function validateFinalBundleV2() {
     throw new Error('Deterministic selection must be ready');
   }
   if (!ownDailyJobKeyV2_(pending, 'curated') || !pending.curated) throw new Error('No curated response is ready');
-  var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic);
+  var errors = validateFinalBundleV2_(pending.curated, snapshot, pending.weather, pending.history, pending.selectedCandidates, pending.critic, pending.selection);
   return { ok: errors.length === 0, errors: errors };
 }
