@@ -1139,5 +1139,88 @@
       "confidence": 0.75,
       "updatedAt": 1784130932054
     }
+  },
+  {
+    "id": "sneaker_FZ3863-300",
+    "name": "Nike C1TY Surplus",
+    "category": "Sneakers",
+    "color": "light army, cargo khaki, university gold, black",
+    "brand": "Nike",
+    "image": "/sneakers/FZ3863-300_A.png",
+    "description": "This low-top utility sneaker pairs breathable Light Army mesh with Cargo Khaki suede reinforcements, a black Swoosh and rugged lugged sole, plus University Gold hits at the heel and tongue. Its muted military palette reads practical and understated; suits workwear, utility streetwear, and relaxed casual looks.",
+    "styleCode": "FZ3863-300",
+    "imageTop": "/sneakers/FZ3863-300_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784172655000
+    }
+  },
+  {
+    "id": "sneaker_308497-060",
+    "name": "Air Jordan 4 Retro Bred",
+    "category": "Sneakers",
+    "color": "black, fire red, cement grey, summit white",
+    "brand": "Nike",
+    "image": "/sneakers/308497-060_A.png",
+    "description": "This iconic mid-top uses a black nubuck upper with Cement Grey hardware, Summit White midsole sections, and Fire Red branding and outsole accents. The high-contrast OG palette reads bold and nostalgic; suits retro basketball, sportswear, and statement streetwear looks.",
+    "styleCode": "308497-060",
+    "imageTop": "/sneakers/308497-060_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "red",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784172655000
+    }
+  },
+  {
+    "id": "sneaker_DX0755-001",
+    "name": "Nike Air Max Plus Hyper Blue",
+    "category": "Sneakers",
+    "color": "black, chamois, sky blue, hyper blue, midnight navy, white",
+    "brand": "Nike",
+    "image": "/sneakers/DX0755-001_A.png",
+    "description": "This retro runner fades from Sky Blue to Hyper Blue across breathable mesh under black palm-inspired TPU ribs, with Midnight Navy, white, and Chamois yellow accents. Its sculpted Tuned Air sole and vivid gradient read energetic and technical; suits late-90s sportswear, techwear, and bold casual looks.",
+    "styleCode": "DX0755-001",
+    "imageTop": "/sneakers/DX0755-001_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784172655000
+    }
   }
 ]
