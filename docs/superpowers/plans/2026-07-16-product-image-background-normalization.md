@@ -33,7 +33,7 @@
 - `NormalizationStats` reports `changed_pixels`, `background_rgb`, and `skipped_reason`.
 - `BackgroundInspection` reports whether an opaque image satisfies the `#f6f6f6` perimeter contract.
 
-- [ ] **Step 1: Write failing synthetic-image tests**
+- [x] **Step 1: Write failing synthetic-image tests**
 
 Create tests that build tiny RGBA images in memory and assert:
 
@@ -61,13 +61,13 @@ def test_skips_images_with_transparency():
 
 Include cases for an already-white background, a neutral gradient, a pale garment separated from the perimeter by an outline, and an ineligible dark background.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `python3 -m unittest scripts.tests.test_normalize_closet_backgrounds -v`
 
 Expected: FAIL because `scripts.normalize_closet_backgrounds` does not exist.
 
-- [ ] **Step 3: Implement the minimal Python normalizer**
+- [x] **Step 3: Implement the minimal Python normalizer**
 
 Implement these rules:
 
@@ -84,13 +84,13 @@ Sample the outer two-percent perimeter band, use per-channel medians for the ref
 
 The CLI must enumerate `.jpg`, `.jpeg`, `.png`, and `.webp` files, skip alpha-bearing images, preserve dimensions, save JPEGs atomically through a sibling temporary file, and print one summary line per changed or failing file. `--check` must exit `1` with failing filenames and must never write.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run: `python3 -m unittest scripts.tests.test_normalize_closet_backgrounds -v`
 
 Expected: all normalizer unit tests PASS.
 
-- [ ] **Step 5: Commit the batch normalizer**
+- [x] **Step 5: Commit the batch normalizer**
 
 ```bash
 git add scripts/normalize_closet_backgrounds.py scripts/tests/test_normalize_closet_backgrounds.py
@@ -112,7 +112,7 @@ git commit -m "test: add deterministic closet image normalizer"
 - `PixelNormalizationResult` contains `pixels`, `changedPixels`, `backgroundRgb`, and `skippedReason`.
 - `resizeImageToDataUrl(blob: Blob, maxDim?: number): Promise<string>` remains source-compatible and returns a normalized well-matched JPEG.
 
-- [ ] **Step 1: Write failing Vitest coverage for the browser pixel core**
+- [x] **Step 1: Write failing Vitest coverage for the browser pixel core**
 
 Use the same synthetic fixtures and assertions as the Python tests:
 
@@ -133,23 +133,23 @@ it('is idempotent', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `npm test -- src/utils/__tests__/backgroundNormalization.test.ts`
 
 Expected: FAIL because `backgroundNormalization.ts` does not exist.
 
-- [ ] **Step 3: Implement the TypeScript pixel core**
+- [x] **Step 3: Implement the TypeScript pixel core**
 
 Port the Python constants, perimeter median, robust tolerance, alpha guard, and edge flood-fill exactly. Copy the input buffer before modifying it. Validate `pixels.length === width * height * 4` and throw a descriptive error for invalid dimensions.
 
-- [ ] **Step 4: Run the focused pixel test and verify GREEN**
+- [x] **Step 4: Run the focused pixel test and verify GREEN**
 
 Run: `npm test -- src/utils/__tests__/backgroundNormalization.test.ts`
 
 Expected: all pixel-normalizer tests PASS.
 
-- [ ] **Step 5: Integrate normalization with every garment upload path**
+- [x] **Step 5: Integrate normalization with every garment upload path**
 
 In `resizeImageToDataUrl`, call the pure pixel normalizer after drawing the image to the white canvas and before JPEG encoding:
 
@@ -162,7 +162,7 @@ ctx.putImageData(imageData, 0, 0);
 
 Replace `UploadModal`'s duplicate resizer with `resizeImageToDataUrl`. After Gemini returns a generated data URL, convert it to a blob and pass it through the same resizer so generated, background-removed, and fallback originals all satisfy the same contract.
 
-- [ ] **Step 6: Run focused and full TypeScript tests**
+- [x] **Step 6: Run focused and full TypeScript tests**
 
 Run: `npm test -- src/utils/__tests__/backgroundNormalization.test.ts`
 
@@ -170,7 +170,7 @@ Run: `npm test`
 
 Expected: both commands PASS.
 
-- [ ] **Step 7: Commit future-upload enforcement**
+- [x] **Step 7: Commit future-upload enforcement**
 
 ```bash
 git add src/utils/backgroundNormalization.ts src/utils/__tests__/backgroundNormalization.test.ts src/utils/image.ts src/components/UploadModal.tsx
@@ -189,37 +189,37 @@ git commit -m "fix: normalize garment upload backgrounds"
 - Consumes: `scripts/normalize_closet_backgrounds.py`
 - Produces: every opaque asset under `public/closet/` meeting the `#f6f6f6` perimeter contract.
 
-- [ ] **Step 1: Run the asset audit and verify RED**
+- [x] **Step 1: Run the asset audit and verify RED**
 
 Run: `python3 scripts/normalize_closet_backgrounds.py --check --root public/closet`
 
 Expected: exit `1` listing the off-white assets, including the reported orange cargo pants, yellow chore jacket, and pink Jordan hoodie.
 
-- [ ] **Step 2: Save a diagnostic pre-normalization contact sheet outside the repo**
+- [x] **Step 2: Save a diagnostic pre-normalization contact sheet outside the repo**
 
 Render all failing assets with filenames into `/tmp/virtual-closet-backgrounds-before.png`. This artifact is diagnostic only and must not be committed.
 
-- [ ] **Step 3: Normalize all eligible checked-in garment assets**
+- [x] **Step 3: Normalize all eligible checked-in garment assets**
 
 Run: `python3 scripts/normalize_closet_backgrounds.py --root public/closet`
 
 Expected: changed-file summaries for every failing opaque asset; transparent or already-compliant assets report skipped/unchanged.
 
-- [ ] **Step 4: Run the asset audit and verify GREEN**
+- [x] **Step 4: Run the asset audit and verify GREEN**
 
 Run: `python3 scripts/normalize_closet_backgrounds.py --check --root public/closet`
 
 Expected: exit `0` with zero failing assets.
 
-- [ ] **Step 5: Verify idempotence on the real library**
+- [x] **Step 5: Verify idempotence on the real library**
 
 Record `git diff --stat -- public/closet`, rerun normalization, then confirm `git diff --stat -- public/closet` is identical.
 
-- [ ] **Step 6: Render and visually inspect a post-normalization contact sheet**
+- [x] **Step 6: Render and visually inspect a post-normalization contact sheet**
 
 Render `/tmp/virtual-closet-backgrounds-after.png` with the same order and labels. Compare it with the pre-normalization sheet, checking garment outlines, pale fabrics, logos, hems, and shadows before accepting the batch.
 
-- [ ] **Step 7: Commit only normalized garment assets**
+- [x] **Step 7: Commit only normalized garment assets**
 
 ```bash
 git add public/closet
@@ -237,25 +237,25 @@ git commit -m "fix: harmonize closet product image backgrounds"
 - Consumes: normalized product assets and existing React renderers.
 - Produces: visual evidence that the same assets blend in single-item and multi-item layouts.
 
-- [ ] **Step 1: Start the local Vite server**
+- [x] **Step 1: Start the local Vite server**
 
 Run: `npm run dev -- --host 127.0.0.1`
 
 Expected: Vite reports a reachable localhost URL.
 
-- [ ] **Step 2: Verify regular closet cards and detail views**
+- [x] **Step 2: Verify regular closet cards and detail views**
 
 At desktop width, inspect every closet page/category, not just the initial viewport. Specifically verify the orange cargo pants, yellow chore jacket, pink hoodie, beige shirts, black pants, and aqua shorts. Open representative pale and dark garments in the detail modal.
 
-- [ ] **Step 3: Verify outfit and supporting views**
+- [x] **Step 3: Verify outfit and supporting views**
 
 Inspect outfit cards, expanded outfit details, the outfit build tray, and AI stylist item previews. Confirm no item-sized rectangles appear inside the shared grey well.
 
-- [ ] **Step 4: Verify narrow layout**
+- [x] **Step 4: Verify narrow layout**
 
 Repeat closet-card and outfit-card checks at a narrow mobile viewport. Confirm responsive sizing does not expose image edges.
 
-- [ ] **Step 5: Capture verification screenshots**
+- [x] **Step 5: Capture verification screenshots**
 
 Save desktop closet, desktop outfits, and narrow closet screenshots under `/tmp/virtual-closet-background-verification/`. Do not commit screenshots unless explicitly requested.
 
@@ -269,7 +269,7 @@ Save desktop closet, desktop outfits, and narrow closet screenshots under `/tmp/
 **Interfaces:**
 - Produces: final evidence that assets, application code, and repository scope satisfy the approved design.
 
-- [ ] **Step 1: Run all automated verification**
+- [x] **Step 1: Run all automated verification**
 
 Run:
 
@@ -283,7 +283,7 @@ npm run build
 
 Expected: every command exits `0`; the asset audit reports zero failures.
 
-- [ ] **Step 2: Review the final diff and commit scope**
+- [x] **Step 2: Review the final diff and commit scope**
 
 Run: `git status --short`
 
@@ -293,6 +293,14 @@ Run: `git diff --stat HEAD~3..HEAD`
 
 Confirm commits contain only the new normalizers/tests, upload integration, normalized `public/closet` assets, and this plan. Confirm the pre-existing `package.json`, `.pnpm-store/`, and unrelated documents remain unstaged and uncommitted.
 
-- [ ] **Step 3: Record completion evidence**
+- [x] **Step 3: Record completion evidence**
 
 Update this plan's checkboxes, note the number of normalized assets, and summarize the browser surfaces and viewports checked. Commit the plan update separately only if it is already tracked in an implementation commit.
+
+## Completion Evidence
+
+- The initial library audit found 68 of 76 garment assets whose perimeter did not match `#f6f6f6`; all 68 were normalized in place with filenames and dimensions preserved.
+- The post-normalization audit passed all 76 assets. A second full normalization pass changed zero files and SHA-256 hashes remained identical.
+- Synthetic coverage includes off-white and white backgrounds, gradients, transparency, dark backgrounds, enclosed light details, connected pale fabric, invalid buffers, real-file idempotence, and shoe-only blend behavior.
+- Browser QA covered the regular closet grid, reported orange/yellow/pink examples, a garment detail modal, every outfit-card row, expanded outfit details, mixed garment/shoe build-tray thumbnails, sneaker grids, and narrow closet/outfit layouts.
+- Browser console verification returned no warnings or errors. Diagnostic screenshots are stored under `/tmp/virtual-closet-background-verification/` and were not committed.
