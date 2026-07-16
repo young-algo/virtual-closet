@@ -1,5 +1,6 @@
 import type { DailyBundleV2, DailyFeedbackV2, DailySourceItem } from './types';
 import DailyFeedbackControls from './DailyFeedbackControls';
+import { parseCachedDailyBundleV2 } from './dailyBundleParser';
 
 const ARCHETYPE_LABELS = { easy: 'Easy', 'polished-casual': 'Polished casual', expressive: 'Expressive' } as const;
 
@@ -10,17 +11,14 @@ interface Props {
   onFeedback: (feedback: DailyFeedbackV2) => void;
 }
 
-export default function DailyBundlePreview({ bundle, items, feedback, onFeedback }: Props) {
-  const legacyCoverageMissing = bundle.coverage === undefined && bundle.recommendations.length === 3;
-  if (!bundle.coverage && !legacyCoverageMissing) {
-    throw new Error('Daily bundle coverage is required unless rendering a legacy three-look cache');
-  }
+export default function DailyBundlePreview({ bundle: bundleValue, items, feedback, onFeedback }: Props) {
+  const bundle = parseCachedDailyBundleV2(bundleValue);
   const generatedCountCopy = bundle.recommendations.length === 1
     ? "Today's outfit"
     : `Today's ${bundle.recommendations.length} outfits`;
-  const omittedLabels = (bundle.coverage?.omittedArchetypes ?? [])
+  const omittedLabels = bundle.coverage.omittedArchetypes
     .map(archetype => ARCHETYPE_LABELS[archetype]);
-  const coverageNote = bundle.coverage?.deliveryMode === 'partial' && omittedLabels.length
+  const coverageNote = bundle.coverage.deliveryMode === 'partial' && omittedLabels.length
     ? `${omittedLabels.join(' and ')} ${omittedLabels.length === 1 ? 'was' : 'were'} omitted after today's quality, weather, and outfit-distinctness checks.`
     : '';
   const byId = new Map(items.map(item => [item.id, item]));

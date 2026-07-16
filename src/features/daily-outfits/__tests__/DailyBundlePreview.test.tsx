@@ -10,19 +10,13 @@ import type {
   DailyFeedbackV2,
   DailySourceItem,
 } from '../types';
+import { makeDailyBundle, makeMalformedDailyBundles } from './dailyBundleTestFixtures';
 
 const items: DailySourceItem[] = [
   { id: 'top', name: 'Top <One>', category: 'T-Shirts', color: 'navy', brand: 'Test', image: '/top.jpg', description: '' },
   { id: 'bottom', name: 'Bottom & Two', category: 'Pants', color: 'navy', brand: 'Test', image: '/bottom.jpg', description: '' },
   { id: 'shoe', name: 'Shoe Three', category: 'Sneakers', color: 'navy', brand: 'Test', image: '/shoe.jpg', description: '' },
 ];
-
-const weather = {
-  morningFeelsLikeF: 70,
-  highTemperatureF: 82,
-  maxRainProbability: 0,
-  plainEnglishSummary: 'Light pieces.',
-};
 
 const recommendation = (archetype: 'easy' | 'polished-casual' | 'expressive', index: number) => ({
   candidateId: `look-${index}`,
@@ -44,10 +38,10 @@ const completeCoverage: DailyBundleCoverageV2 = {
 };
 
 const bundle = (patch: Record<string, unknown> = {}) => ({
+  ...makeDailyBundle(),
   localDate: '2026-07-14',
   recommendations: defaultRecommendations,
   coverage: completeCoverage,
-  weather,
   ...patch,
 }) as unknown as DailyBundleV2;
 
@@ -161,6 +155,7 @@ describe('DailyBundlePreview Encore', () => {
       coverage?: DailyBundleCoverageV2;
     };
     delete legacy.coverage;
+    legacy.qualityPolicyVersion = 3;
 
     expect(() => render(legacy as DailyBundleV2)).not.toThrow();
     expect(render(legacy as DailyBundleV2)).not.toContain('daily-coverage-note');
@@ -176,14 +171,14 @@ describe('DailyBundlePreview Encore', () => {
     delete missingCoverage.coverage;
 
     expect(() => render(missingCoverage as DailyBundleV2))
-      .toThrowError('Daily bundle coverage is required unless rendering a legacy three-look cache');
+      .toThrowError(/DailyBundleV2/);
   });
 
   it('rejects malformed coverage instead of treating it as a missing legacy field', () => {
     const malformed = bundle({ coverage: null });
 
     expect(() => render(malformed))
-      .toThrowError('Daily bundle coverage is required unless rendering a legacy three-look cache');
+      .toThrowError(/DailyBundleV2/);
   });
 
   it('defines intentional one-, two-, three-, and mobile-grid CSS contracts', () => {
@@ -242,16 +237,14 @@ describe('DailyBundlePreview Encore', () => {
     expect(html).not.toContain("One of yours, back in rotation for today&#x27;s weather.");
   });
 
-  it('renders the Encore identity without crashing when item ids are malformed', () => {
-    const html = render(bundle({
+  it('rejects malformed Encore item ids before rendering', () => {
+    const malformed = bundle({
       encore: {
         outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: null,
       },
-    }));
+    });
 
-    expect(html).toContain('Saved One');
-    expect(html).toContain('aria-label="Feedback for Saved One"');
-    expect(html).not.toContain('src="/top.jpg"');
+    expect(() => render(malformed)).toThrowError(/DailyBundleV2/);
   });
 
   it('passes the exact Encore candidate identity and name to the shared feedback controls', () => {
@@ -328,5 +321,9 @@ describe('DailyBundlePreview Encore', () => {
     }));
 
     expect(html.indexOf('03 Expressive')).toBeLessThan(html.indexOf('Encore — from your saved outfits'));
+  });
+
+  it.each(makeMalformedDailyBundles())('rejects malformed preview payload before rendering: %s', (_name, malformed) => {
+    expect(() => render(malformed as DailyBundleV2)).toThrowError(/DailyBundleV2/);
   });
 });

@@ -652,30 +652,6 @@ function validateReplanResponseV2_(response, archetype) {
   });
 }
 
-function mergeReplannedCandidatesV2_(existing, additions) {
-  existing = Array.isArray(existing) ? existing : [];
-  additions = Array.isArray(additions) ? additions : [];
-  var ids = Object.create(null);
-  var combinations = Object.create(null);
-  existing.forEach(function(candidate, index) {
-    if (!validSelectionCandidateV2_(candidate)) throw new Error('Existing selection candidate[' + index + '] is malformed');
-    if (ownSelectionKeyV2_(ids, candidate.candidateId)) throw new Error('Daily selection contains duplicate candidateId ' + candidate.candidateId);
-    ids[candidate.candidateId] = true;
-    combinations[canonicalSelectionIdListV2_(candidate.itemIds)] = true;
-  });
-  var merged = existing.slice();
-  additions.forEach(function(candidate, index) {
-    if (!validSelectionCandidateV2_(candidate)) throw new Error('Targeted re-plan candidate[' + index + '] is malformed');
-    if (ownSelectionKeyV2_(ids, candidate.candidateId)) throw new Error('Targeted re-plan reused candidateId ' + candidate.candidateId);
-    ids[candidate.candidateId] = true;
-    var key = canonicalSelectionIdListV2_(candidate.itemIds);
-    if (ownSelectionKeyV2_(combinations, key)) return;
-    combinations[key] = true;
-    merged.push(candidate);
-  });
-  return merged;
-}
-
 function classifyReplanCandidatesV2_(existing, priorRounds, returnedCandidates) {
   var seenIds = Object.create(null);
   var seenCombinations = Object.create(null);

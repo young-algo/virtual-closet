@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { evaluateAppsScript } from './appsScriptTestHarness';
 
@@ -1037,12 +1038,10 @@ describe('bounded targeted replan orchestration', () => {
     scoreNew: (...args: unknown[]) => { scores: object[] }
   ) => evaluateAppsScript<{
     runSelectionV2_: SelectionRun | null;
-    mergeReplannedCandidatesV2_: ((existing: Candidate[], additions: Candidate[]) => Candidate[]) | null;
   }>(
     ['Config.gs', 'Selection.gs'],
     `({
-      runSelectionV2_: typeof runSelectionV2_ === 'function' ? runSelectionV2_ : null,
-      mergeReplannedCandidatesV2_: typeof mergeReplannedCandidatesV2_ === 'function' ? mergeReplannedCandidatesV2_ : null
+      runSelectionV2_: typeof runSelectionV2_ === 'function' ? runSelectionV2_ : null
     })`,
     {
       replanArchetypeV2_: replan,
@@ -1089,21 +1088,13 @@ describe('bounded targeted replan orchestration', () => {
     expect(scoredBatches).toEqual([replanned.map(candidate => candidate.candidateId)]);
   });
 
-  it('uses injective item-combination identity and drops only true exact duplicates', () => {
-    const api = orchestrationApi(() => ({ archetype: 'easy', candidates: [] }), () => ({ scores: [] }));
-    expect(api.mergeReplannedCandidatesV2_).toBeTypeOf('function');
-    if (!api.mergeReplannedCandidatesV2_) return;
-    const existing = [makeCandidate('existing', 'easy', 'a', 'b|c', 'd')];
-    const colliding = makeCandidate('colliding', 'easy', 'a|b', 'c', 'd');
-    const exact = {
-      ...makeCandidate('exact', 'easy', 'a', 'b|c', 'd'),
-      itemIds: ['d', 'a', 'b|c']
-    };
+  it('does not retain the obsolete pre-ledger merge helper', () => {
+    const selectionSource = readFileSync(
+      new URL('../../../../apps-script/daily-outfits-v2/Selection.gs', import.meta.url),
+      'utf8',
+    );
 
-    expect(api.mergeReplannedCandidatesV2_(existing, [colliding]).map(candidate => candidate.candidateId))
-      .toEqual(['existing', 'colliding']);
-    expect(api.mergeReplannedCandidatesV2_(existing, [exact]).map(candidate => candidate.candidateId))
-      .toEqual(['existing']);
+    expect(selectionSource).not.toContain('function mergeReplannedCandidatesV2_');
   });
 
   it('records a duplicate-only first round and scores only accepted round-two combinations', () => {

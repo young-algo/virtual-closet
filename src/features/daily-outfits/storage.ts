@@ -1,4 +1,5 @@
 import type { DailyAtlasManifestV2, DailyBundleV2, DailyFeedbackV2, DailyOutfitSettingsV2, DailySyncStatusV2 } from './types';
+import { parseDailyBundleV2, tryParseCachedDailyBundleV2 } from './dailyBundleParser';
 
 export const DAILY_STORAGE_KEYS = {
   settings: 'daily_outfits_settings_v2',
@@ -40,8 +41,12 @@ export const loadDailySettings = (defaults: DailyOutfitSettingsV2): DailyOutfitS
 export const saveDailySettings = (settings: DailyOutfitSettingsV2) => writeDailyJson(DAILY_STORAGE_KEYS.settings, settings);
 export const loadDailyFeedback = () => readJson<DailyFeedbackV2[]>(DAILY_STORAGE_KEYS.feedback, []);
 export const saveDailyFeedback = (feedback: DailyFeedbackV2[]) => writeDailyJson(DAILY_STORAGE_KEYS.feedback, feedback);
-export const loadLastDailyBundle = () => readJson<DailyBundleV2 | null>(DAILY_STORAGE_KEYS.lastBundle, null);
-export const saveLastDailyBundle = (bundle: DailyBundleV2) => writeDailyJson(DAILY_STORAGE_KEYS.lastBundle, bundle);
+export const loadLastDailyBundle = (): DailyBundleV2 | null => (
+  tryParseCachedDailyBundleV2(readJson<unknown>(DAILY_STORAGE_KEYS.lastBundle, null))
+);
+export const saveLastDailyBundle = (bundle: DailyBundleV2) => (
+  writeDailyJson(DAILY_STORAGE_KEYS.lastBundle, parseDailyBundleV2(bundle))
+);
 export const loadDailySyncStatus = () => readJson<DailySyncStatusV2>(DAILY_STORAGE_KEYS.syncStatus, { state: 'idle' });
 export const saveDailySyncStatus = (status: DailySyncStatusV2) => writeDailyJson(DAILY_STORAGE_KEYS.syncStatus, status);
 export const loadAtlasManifest = (fallback: DailyAtlasManifestV2) => readJson<DailyAtlasManifestV2>(DAILY_STORAGE_KEYS.atlasManifest, fallback);

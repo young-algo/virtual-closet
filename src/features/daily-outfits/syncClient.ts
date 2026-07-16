@@ -1,4 +1,5 @@
 import { saveDailySyncStatus, saveLastDailyBundle } from './storage';
+import { parseDailyBundleV2 } from './dailyBundleParser';
 import type {
   DailyBundleV2,
   DailyClosetSnapshotV2,
@@ -42,7 +43,11 @@ export const callDailyServer = async (
   if (!response.ok) throw new Error(`Daily server returned HTTP ${response.status}`);
   const body = await response.json() as DailyServerResponse;
   if (!body.ok) throw new Error(body.error || body.message || 'Daily server request failed');
-  if (body.bundle) saveLastDailyBundle(body.bundle);
+  if (body.bundle !== undefined) {
+    const bundle = parseDailyBundleV2(body.bundle);
+    saveLastDailyBundle(bundle);
+    return { ...body, bundle };
+  }
   return body;
 };
 
