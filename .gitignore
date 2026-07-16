@@ -34,6 +34,10 @@ public/raw/
 *.gif
 *.svg
 
+# Python maintenance scripts
+__pycache__/
+*.pyc
+
 # Product images are versioned so the closet works from every checkout.
 !public/closet/
 !public/closet/**
