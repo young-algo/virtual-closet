@@ -1607,9 +1607,13 @@ describe('Apps Script contracts', () => {
   });
 
   it.each([
-    ['quality-exhausted-zero: no eligible daily outfit recommendation remains', 'quality-exhausted-zero'],
-    ['critic transport failed', 'generation-failed'],
-  ])('classifies scheduler failure %s without saving or sending a bundle', (errorMessage, expectedReason) => {
+    ['quality-exhausted-zero: no eligible daily outfit recommendation remains', 'quality-exhausted-zero', 0],
+    ['critic transport failed', 'generation-failed', 1],
+  ])('classifies scheduler failure %s and suppresses only zero-safe alert delivery', (
+    errorMessage,
+    expectedReason,
+    expectedAlertCount,
+  ) => {
     const planners = persistedPlannersFixture();
     const pending = {
       qualityPolicyVersion: 4,
@@ -1625,10 +1629,12 @@ describe('Apps Script contracts', () => {
       candidates: planners.flatMap(response => response.candidates),
     });
     const bundleSaves: unknown[] = [];
-    const alertReasons: string[] = [];
     const mailCalls: unknown[] = [];
+    const logMessages: string[] = [];
+    const savedStates: Array<Record<string, unknown>> = [];
+    const propertyValues: Record<string, string> = {};
     const scheduler = evaluateAppsScript<() => { ok: boolean; error: string; stage: string }>(
-      ['Scheduler.gs'],
+      ['Email.gs', 'Scheduler.gs'],
       'runDailyOutfitScheduler',
       {
         DAILY_V2: {
@@ -1648,10 +1654,17 @@ describe('Apps Script contracts', () => {
           deliveryMinute: 45,
           generationLeadMinutes: 75,
         }),
-        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        getDailyConfigV2_: () => ({
+          timezone: 'UTC',
+          recipientEmail: 'safe@example.com',
+          sendOperationalAlerts: true,
+        }),
         localDateV2_: () => pending.localDate,
         localMinutesV2_: () => 600,
-        getDailyPropertiesV2_: () => ({ getProperty: () => null }),
+        getDailyPropertiesV2_: () => ({
+          getProperty: (key: string) => propertyValues[key] ?? null,
+          setProperty: (key: string, value: string) => { propertyValues[key] = value; },
+        }),
         assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
         getBooleanPropertyV2_: () => false,
         loadJobStateV2_: () => ({
@@ -1672,18 +1685,27 @@ describe('Apps Script contracts', () => {
           bundleSaves.push(structuredClone(value));
           return 'pending-file';
         },
-        saveJobStateV2_: () => 'job-file',
-        sendDailyBundleNowV2_: () => { mailCalls.push('send'); },
+        saveJobStateV2_: (value: Record<string, unknown>) => {
+          savedStates.push(structuredClone(value));
+          return 'job-file';
+        },
         MailApp: { sendEmail: (...args: unknown[]) => { mailCalls.push(args); } },
-        sendOperationalAlertV2_: (reason: string) => { alertReasons.push(reason); },
-        console: { error: () => undefined },
+        console: { error: (message: string) => { logMessages.push(message); } },
       },
     );
 
     expect(scheduler()).toMatchObject({ ok: false, error: errorMessage, stage: 'failed' });
-    expect(alertReasons).toEqual([expectedReason]);
     expect(bundleSaves).toEqual([]);
-    expect(mailCalls).toEqual([]);
+    expect(mailCalls).toHaveLength(expectedAlertCount);
+    expect(propertyValues).toEqual(expectedAlertCount
+      ? { LAST_OPERATIONAL_ALERT_V2: `${pending.localDate}|${expectedReason}` }
+      : {});
+    expect(logMessages).toContain(`Daily scheduler failed [${expectedReason}]: ${errorMessage}`);
+    expect(savedStates.at(-1)).toMatchObject({
+      stage: 'failed',
+      lastError: errorMessage,
+      attemptCounts: { 'critic-ready-error': 1 },
+    });
   });
 
   it('sets the real-send marker immediately before MailApp while test delivery never touches it', () => {

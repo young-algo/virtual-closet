@@ -830,6 +830,24 @@ function reconcilePersistedSentBundleV2_(sentDate, snapshot) {
 }
 
 function finalizeSentBundleV2_(bundle, snapshot, state) {
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignoredPending) {}
+  var snapshotGeneratedAt = pending && pending.bundle && pending.bundle.snapshotGeneratedAt;
+  var canValidate = validOwnDailyRecordV2_(snapshot) &&
+    ownDailyJobKeyV2_(snapshot, 'generatedAt') && typeof snapshot.generatedAt === 'number' &&
+    Number.isFinite(snapshot.generatedAt) && snapshot.generatedAt >= 0 &&
+    typeof snapshotGeneratedAt === 'number' && Number.isFinite(snapshotGeneratedAt) &&
+    snapshotGeneratedAt >= 0 && snapshotGeneratedAt <= snapshot.generatedAt;
+  var validationSnapshot = canValidate
+    ? Object.assign({}, snapshot, { generatedAt: snapshotGeneratedAt })
+    : snapshot;
+  if (!canValidate || !validFullBundleReadyV2_(
+    pending,
+    validationSnapshot,
+    bundle && bundle.localDate
+  ) || !exactPersistedDailyValueV2_(pending.bundle, bundle)) {
+    throw new Error('No current quality-gated bundle is ready to finalize');
+  }
   var properties = getDailyPropertiesV2_();
   var marker = properties.getProperty('SEND_IN_PROGRESS_DATE_V2');
   if (marker && marker !== bundle.localDate) {

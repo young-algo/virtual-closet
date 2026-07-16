@@ -257,7 +257,8 @@ function runDailyOutfitScheduler() {
         if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) state.stage = 'failed';
         saveJobStateV2_(state);
       }
-      if (current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) {
+      if (failureReason !== 'quality-exhausted-zero' &&
+          current !== null && current >= DAILY_V2.GENERATION_CUTOFF_HOUR * 60) {
         sendOperationalAlertV2_(failureReason, error.message);
       }
     } catch (handlerError) {

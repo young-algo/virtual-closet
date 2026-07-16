@@ -434,6 +434,50 @@ const runResolvedRecovery = (
 };
 
 describe('resolved send recovery', () => {
+  it('fails closed inside direct finalization before invalid coverage can mutate sent state or history', () => {
+    const { pending, snapshot } = partialPendingFixture(2, false);
+    pending.bundle.coverage = {
+      deliveryMode: 'complete',
+      selectedArchetypes: archetypes.slice(),
+      omittedArchetypes: [],
+    };
+    snapshot.generatedAt = 75;
+    const values: Record<string, string> = { SEND_IN_PROGRESS_DATE_V2: pending.localDate };
+    const events: string[] = [];
+    const properties = {
+      getProperty: (key: string) => values[key] ?? null,
+      setProperty: (key: string, value: string) => {
+        events.push(`set:${key}:${value}`);
+        values[key] = value;
+      },
+      deleteProperty: (key: string) => {
+        events.push(`delete:${key}`);
+        delete values[key];
+      },
+    };
+    const finalize = evaluateAppsScript<(
+      bundle: Record<string, unknown>,
+      snapshotValue: ReturnType<typeof snapshotFixture>,
+      stateValue: Record<string, unknown> | null,
+    ) => Record<string, unknown>>(
+      runtimeFiles,
+      'finalizeSentBundleV2_',
+      {
+        DAILY_V2: daily,
+        loadPendingV2_: () => structuredClone(pending),
+        getDailyPropertiesV2_: () => properties,
+        loadHistoryV2_: () => [],
+        saveHistoryV2_: () => events.push('history'),
+        saveJobStateV2_: () => events.push('state'),
+      },
+    );
+
+    expect(() => finalize(pending.bundle, snapshot, null))
+      .toThrowError('No current quality-gated bundle is ready to finalize');
+    expect(events).toEqual([]);
+    expect(values).toEqual({ SEND_IN_PROGRESS_DATE_V2: pending.localDate });
+  });
+
   it.each([
     [2, false],
     [1, true],

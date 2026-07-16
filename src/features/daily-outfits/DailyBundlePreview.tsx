@@ -11,6 +11,10 @@ interface Props {
 }
 
 export default function DailyBundlePreview({ bundle, items, feedback, onFeedback }: Props) {
+  const legacyCoverageMissing = bundle.coverage === undefined && bundle.recommendations.length === 3;
+  if (!bundle.coverage && !legacyCoverageMissing) {
+    throw new Error('Daily bundle coverage is required unless rendering a legacy three-look cache');
+  }
   const generatedCountCopy = bundle.recommendations.length === 1
     ? "Today's outfit"
     : `Today's ${bundle.recommendations.length} outfits`;

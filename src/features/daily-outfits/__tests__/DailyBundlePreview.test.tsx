@@ -34,9 +34,19 @@ const recommendation = (archetype: 'easy' | 'polished-casual' | 'expressive', in
   weatherNote: 'Comfortable for the forecast.',
 });
 
+const defaultRecommendations = (['easy', 'polished-casual', 'expressive'] as const)
+  .map((archetype, index) => ({ ...recommendation(archetype, index), itemIds: [] }));
+
+const completeCoverage: DailyBundleCoverageV2 = {
+  deliveryMode: 'complete',
+  selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+  omittedArchetypes: [],
+};
+
 const bundle = (patch: Record<string, unknown> = {}) => ({
   localDate: '2026-07-14',
-  recommendations: [],
+  recommendations: defaultRecommendations,
+  coverage: completeCoverage,
   weather,
   ...patch,
 }) as unknown as DailyBundleV2;
@@ -156,6 +166,26 @@ describe('DailyBundlePreview Encore', () => {
     expect(render(legacy as DailyBundleV2)).not.toContain('daily-coverage-note');
   });
 
+  it.each([
+    [1, [recommendation('expressive', 0)]],
+    [2, [recommendation('easy', 0), recommendation('expressive', 1)]],
+  ] as const)('rejects missing coverage for a non-legacy %i-look bundle', (_count, recommendations) => {
+    const missingCoverage = structuredClone(bundle({ recommendations })) as Omit<DailyBundleV2, 'coverage'> & {
+      coverage?: DailyBundleCoverageV2;
+    };
+    delete missingCoverage.coverage;
+
+    expect(() => render(missingCoverage as DailyBundleV2))
+      .toThrowError('Daily bundle coverage is required unless rendering a legacy three-look cache');
+  });
+
+  it('rejects malformed coverage instead of treating it as a missing legacy field', () => {
+    const malformed = bundle({ coverage: null });
+
+    expect(() => render(malformed))
+      .toThrowError('Daily bundle coverage is required unless rendering a legacy three-look cache');
+  });
+
   it('defines intentional one-, two-, three-, and mobile-grid CSS contracts', () => {
     const css = readFileSync(new URL('../daily-outfits.css', import.meta.url), 'utf8');
 
@@ -232,7 +262,10 @@ describe('DailyBundlePreview Encore', () => {
     const tree = DailyBundlePreview({
       bundle: encoreBundle, items, feedback: [], onFeedback: () => undefined,
     });
-    const control = elementsIn(tree).find(element => element.type === DailyFeedbackControls);
+    const control = elementsIn(tree).find(element => (
+      element.type === DailyFeedbackControls &&
+      (element.props as { recommendation?: unknown }).recommendation === encore
+    ));
     if (!control) throw new Error('Expected Encore feedback controls');
     const controlProps = control.props as { recommendation?: unknown; localDate?: unknown };
 
