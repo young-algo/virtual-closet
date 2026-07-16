@@ -7,6 +7,7 @@ import {
   type StylistRecommendation, type RejectedCombo, type LockedIds, type SlotName,
   type SavedOutfitExample, type StylistProgress
 } from '../services/stylist';
+import { productImageBlendMode } from '../utils/productImagePresentation';
 
 interface AIStylistProps {
   items: ClosetItem[];
@@ -284,7 +285,10 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSav
                         backgroundColor: 'var(--well)'
                       }}>
                         <img src={item.image} alt={item.name}
-                          style={{ width: '88%', height: '88%', objectFit: 'contain' }} />
+                          style={{
+                            width: '88%', height: '88%', objectFit: 'contain',
+                            mixBlendMode: productImageBlendMode(item.category)
+                          }} />
                       </div>
                     );
                   })}

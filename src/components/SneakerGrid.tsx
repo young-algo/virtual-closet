@@ -966,7 +966,8 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
           background-color: var(--well);
         }
         .sneaker-well img {
-          opacity: 1;
+          mix-blend-mode: multiply;
+          opacity: 0.95;
           transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .sneaker-well .sneaker-view-top {
@@ -980,7 +981,7 @@ export const SneakerGrid: React.FC<SneakerGridProps> = ({
           transform: scale(1.04);
         }
         .sneaker-cell:hover .sneaker-well .sneaker-view-top {
-          opacity: 1;
+          opacity: 0.95;
         }
         .sneaker-cell:hover .sneaker-well .sneaker-view-side.has-top {
           opacity: 0;

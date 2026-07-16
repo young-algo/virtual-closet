@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { normalizeProductImagePixels } from '../backgroundNormalization';
+import { productImageBlendMode } from '../productImagePresentation';
 
 type Rgba = [number, number, number, number];
 
@@ -28,12 +29,6 @@ const offWhiteCanvasWithEnclosedDetail = (): Uint8ClampedArray => {
   setPixel(pixels, 9, 4, 4, [243, 243, 243, 255]);
   return pixels;
 };
-
-const sourceFiles = (directory: string): string[] => readdirSync(directory, { withFileTypes: true })
-  .flatMap(entry => entry.isDirectory()
-    ? sourceFiles(join(directory, entry.name))
-    : [join(directory, entry.name)])
-  .filter(path => ['.ts', '.tsx', '.css'].includes(extname(path)));
 
 describe('normalizeProductImagePixels', () => {
   it('harmonizes off-white pixels connected to the perimeter without crossing the garment', () => {
@@ -138,11 +133,14 @@ describe('normalizeProductImagePixels', () => {
 });
 
 describe('product image rendering contract', () => {
-  it('does not multiply product pixels into the image-well background', () => {
-    const source = sourceFiles(join(process.cwd(), 'src'))
-      .map(path => readFileSync(path, 'utf8'))
-      .join('\n');
+  it('multiplies sneaker photos but leaves normalized garments unblended', () => {
+    expect(productImageBlendMode('Sneakers')).toBe('multiply');
+    expect(productImageBlendMode('T-Shirts')).toBeUndefined();
+    expect(productImageBlendMode('Pants')).toBeUndefined();
+  });
 
-    expect(source).not.toMatch(/mixBlendMode\s*:\s*['"]multiply|mix-blend-mode\s*:\s*multiply/);
+  it('does not apply multiply globally to every product image', () => {
+    const source = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    expect(source).not.toMatch(/\.product-image-container img\s*\{[^}]*mix-blend-mode/s);
   });
 });

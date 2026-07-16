@@ -1,6 +1,7 @@
 import type { DailyBundleV2, DailyFeedbackV2, DailySourceItem } from './types';
 import DailyFeedbackControls from './DailyFeedbackControls';
 import { parseCachedDailyBundleV2 } from './dailyBundleParser';
+import { productImageBlendMode } from '../../utils/productImagePresentation';
 
 const ARCHETYPE_LABELS = { easy: 'Easy', 'polished-casual': 'Polished casual', expressive: 'Expressive' } as const;
 
@@ -49,7 +50,14 @@ export default function DailyBundlePreview({ bundle: bundleValue, items, feedbac
               <div className="daily-look-label">0{index + 1} {ARCHETYPE_LABELS[recommendation.archetype]}</div>
               <h4>{recommendation.name}</h4>
               <div className="daily-look-images">
-                {recommendationItems.map(item => <img key={item.id} src={item.image} alt={item.name} />)}
+                {recommendationItems.map(item => (
+                  <img
+                    key={item.id}
+                    src={item.image}
+                    alt={item.name}
+                    style={{ mixBlendMode: productImageBlendMode(item.category) }}
+                  />
+                ))}
               </div>
               {recommendation.colorHook && <p className="daily-color-hook"><strong>Color hook</strong> — {recommendation.colorHook}</p>}
               <p>{recommendation.whyItWorks}</p>
@@ -67,7 +75,14 @@ export default function DailyBundlePreview({ bundle: bundleValue, items, feedbac
           <div className="daily-look-label">Encore — from your saved outfits</div>
           <h4>{bundle.encore.name}</h4>
           <div className="daily-look-images">
-            {encoreItems.map((item, index) => <img key={`${item.id}:${index}`} src={item.image} alt={item.name} />)}
+            {encoreItems.map((item, index) => (
+              <img
+                key={`${item.id}:${index}`}
+                src={item.image}
+                alt={item.name}
+                style={{ mixBlendMode: productImageBlendMode(item.category) }}
+              />
+            ))}
           </div>
           <p>One of yours, back in rotation for today's weather.</p>
           <ul>

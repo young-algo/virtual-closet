@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Check, AlertCircle } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 import type { Outfit } from './OutfitsView';
+import { productImageBlendMode } from '../utils/productImagePresentation';
 
 interface OutfitBuildTrayProps {
   selectedItems: ClosetItem[];
@@ -108,7 +109,12 @@ export const OutfitBuildTray: React.FC<OutfitBuildTrayProps> = ({
               <img
                 src={item.image}
                 alt={item.name}
-                style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+                style={{
+                  width: '85%',
+                  height: '85%',
+                  objectFit: 'contain',
+                  mixBlendMode: productImageBlendMode(item.category)
+                }}
               />
               <button
                 onClick={() => onToggleSelectItem(item)}

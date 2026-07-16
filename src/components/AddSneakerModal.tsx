@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Check, AlertCircle } from 'lucide-react';
 import type { SneakerItem } from './SneakerGrid';
 import { resizeImageToDataUrl } from '../utils/image';
+import { productImageBlendMode } from '../utils/productImagePresentation';
 
 interface AddSneakerModalProps {
   isOpen: boolean;
@@ -152,7 +153,12 @@ export const AddSneakerModal: React.FC<AddSneakerModalProps> = ({ isOpen, onClos
           <img
             src={image}
             alt={label}
-            style={{ width: '90%', height: '90%', objectFit: 'contain' }}
+            style={{
+              width: '90%',
+              height: '90%',
+              objectFit: 'contain',
+              mixBlendMode: productImageBlendMode('Sneakers')
+            }}
           />
         ) : (
           <>

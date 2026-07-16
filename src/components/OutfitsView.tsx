@@ -3,6 +3,7 @@ import { Check, Luggage, Trash2, Pencil, Sparkles } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
 import { slotForItem, type SlotName } from '../services/stylist';
 import AIStylist from './AIStylist';
+import { productImageBlendMode } from '../utils/productImagePresentation';
 
 export interface Outfit {
   id: string;
@@ -72,7 +73,8 @@ const LookCollage: React.FC<{ items: ClosetItem[] }> = ({ items }) => {
               inset: 0,
               width: '100%',
               height: '100%',
-              objectFit: 'contain'
+              objectFit: 'contain',
+              mixBlendMode: productImageBlendMode(item.category)
             }}
           />
         </div>
@@ -225,7 +227,12 @@ export const OutfitsView: React.FC<OutfitsViewProps> = ({
                                       src={item.image}
                                       alt={item.name}
                                       loading="lazy"
-                                      style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+                                      style={{
+                                        width: '85%',
+                                        height: '85%',
+                                        objectFit: 'contain',
+                                        mixBlendMode: productImageBlendMode(item.category)
+                                      }}
                                     />
                                   </div>
                                   <figcaption style={{ marginTop: '6px' }}>
