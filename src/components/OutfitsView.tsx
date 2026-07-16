@@ -72,8 +72,7 @@ const LookCollage: React.FC<{ items: ClosetItem[] }> = ({ items }) => {
               inset: 0,
               width: '100%',
               height: '100%',
-              objectFit: 'contain',
-              mixBlendMode: 'multiply'
+              objectFit: 'contain'
             }}
           />
         </div>
@@ -226,7 +225,7 @@ export const OutfitsView: React.FC<OutfitsViewProps> = ({
                                       src={item.image}
                                       alt={item.name}
                                       loading="lazy"
-                                      style={{ width: '85%', height: '85%', objectFit: 'contain', mixBlendMode: 'multiply' }}
+                                      style={{ width: '85%', height: '85%', objectFit: 'contain' }}
                                     />
                                   </div>
                                   <figcaption style={{ marginTop: '6px' }}>

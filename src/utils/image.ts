@@ -1,8 +1,8 @@
 import { normalizeProductImagePixels } from './backgroundNormalization';
 
 // Resize an image file to a square white-backed JPEG data URL — the storage
-// format for user-provided imagery. White backgrounds blend into the grey
-// wells via mix-blend-mode: multiply, and the cap keeps localStorage small.
+// format for user-provided imagery. Edge-connected backgrounds are matched to
+// the grey image well, and the cap keeps localStorage small.
 export const resizeImageToDataUrl = (blob: Blob, maxDim = 500): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();

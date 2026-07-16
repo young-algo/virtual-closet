@@ -2,6 +2,7 @@ const MIN_BACKGROUND_LUMA = 205;
 const MAX_BACKGROUND_CHROMA = 32;
 const MIN_COLOR_TOLERANCE = 14;
 const MAX_COLOR_TOLERANCE = 38;
+const TARGET_BACKGROUND_RGB: Rgb = [246, 246, 246];
 
 type Rgb = [number, number, number];
 
@@ -120,6 +121,7 @@ export const normalizeProductImagePixels = (
   }
 
   const pixelCount = width * height;
+  const perimeterBand = Math.max(1, Math.round(Math.min(width, height) * 0.02));
   const visited = new Uint8Array(pixelCount);
   const queue = new Int32Array(pixelCount);
   let queueStart = 0;
@@ -145,20 +147,36 @@ export const normalizeProductImagePixels = (
   }
 
   let changedPixels = 0;
+  const channelOffsets: Rgb = [
+    TARGET_BACKGROUND_RGB[0] - model.rgb[0],
+    TARGET_BACKGROUND_RGB[1] - model.rgb[1],
+    TARGET_BACKGROUND_RGB[2] - model.rgb[2]
+  ];
   while (queueStart < queueEnd) {
     const pixelIndex = queue[queueStart];
     queueStart += 1;
     const offset = pixelIndex * 4;
-    if (output[offset] !== 255 || output[offset + 1] !== 255 || output[offset + 2] !== 255) {
-      output[offset] = 255;
-      output[offset + 1] = 255;
-      output[offset + 2] = 255;
+    const x = pixelIndex % width;
+    const y = Math.floor(pixelIndex / width);
+    const isPerimeter = x < perimeterBand || x >= width - perimeterBand
+      || y < perimeterBand || y >= height - perimeterBand;
+    const corrected: Rgb = isPerimeter
+      ? TARGET_BACKGROUND_RGB
+      : [
+          Math.max(0, Math.min(255, Math.round(pixels[offset] + channelOffsets[0]))),
+          Math.max(0, Math.min(255, Math.round(pixels[offset + 1] + channelOffsets[1]))),
+          Math.max(0, Math.min(255, Math.round(pixels[offset + 2] + channelOffsets[2])))
+        ];
+    if (output[offset] !== corrected[0]
+        || output[offset + 1] !== corrected[1]
+        || output[offset + 2] !== corrected[2]) {
+      output[offset] = corrected[0];
+      output[offset + 1] = corrected[1];
+      output[offset + 2] = corrected[2];
       output[offset + 3] = 255;
       changedPixels += 1;
     }
 
-    const x = pixelIndex % width;
-    const y = Math.floor(pixelIndex / width);
     if (x > 0) enqueueIfEligible(x - 1, y);
     if (x + 1 < width) enqueueIfEligible(x + 1, y);
     if (y > 0) enqueueIfEligible(x, y - 1);

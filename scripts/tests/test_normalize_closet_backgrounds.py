@@ -24,7 +24,7 @@ class NormalizeRgbaTests(unittest.TestCase):
 
         normalized, stats = normalize_rgba(image)
 
-        self.assertEqual(normalized.getpixel((0, 0)), (255, 255, 255, 255))
+        self.assertEqual(normalized.getpixel((0, 0)), (246, 246, 246, 255))
         self.assertEqual(normalized.getpixel((2, 2)), (20, 30, 40, 255))
         self.assertEqual(normalized.getpixel((4, 4)), (243, 243, 243, 255))
         self.assertGreater(stats.changed_pixels, 0)
@@ -47,14 +47,15 @@ class NormalizeRgbaTests(unittest.TestCase):
         self.assertEqual(normalized.tobytes(), image.tobytes())
         self.assertEqual(stats.skipped_reason, "contains transparency")
 
-    def test_already_white_image_is_unchanged(self) -> None:
+    def test_maps_an_already_white_background_to_the_image_well(self) -> None:
         image = solid_image(7, (255, 255, 255, 255))
         image.putpixel((3, 3), (15, 25, 35, 255))
 
         normalized, stats = normalize_rgba(image)
 
-        self.assertEqual(normalized.tobytes(), image.tobytes())
-        self.assertEqual(stats.changed_pixels, 0)
+        self.assertEqual(normalized.getpixel((0, 0)), (246, 246, 246, 255))
+        self.assertEqual(normalized.getpixel((3, 3)), (15, 25, 35, 255))
+        self.assertGreater(stats.changed_pixels, 0)
 
     def test_normalizes_a_neutral_background_gradient(self) -> None:
         image = Image.new("RGBA", (11, 11))
@@ -68,8 +69,8 @@ class NormalizeRgbaTests(unittest.TestCase):
 
         normalized, _ = normalize_rgba(image)
 
-        self.assertEqual(normalized.getpixel((0, 5)), (255, 255, 255, 255))
-        self.assertEqual(normalized.getpixel((10, 5)), (255, 255, 255, 255))
+        self.assertEqual(normalized.getpixel((0, 5)), (246, 246, 246, 255))
+        self.assertEqual(normalized.getpixel((10, 5)), (246, 246, 246, 255))
         self.assertEqual(normalized.getpixel((5, 5)), (180, 45, 30, 255))
 
     def test_preserves_a_pale_garment_separated_by_an_outline(self) -> None:
@@ -83,8 +84,19 @@ class NormalizeRgbaTests(unittest.TestCase):
 
         normalized, _ = normalize_rgba(image)
 
-        self.assertEqual(normalized.getpixel((0, 0)), (255, 255, 255, 255))
+        self.assertEqual(normalized.getpixel((0, 0)), (246, 246, 246, 255))
         self.assertEqual(normalized.getpixel((4, 4)), (250, 248, 244, 255))
+
+    def test_preserves_contrast_when_pale_fabric_is_connected_to_the_background(self) -> None:
+        image = solid_image(7, (228, 228, 228, 255))
+        for y in range(2, 5):
+            for x in range(2, 5):
+                image.putpixel((x, y), (236, 236, 236, 255))
+
+        normalized, _ = normalize_rgba(image)
+
+        self.assertEqual(normalized.getpixel((0, 0)), (246, 246, 246, 255))
+        self.assertEqual(normalized.getpixel((3, 3)), (254, 254, 254, 255))
 
     def test_skips_an_ineligible_dark_background(self) -> None:
         image = solid_image(7, (80, 82, 84, 255))
@@ -103,13 +115,19 @@ class InspectBackgroundTests(unittest.TestCase):
         self.assertFalse(inspection.compliant)
         self.assertIsNone(inspection.skipped_reason)
 
-    def test_reports_white_perimeter_as_compliant(self) -> None:
-        image = solid_image(7, (255, 255, 255, 255))
+    def test_reports_well_matched_perimeter_as_compliant(self) -> None:
+        image = solid_image(7, (246, 246, 246, 255))
         image.putpixel((3, 3), (10, 20, 30, 255))
 
         inspection = inspect_background(image)
 
         self.assertTrue(inspection.compliant)
+        self.assertIsNone(inspection.skipped_reason)
+
+    def test_reports_white_perimeter_as_noncompliant(self) -> None:
+        inspection = inspect_background(solid_image(7, (255, 255, 255, 255)))
+
+        self.assertFalse(inspection.compliant)
         self.assertIsNone(inspection.skipped_reason)
 
     def test_reports_transparency_as_skipped(self) -> None:

@@ -152,7 +152,7 @@ export const AddSneakerModal: React.FC<AddSneakerModalProps> = ({ isOpen, onClos
           <img
             src={image}
             alt={label}
-            style={{ width: '90%', height: '90%', objectFit: 'contain', mixBlendMode: 'multiply' }}
+            style={{ width: '90%', height: '90%', objectFit: 'contain' }}
           />
         ) : (
           <>

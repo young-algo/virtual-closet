@@ -17,7 +17,8 @@ MIN_BACKGROUND_LUMA = 205.0
 MAX_BACKGROUND_CHROMA = 32.0
 MIN_COLOR_TOLERANCE = 14.0
 MAX_COLOR_TOLERANCE = 38.0
-WHITE_CONTRACT_LUMA = 254.5
+TARGET_BACKGROUND_RGB = (246, 246, 246)
+CONTRACT_COLOR_TOLERANCE = 2.0
 SUPPORTED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
@@ -103,7 +104,8 @@ def inspect_background(image: Image.Image) -> BackgroundInspection:
     if _luma(model.rgb) < MIN_BACKGROUND_LUMA or _chroma(model.rgb) > MAX_BACKGROUND_CHROMA:
         return BackgroundInspection(True, model.rgb, "background is not bright and neutral")
 
-    return BackgroundInspection(_luma(model.rgb) >= WHITE_CONTRACT_LUMA, model.rgb)
+    target = tuple(float(value) for value in TARGET_BACKGROUND_RGB)
+    return BackgroundInspection(_distance(model.rgb, target) <= CONTRACT_COLOR_TOLERANCE, model.rgb)
 
 
 def normalize_rgba(image: Image.Image) -> tuple[Image.Image, NormalizationStats]:
@@ -116,6 +118,7 @@ def normalize_rgba(image: Image.Image) -> tuple[Image.Image, NormalizationStats]
         return rgba.copy(), NormalizationStats(0, model.rgb, "background is not bright and neutral")
 
     width, height = rgba.size
+    perimeter_band = max(1, round(min(width, height) * 0.02))
     output = rgba.copy()
     source = rgba.load()
     destination = output.load()
@@ -141,10 +144,24 @@ def normalize_rgba(image: Image.Image) -> tuple[Image.Image, NormalizationStats]
             enqueue_if_eligible(width - 1, y)
 
     changed_pixels = 0
+    channel_offsets = tuple(target - source for target, source in zip(TARGET_BACKGROUND_RGB, model.rgb))
     while queue:
         x, y = queue.popleft()
-        if destination[x, y] != (255, 255, 255, 255):
-            destination[x, y] = (255, 255, 255, 255)
+        source_pixel = source[x, y]
+        if (
+            x < perimeter_band
+            or x >= width - perimeter_band
+            or y < perimeter_band
+            or y >= height - perimeter_band
+        ):
+            corrected = (*TARGET_BACKGROUND_RGB, 255)
+        else:
+            corrected = (
+                *(max(0, min(255, round(source_pixel[channel] + channel_offsets[channel]))) for channel in range(3)),
+                255,
+            )
+        if destination[x, y] != corrected:
+            destination[x, y] = corrected
             changed_pixels += 1
 
         if x > 0:
@@ -223,7 +240,7 @@ def run(root: Path, check: bool) -> int:
         if failures:
             print(f"FAILED {len(failures)} image(s) do not meet the white-perimeter contract")
             return 1
-        print(f"PASS {len(_image_paths(root))} image(s) meet the background contract")
+        print(f"PASS {len(_image_paths(root))} image(s) match the image-well background contract")
         return 0
 
     print(f"DONE changed_files={changed_files} changed_pixels={changed_pixels}")

@@ -98,7 +98,7 @@ export const OutfitBuildTray: React.FC<OutfitBuildTrayProps> = ({
                 height: '56px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-color)',
-                backgroundColor: 'var(--bg-surface)',
+                backgroundColor: 'var(--well)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -108,7 +108,7 @@ export const OutfitBuildTray: React.FC<OutfitBuildTrayProps> = ({
               <img
                 src={item.image}
                 alt={item.name}
-                style={{ width: '85%', height: '85%', objectFit: 'contain', mixBlendMode: 'multiply' }}
+                style={{ width: '85%', height: '85%', objectFit: 'contain' }}
               />
               <button
                 onClick={() => onToggleSelectItem(item)}

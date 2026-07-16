@@ -281,10 +281,10 @@ export const AIStylist: React.FC<AIStylistProps> = ({ items, savedOutfits, onSav
                         width: '86px', height: '86px',
                         border: group.locked ? '1px solid var(--text-primary)' : '1px solid var(--border-color)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: 'var(--bg-surface)'
+                        backgroundColor: 'var(--well)'
                       }}>
                         <img src={item.image} alt={item.name}
-                          style={{ width: '88%', height: '88%', objectFit: 'contain', mixBlendMode: 'multiply' }} />
+                          style={{ width: '88%', height: '88%', objectFit: 'contain' }} />
                       </div>
                     );
                   })}

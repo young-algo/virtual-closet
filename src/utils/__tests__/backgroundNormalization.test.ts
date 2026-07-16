@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { extname, join } from 'node:path';
 import { normalizeProductImagePixels } from '../backgroundNormalization';
 
 type Rgba = [number, number, number, number];
@@ -27,11 +29,17 @@ const offWhiteCanvasWithEnclosedDetail = (): Uint8ClampedArray => {
   return pixels;
 };
 
+const sourceFiles = (directory: string): string[] => readdirSync(directory, { withFileTypes: true })
+  .flatMap(entry => entry.isDirectory()
+    ? sourceFiles(join(directory, entry.name))
+    : [join(directory, entry.name)])
+  .filter(path => ['.ts', '.tsx', '.css'].includes(extname(path)));
+
 describe('normalizeProductImagePixels', () => {
-  it('whitens off-white pixels connected to the perimeter without crossing the garment', () => {
+  it('harmonizes off-white pixels connected to the perimeter without crossing the garment', () => {
     const result = normalizeProductImagePixels(offWhiteCanvasWithEnclosedDetail(), 9, 9);
 
-    expect(pixelAt(result.pixels, 9, 0, 0)).toEqual([255, 255, 255, 255]);
+    expect(pixelAt(result.pixels, 9, 0, 0)).toEqual([246, 246, 246, 255]);
     expect(pixelAt(result.pixels, 9, 2, 2)).toEqual([20, 30, 40, 255]);
     expect(pixelAt(result.pixels, 9, 4, 4)).toEqual([243, 243, 243, 255]);
     expect(result.changedPixels).toBeGreaterThan(0);
@@ -56,14 +64,15 @@ describe('normalizeProductImagePixels', () => {
     expect(result.skippedReason).toBe('contains transparency');
   });
 
-  it('leaves an already-white background unchanged', () => {
+  it('maps an already-white background to the image well', () => {
     const pixels = solidPixels(7, 7, [255, 255, 255, 255]);
     setPixel(pixels, 7, 3, 3, [15, 25, 35, 255]);
 
     const result = normalizeProductImagePixels(pixels, 7, 7);
 
-    expect(result.pixels).toEqual(pixels);
-    expect(result.changedPixels).toBe(0);
+    expect(pixelAt(result.pixels, 7, 0, 0)).toEqual([246, 246, 246, 255]);
+    expect(pixelAt(result.pixels, 7, 3, 3)).toEqual([15, 25, 35, 255]);
+    expect(result.changedPixels).toBeGreaterThan(0);
   });
 
   it('normalizes a neutral background gradient', () => {
@@ -80,8 +89,8 @@ describe('normalizeProductImagePixels', () => {
 
     const result = normalizeProductImagePixels(pixels, 11, 11);
 
-    expect(pixelAt(result.pixels, 11, 0, 5)).toEqual([255, 255, 255, 255]);
-    expect(pixelAt(result.pixels, 11, 10, 5)).toEqual([255, 255, 255, 255]);
+    expect(pixelAt(result.pixels, 11, 0, 5)).toEqual([246, 246, 246, 255]);
+    expect(pixelAt(result.pixels, 11, 10, 5)).toEqual([246, 246, 246, 255]);
     expect(pixelAt(result.pixels, 11, 5, 5)).toEqual([180, 45, 30, 255]);
   });
 
@@ -96,8 +105,20 @@ describe('normalizeProductImagePixels', () => {
 
     const result = normalizeProductImagePixels(pixels, 9, 9);
 
-    expect(pixelAt(result.pixels, 9, 0, 0)).toEqual([255, 255, 255, 255]);
+    expect(pixelAt(result.pixels, 9, 0, 0)).toEqual([246, 246, 246, 255]);
     expect(pixelAt(result.pixels, 9, 4, 4)).toEqual([250, 248, 244, 255]);
+  });
+
+  it('preserves contrast when pale fabric is connected to the background', () => {
+    const pixels = solidPixels(7, 7, [228, 228, 228, 255]);
+    for (let y = 2; y < 5; y += 1) {
+      for (let x = 2; x < 5; x += 1) setPixel(pixels, 7, x, y, [236, 236, 236, 255]);
+    }
+
+    const result = normalizeProductImagePixels(pixels, 7, 7);
+
+    expect(pixelAt(result.pixels, 7, 0, 0)).toEqual([246, 246, 246, 255]);
+    expect(pixelAt(result.pixels, 7, 3, 3)).toEqual([254, 254, 254, 255]);
   });
 
   it('skips an ineligible dark background', () => {
@@ -113,5 +134,15 @@ describe('normalizeProductImagePixels', () => {
   it('rejects dimensions that do not match the RGBA buffer', () => {
     expect(() => normalizeProductImagePixels(new Uint8ClampedArray(12), 2, 2))
       .toThrow('RGBA pixel buffer length does not match 2x2');
+  });
+});
+
+describe('product image rendering contract', () => {
+  it('does not multiply product pixels into the image-well background', () => {
+    const source = sourceFiles(join(process.cwd(), 'src'))
+      .map(path => readFileSync(path, 'utf8'))
+      .join('\n');
+
+    expect(source).not.toMatch(/mixBlendMode\s*:\s*['"]multiply|mix-blend-mode\s*:\s*multiply/);
   });
 });

@@ -205,8 +205,6 @@ dialog[open]::backdrop {
 }
 
 .product-image-container img {
-  mix-blend-mode: multiply; /* Blends white photo backdrops into the well */
-  opacity: 0.95;
   transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Normalize every opaque garment image to a pure-white, edge-connected background so no image canvas appears as a rectangle against the closet's grey wells, and enforce the same contract for future uploads.
+**Goal:** Normalize every opaque garment image perimeter to the closet's `#f6f6f6` well so no image canvas appears as a rectangle, and enforce the same contract for future uploads.
 
-**Architecture:** A deterministic perimeter flood-fill normalizer processes raw RGBA pixels without generative editing. A Python/Pillow batch implementation transforms and audits checked-in JPEG assets in place while a browser TypeScript implementation applies the same rules to future uploads; both are regression-tested with synthetic pixel fixtures before existing assets are changed.
+**Architecture:** A deterministic perimeter flood-fill normalizer processes raw RGBA pixels without generative editing. It shifts eligible connected pixels relative to the sampled backdrop, preserving pale-fabric contrast, while pinning the perimeter to `#f6f6f6`; product images then render without multiply blending. A Python/Pillow batch implementation transforms and audits checked-in JPEG assets in place while a browser TypeScript implementation applies the same rules to future uploads.
 
 **Tech Stack:** Python 3.12, Pillow, TypeScript, Vitest, React 19, Canvas 2D, Vite.
 
@@ -12,7 +12,8 @@
 
 - Preserve every existing image filename, URL, width, and height.
 - Preserve garment identity, color, logos, silhouette, and natural shadow.
-- Normalize only bright, low-chroma pixels connected to the image perimeter.
+- Normalize only bright, low-chroma pixels connected to the image perimeter, preserving their tonal differences.
+- Render normalized product images without multiply blending.
 - Do not alter transparent sneaker assets.
 - Do not add filename-specific exceptions.
 - Preserve unrelated working-tree changes in `package.json`, `.pnpm-store/`, and existing daily-outfit documents.
@@ -30,7 +31,7 @@
 - Produces: `inspect_background(image: PIL.Image.Image) -> BackgroundInspection`
 - Produces: CLI `python3 scripts/normalize_closet_backgrounds.py [--check] [--root PATH]`
 - `NormalizationStats` reports `changed_pixels`, `background_rgb`, and `skipped_reason`.
-- `BackgroundInspection` reports whether an opaque image satisfies the white-perimeter contract.
+- `BackgroundInspection` reports whether an opaque image satisfies the `#f6f6f6` perimeter contract.
 
 - [ ] **Step 1: Write failing synthetic-image tests**
 
@@ -40,7 +41,7 @@ Create tests that build tiny RGBA images in memory and assert:
 def test_normalizes_only_off_white_pixels_connected_to_perimeter():
     image = off_white_canvas_with_dark_center_and_enclosed_off_white_detail()
     normalized, stats = normalize_rgba(image)
-    assert normalized.getpixel((0, 0)) == (255, 255, 255, 255)
+    assert normalized.getpixel((0, 0)) == (246, 246, 246, 255)
     assert normalized.getpixel((4, 4)) == (20, 30, 40, 255)
     assert normalized.getpixel((5, 5)) == (243, 243, 243, 255)
     assert stats.changed_pixels > 0
@@ -75,10 +76,11 @@ MIN_BACKGROUND_LUMA = 205.0
 MAX_BACKGROUND_CHROMA = 32
 MIN_COLOR_TOLERANCE = 14.0
 MAX_COLOR_TOLERANCE = 38.0
-WHITE_CONTRACT_LUMA = 254.5
+TARGET_BACKGROUND_RGB = (246, 246, 246)
+CONTRACT_COLOR_TOLERANCE = 2.0
 ```
 
-Sample the outer two-percent perimeter band, use per-channel medians for the reference background, derive a robust tolerance from median absolute color distance, and flood-fill eligible pixels from all four edges. A pixel is eligible only when its RGB distance from the perimeter reference is within tolerance, its luma is at least `MIN_BACKGROUND_LUMA`, and its chroma is at most `MAX_BACKGROUND_CHROMA`. Set eligible connected pixels to `(255, 255, 255, 255)` and leave every other pixel byte-for-byte unchanged.
+Sample the outer two-percent perimeter band, use per-channel medians for the reference background, derive a robust tolerance from median absolute color distance, and flood-fill eligible pixels from all four edges. A pixel is eligible only when its RGB distance from the perimeter reference is within tolerance, its luma is at least `MIN_BACKGROUND_LUMA`, and its chroma is at most `MAX_BACKGROUND_CHROMA`. Pin eligible perimeter pixels to `(246, 246, 246, 255)`; shift other eligible connected pixels by the same per-channel offset between the sampled backdrop and `#f6f6f6`, preserving their tonal differences. Leave every ineligible pixel byte-for-byte unchanged.
 
 The CLI must enumerate `.jpg`, `.jpeg`, `.png`, and `.webp` files, skip alpha-bearing images, preserve dimensions, save JPEGs atomically through a sibling temporary file, and print one summary line per changed or failing file. `--check` must exit `1` with failing filenames and must never write.
 
@@ -108,17 +110,17 @@ git commit -m "test: add deterministic closet image normalizer"
 **Interfaces:**
 - Produces: `normalizeProductImagePixels(pixels: Uint8ClampedArray, width: number, height: number): PixelNormalizationResult`
 - `PixelNormalizationResult` contains `pixels`, `changedPixels`, `backgroundRgb`, and `skippedReason`.
-- `resizeImageToDataUrl(blob: Blob, maxDim?: number): Promise<string>` remains source-compatible and returns a normalized white-backed JPEG.
+- `resizeImageToDataUrl(blob: Blob, maxDim?: number): Promise<string>` remains source-compatible and returns a normalized well-matched JPEG.
 
 - [ ] **Step 1: Write failing Vitest coverage for the browser pixel core**
 
 Use the same synthetic fixtures and assertions as the Python tests:
 
 ```typescript
-it('whitens off-white pixels connected to the perimeter without crossing the garment', () => {
+it('harmonizes off-white pixels connected to the perimeter without crossing the garment', () => {
   const input = offWhiteCanvasWithDarkCenterAndEnclosedDetail();
   const result = normalizeProductImagePixels(input, 10, 10);
-  expect(pixelAt(result.pixels, 10, 0, 0)).toEqual([255, 255, 255, 255]);
+  expect(pixelAt(result.pixels, 10, 0, 0)).toEqual([246, 246, 246, 255]);
   expect(pixelAt(result.pixels, 10, 4, 4)).toEqual([20, 30, 40, 255]);
   expect(pixelAt(result.pixels, 10, 5, 5)).toEqual([243, 243, 243, 255]);
 });
@@ -185,7 +187,7 @@ git commit -m "fix: normalize garment upload backgrounds"
 
 **Interfaces:**
 - Consumes: `scripts/normalize_closet_backgrounds.py`
-- Produces: every opaque asset under `public/closet/` meeting the white-perimeter contract.
+- Produces: every opaque asset under `public/closet/` meeting the `#f6f6f6` perimeter contract.
 
 - [ ] **Step 1: Run the asset audit and verify RED**
 
