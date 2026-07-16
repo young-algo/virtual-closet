@@ -224,6 +224,8 @@ def run(root: Path, check: bool) -> int:
                         print(f"FAIL {path} perimeter={rgb}")
                     continue
 
+                if inspect_background(source).compliant:
+                    continue
                 normalized, stats = normalize_rgba(source)
                 if stats.changed_pixels == 0:
                     continue
@@ -238,7 +240,7 @@ def run(root: Path, check: bool) -> int:
 
     if check:
         if failures:
-            print(f"FAILED {len(failures)} image(s) do not meet the white-perimeter contract")
+            print(f"FAILED {len(failures)} image(s) do not match the image-well background contract")
             return 1
         print(f"PASS {len(_image_paths(root))} image(s) match the image-well background contract")
         return 0

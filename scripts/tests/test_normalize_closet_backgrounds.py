@@ -1,8 +1,10 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from PIL import Image
 
-from scripts.normalize_closet_backgrounds import inspect_background, normalize_rgba
+from scripts.normalize_closet_backgrounds import inspect_background, normalize_rgba, run
 
 
 def solid_image(size: int, rgba: tuple[int, int, int, int]) -> Image.Image:
@@ -138,6 +140,22 @@ class InspectBackgroundTests(unittest.TestCase):
 
         self.assertTrue(inspection.compliant)
         self.assertEqual(inspection.skipped_reason, "contains transparency")
+
+
+class BatchRunTests(unittest.TestCase):
+    def test_does_not_reencode_an_image_that_already_matches_the_well(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "compliant.png"
+            image = solid_image(9, (246, 246, 246, 255))
+            image.putpixel((0, 0), (245, 246, 246, 255))
+            image.putpixel((4, 4), (20, 30, 40, 255))
+            image.save(path)
+            before = path.read_bytes()
+
+            result = run(Path(directory), check=False)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(path.read_bytes(), before)
 
 
 if __name__ == "__main__":
