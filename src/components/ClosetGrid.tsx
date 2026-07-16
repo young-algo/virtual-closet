@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Search, Plus, Check, X, Edit2, AlertCircle, Shirt } from 'lucide-react';
+import { productImageBlendMode } from '../utils/productImagePresentation';
 
 export interface ClosetItem {
   id: string;
@@ -393,6 +394,7 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                       width: '90%',
                       height: '90%',
                       objectFit: 'contain',
+                      mixBlendMode: productImageBlendMode(item.category)
                     }}
                     className="product-image"
                   />
@@ -620,7 +622,8 @@ export const ClosetGrid: React.FC<ClosetGridProps> = ({
                   style={{
                     maxWidth: '100%',
                     maxHeight: '100%',
-                    objectFit: 'contain'
+                    objectFit: 'contain',
+                    mixBlendMode: productImageBlendMode(activeDetailItem.category)
                   }}
                 />
               </div>

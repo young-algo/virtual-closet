@@ -1,2 +1,2 @@
-export const productImageBlendMode = (category: string): 'multiply' | undefined =>
-  category === 'Sneakers' ? 'multiply' : undefined;
+export const productImageBlendMode = (category: string): 'multiply' | 'darken' =>
+  category === 'Sneakers' ? 'multiply' : 'darken';

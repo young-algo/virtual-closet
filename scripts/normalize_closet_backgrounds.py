@@ -17,6 +17,8 @@ MIN_BACKGROUND_LUMA = 205.0
 MAX_BACKGROUND_CHROMA = 32.0
 MIN_COLOR_TOLERANCE = 14.0
 MAX_COLOR_TOLERANCE = 38.0
+INNER_CANVAS_TOLERANCE = 18.0
+INNER_CANVAS_QUANTILE = 0.9
 TARGET_BACKGROUND_RGB = (246, 246, 246)
 CONTRACT_COLOR_TOLERANCE = 2.0
 SUPPORTED_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
@@ -82,6 +84,56 @@ def _background_model(image: Image.Image) -> BackgroundModel:
     return BackgroundModel(reference, tolerance)
 
 
+def _quantile(values: list[int], quantile: float) -> float:
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return float(ordered[lower])
+    weight = position - lower
+    return (ordered[lower] * (1.0 - weight)) + (ordered[upper] * weight)
+
+
+def _inner_background_model(image: Image.Image) -> BackgroundModel | None:
+    width, height = image.size
+    band = max(1, round(min(width, height) * 0.02))
+    outer_limit = min(width, height) // 2
+    samples: list[tuple[int, int, int]] = []
+    for y in range(height):
+        for x in range(width):
+            edge_distance = min(x, y, width - 1 - x, height - 1 - y)
+            if edge_distance < band or edge_distance >= min(5 * band, outer_limit):
+                continue
+            pixel = image.getpixel((x, y))
+            rgb = tuple(float(value) for value in pixel[:3])
+            if pixel[3] == 255 and _luma(rgb) >= MIN_BACKGROUND_LUMA and _chroma(rgb) <= MAX_BACKGROUND_CHROMA:
+                samples.append(pixel[:3])
+
+    if not samples:
+        return None
+
+    reference = tuple(
+        _quantile([sample[channel] for sample in samples], INNER_CANVAS_QUANTILE)
+        for channel in range(3)
+    )
+    return BackgroundModel(reference, INNER_CANVAS_TOLERANCE)
+
+
+def _normalization_model(image: Image.Image) -> BackgroundModel:
+    perimeter = _background_model(image)
+    inner = _inner_background_model(image)
+    if inner is None:
+        return perimeter
+
+    target = tuple(float(value) for value in TARGET_BACKGROUND_RGB)
+    perimeter_error = _distance(perimeter.rgb, target)
+    inner_error = _distance(inner.rgb, target)
+    if inner_error > perimeter_error + CONTRACT_COLOR_TOLERANCE:
+        return inner
+    return perimeter
+
+
 def _eligible_background_pixel(
     pixel: tuple[int, int, int, int],
     model: BackgroundModel,
@@ -100,11 +152,16 @@ def inspect_background(image: Image.Image) -> BackgroundInspection:
     if _contains_transparency(rgba):
         return BackgroundInspection(True, None, "contains transparency")
 
-    model = _background_model(rgba)
-    if _luma(model.rgb) < MIN_BACKGROUND_LUMA or _chroma(model.rgb) > MAX_BACKGROUND_CHROMA:
-        return BackgroundInspection(True, model.rgb, "background is not bright and neutral")
+    perimeter = _background_model(rgba)
+    if _luma(perimeter.rgb) < MIN_BACKGROUND_LUMA or _chroma(perimeter.rgb) > MAX_BACKGROUND_CHROMA:
+        return BackgroundInspection(True, perimeter.rgb, "background is not bright and neutral")
 
     target = tuple(float(value) for value in TARGET_BACKGROUND_RGB)
+    candidates = [perimeter]
+    inner = _inner_background_model(rgba)
+    if inner is not None:
+        candidates.append(inner)
+    model = max(candidates, key=lambda candidate: _distance(candidate.rgb, target))
     return BackgroundInspection(_distance(model.rgb, target) <= CONTRACT_COLOR_TOLERANCE, model.rgb)
 
 
@@ -113,7 +170,7 @@ def normalize_rgba(image: Image.Image) -> tuple[Image.Image, NormalizationStats]
     if _contains_transparency(rgba):
         return rgba.copy(), NormalizationStats(0, None, "contains transparency")
 
-    model = _background_model(rgba)
+    model = _normalization_model(rgba)
     if _luma(model.rgb) < MIN_BACKGROUND_LUMA or _chroma(model.rgb) > MAX_BACKGROUND_CHROMA:
         return rgba.copy(), NormalizationStats(0, model.rgb, "background is not bright and neutral")
 

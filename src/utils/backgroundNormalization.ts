@@ -2,6 +2,8 @@ const MIN_BACKGROUND_LUMA = 205;
 const MAX_BACKGROUND_CHROMA = 32;
 const MIN_COLOR_TOLERANCE = 14;
 const MAX_COLOR_TOLERANCE = 38;
+const INNER_CANVAS_TOLERANCE = 18;
+const INNER_CANVAS_QUANTILE = 0.9;
 const TARGET_BACKGROUND_RGB: Rgb = [246, 246, 246];
 
 type Rgb = [number, number, number];
@@ -35,6 +37,16 @@ const median = (values: number[]): number => {
   return sorted.length % 2 === 0
     ? (sorted[middle - 1] + sorted[middle]) / 2
     : sorted[middle];
+};
+
+const quantile = (values: number[], target: number): number => {
+  const sorted = [...values].sort((left, right) => left - right);
+  const position = (sorted.length - 1) * target;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  if (lower === upper) return sorted[lower];
+  const weight = position - lower;
+  return (sorted[lower] * (1 - weight)) + (sorted[upper] * weight);
 };
 
 const containsTransparency = (pixels: Uint8ClampedArray): boolean => {
@@ -78,6 +90,56 @@ const buildBackgroundModel = (
   return { rgb, tolerance };
 };
 
+const buildInnerBackgroundModel = (
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number
+): BackgroundModel | null => {
+  const band = Math.max(1, Math.round(Math.min(width, height) * 0.02));
+  const outerLimit = Math.floor(Math.min(width, height) / 2);
+  const red: number[] = [];
+  const green: number[] = [];
+  const blue: number[] = [];
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const edgeDistance = Math.min(x, y, width - 1 - x, height - 1 - y);
+      if (edgeDistance < band || edgeDistance >= Math.min(5 * band, outerLimit)) continue;
+      const offset = ((y * width) + x) * 4;
+      const rgb: Rgb = [pixels[offset], pixels[offset + 1], pixels[offset + 2]];
+      if (pixels[offset + 3] !== 255
+          || luma(rgb) < MIN_BACKGROUND_LUMA
+          || chroma(rgb) > MAX_BACKGROUND_CHROMA) continue;
+      red.push(rgb[0]);
+      green.push(rgb[1]);
+      blue.push(rgb[2]);
+    }
+  }
+
+  if (red.length === 0) return null;
+  return {
+    rgb: [
+      quantile(red, INNER_CANVAS_QUANTILE),
+      quantile(green, INNER_CANVAS_QUANTILE),
+      quantile(blue, INNER_CANVAS_QUANTILE)
+    ],
+    tolerance: INNER_CANVAS_TOLERANCE
+  };
+};
+
+const selectNormalizationModel = (
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number
+): BackgroundModel => {
+  const perimeter = buildBackgroundModel(pixels, width, height);
+  const inner = buildInnerBackgroundModel(pixels, width, height);
+  if (!inner) return perimeter;
+  const perimeterError = distance(perimeter.rgb, TARGET_BACKGROUND_RGB);
+  const innerError = distance(inner.rgb, TARGET_BACKGROUND_RGB);
+  return innerError > perimeterError + 2 ? inner : perimeter;
+};
+
 const isEligibleBackgroundPixel = (
   pixels: Uint8ClampedArray,
   offset: number,
@@ -110,7 +172,7 @@ export const normalizeProductImagePixels = (
     };
   }
 
-  const model = buildBackgroundModel(pixels, width, height);
+  const model = selectNormalizationModel(pixels, width, height);
   if (luma(model.rgb) < MIN_BACKGROUND_LUMA || chroma(model.rgb) > MAX_BACKGROUND_CHROMA) {
     return {
       pixels: output,

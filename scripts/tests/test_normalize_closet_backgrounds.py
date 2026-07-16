@@ -20,7 +20,28 @@ def off_white_canvas_with_enclosed_detail() -> Image.Image:
     return image
 
 
+def well_frame_with_bright_inner_canvas() -> Image.Image:
+    image = solid_image(51, (246, 246, 246, 255))
+    for y in range(1, 50):
+        for x in range(1, 50):
+            image.putpixel((x, y), (255, 255, 255, 255))
+    for y in range(18, 33):
+        for x in range(18, 33):
+            image.putpixel((x, y), (20, 30, 40, 255))
+    return image
+
+
 class NormalizeRgbaTests(unittest.TestCase):
+    def test_normalizes_a_bright_inner_canvas_behind_a_well_colored_frame(self) -> None:
+        image = well_frame_with_bright_inner_canvas()
+
+        normalized, stats = normalize_rgba(image)
+
+        self.assertEqual(normalized.getpixel((0, 0)), (246, 246, 246, 255))
+        self.assertEqual(normalized.getpixel((8, 8)), (246, 246, 246, 255))
+        self.assertEqual(normalized.getpixel((25, 25)), (20, 30, 40, 255))
+        self.assertGreater(stats.changed_pixels, 0)
+
     def test_normalizes_only_off_white_pixels_connected_to_perimeter(self) -> None:
         image = off_white_canvas_with_enclosed_detail()
 
@@ -111,6 +132,12 @@ class NormalizeRgbaTests(unittest.TestCase):
 
 
 class InspectBackgroundTests(unittest.TestCase):
+    def test_reports_a_bright_inner_canvas_as_noncompliant(self) -> None:
+        inspection = inspect_background(well_frame_with_bright_inner_canvas())
+
+        self.assertFalse(inspection.compliant)
+        self.assertIsNone(inspection.skipped_reason)
+
     def test_reports_off_white_perimeter_as_noncompliant(self) -> None:
         inspection = inspect_background(solid_image(7, (243, 243, 243, 255)))
 

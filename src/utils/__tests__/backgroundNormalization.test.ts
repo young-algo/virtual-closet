@@ -30,7 +30,27 @@ const offWhiteCanvasWithEnclosedDetail = (): Uint8ClampedArray => {
   return pixels;
 };
 
+const wellFrameWithBrightInnerCanvas = (): Uint8ClampedArray => {
+  const pixels = solidPixels(51, 51, [246, 246, 246, 255]);
+  for (let y = 1; y < 50; y += 1) {
+    for (let x = 1; x < 50; x += 1) setPixel(pixels, 51, x, y, [255, 255, 255, 255]);
+  }
+  for (let y = 18; y < 33; y += 1) {
+    for (let x = 18; x < 33; x += 1) setPixel(pixels, 51, x, y, [20, 30, 40, 255]);
+  }
+  return pixels;
+};
+
 describe('normalizeProductImagePixels', () => {
+  it('harmonizes a bright inner canvas hidden behind a well-colored frame', () => {
+    const result = normalizeProductImagePixels(wellFrameWithBrightInnerCanvas(), 51, 51);
+
+    expect(pixelAt(result.pixels, 51, 0, 0)).toEqual([246, 246, 246, 255]);
+    expect(pixelAt(result.pixels, 51, 8, 8)).toEqual([246, 246, 246, 255]);
+    expect(pixelAt(result.pixels, 51, 25, 25)).toEqual([20, 30, 40, 255]);
+    expect(result.changedPixels).toBeGreaterThan(0);
+  });
+
   it('harmonizes off-white pixels connected to the perimeter without crossing the garment', () => {
     const result = normalizeProductImagePixels(offWhiteCanvasWithEnclosedDetail(), 9, 9);
 
@@ -133,10 +153,10 @@ describe('normalizeProductImagePixels', () => {
 });
 
 describe('product image rendering contract', () => {
-  it('multiplies sneaker photos but leaves normalized garments unblended', () => {
+  it('multiplies sneaker photos and darkens bright garment canvases into the well', () => {
     expect(productImageBlendMode('Sneakers')).toBe('multiply');
-    expect(productImageBlendMode('T-Shirts')).toBeUndefined();
-    expect(productImageBlendMode('Pants')).toBeUndefined();
+    expect(productImageBlendMode('T-Shirts')).toBe('darken');
+    expect(productImageBlendMode('Pants')).toBe('darken');
   });
 
   it('does not apply multiply globally to every product image', () => {
