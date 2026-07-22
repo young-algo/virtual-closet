@@ -85,7 +85,16 @@ function shoeRotationContextV2_(snapshot, localDate, history) {
   var recent = available.filter(function(id) { return Boolean(lastDateById[id]); });
   var fresh = available.filter(function(id) { return !lastDateById[id]; });
   var target = Math.min(3, available.length);
+  var anchorPool = fresh.slice();
+  if (!anchorPool.length) {
+    var oldestDate = recent.reduce(function(oldest, id) {
+      return oldest === null || lastDateById[id] < oldest ? lastDateById[id] : oldest;
+    }, null);
+    anchorPool = recent.filter(function(id) { return lastDateById[id] === oldestDate; });
+  }
+  var anchor = shoeRotationSeededPickV2_(anchorPool, localDate, snapshot.wardrobeFingerprint);
   var allowed = fresh.slice();
+  if (!allowed.length) allowed.push(anchor);
   if (allowed.length < target) {
     recent.slice().sort(function(left, right) {
       if (lastDateById[left] !== lastDateById[right]) {
@@ -93,16 +102,10 @@ function shoeRotationContextV2_(snapshot, localDate, history) {
       }
       return left < right ? -1 : left > right ? 1 : 0;
     }).some(function(id) {
+      if (allowed.indexOf(id) >= 0) return false;
       allowed.push(id);
       return allowed.length >= target;
     });
-  }
-  var anchorPool = fresh.slice();
-  if (!anchorPool.length) {
-    var oldestDate = recent.reduce(function(oldest, id) {
-      return oldest === null || lastDateById[id] < oldest ? lastDateById[id] : oldest;
-    }, null);
-    anchorPool = recent.filter(function(id) { return lastDateById[id] === oldestDate; });
   }
   var allowedSet = new Set(allowed);
   return {
@@ -111,7 +114,7 @@ function shoeRotationContextV2_(snapshot, localDate, history) {
     freshShoeIds: fresh,
     allowedGeneratedShoeIds: allowed,
     blockedGeneratedShoeIds: available.filter(function(id) { return !allowedSet.has(id); }),
-    easyAnchorShoeId: shoeRotationSeededPickV2_(anchorPool, localDate, snapshot.wardrobeFingerprint),
+    easyAnchorShoeId: anchor,
     fallbackUsed: allowed.length > fresh.length,
     lastRecommendedDateById: lastDateById
   };
@@ -124,6 +127,21 @@ function shoeRotationModelViewV2_(rotation, snapshot) {
     allowedShoeLabels: rotation.allowedGeneratedShoeIds.map(label).filter(Boolean),
     blockedShoeLabels: rotation.blockedGeneratedShoeIds.map(label).filter(Boolean)
   };
+}
+
+function modelWeatherViewForOutfitModelsV2_(weather) {
+  var view = modelWeatherViewV2_(weather);
+  if (!view || typeof view.plainEnglishSummary !== 'string') return view;
+  var summary = view.plainEnglishSummary;
+  var terminal = summary.match(/[.!?]\s*$/);
+  var clauses = summary.split(/\s*;\s*/).filter(function(clause) {
+    return !/\b(?:footwear|shoe|shoes|sneaker|sneakers)\b/i.test(clause);
+  });
+  view.plainEnglishSummary = clauses.join('; ').trim();
+  if (view.plainEnglishSummary && terminal && !/[.!?]\s*$/.test(view.plainEnglishSummary)) {
+    view.plainEnglishSummary += terminal[0].trim();
+  }
+  return view;
 }
 
 function shoeRotationDiagnosticSummaryV2_(rotation, snapshot) {

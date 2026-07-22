@@ -92,7 +92,7 @@ function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidanc
     'Return five genuinely viable and materially distinct candidates for the ' + archetype + ' direction—not superficial variations and not the same hero piece with small substitutions. Each needs one top, one bottom, one shoe, and zero or one layer.',
     'Do not reveal chain-of-thought. Return only the requested concise structured fields.',
     'ARCHETYPE BRIEF: ' + archetypeBriefV2_(archetype),
-    'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewV2_(weather))
+    'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewForOutfitModelsV2_(weather))
   ];
   if (rotation) prompt.push(plannerShoeRotationGuidanceV2_(archetype, rotation, snapshot));
   var extremeHeatContract = extremeHeatPolishedCasualContractV2_(archetype, weather);

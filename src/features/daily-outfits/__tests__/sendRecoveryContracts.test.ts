@@ -595,6 +595,46 @@ describe('resolved send recovery', () => {
       .toBeGreaterThan(recovered.events.indexOf('history'));
   });
 
+  it.each([
+    ['cooling Encore shoe', (pending: ReturnType<typeof pendingFixture>) => {
+      pending.history.exactOutfitsPrevious14Days.push({
+        localDate: '2026-07-13',
+        archetype: 'easy',
+        itemIds: ['encore-shoe'],
+      });
+      const wardrobeFingerprint = fixtureFingerprintForEasyAnchor(
+        pending.localDate,
+        pending.history,
+        pending.candidates.map(candidate => candidate.shoeId).concat(['encore-shoe']),
+        pending.selectedCandidates[0].shoeId,
+      );
+      pending.wardrobeFingerprint = wardrobeFingerprint;
+      pending.bundle.wardrobeFingerprint = wardrobeFingerprint;
+    }],
+    ['same-day generated Encore shoe', (pending: ReturnType<typeof pendingFixture>) => {
+      const encore = pending.bundle.encore as { itemIds: string[] };
+      encore.itemIds[2] = pending.selectedCandidates[1].shoeId;
+    }],
+  ] as const)('rejects a persisted %s at bundle-ready and resolved send recovery', (_name, mutate) => {
+    const pending = pendingFixture('2026-07-14', true);
+    mutate(pending);
+    const snapshot = snapshotFixture(pending);
+    const validateBundle = evaluateAppsScript<(
+      pendingValue: ReturnType<typeof pendingFixture>,
+      snapshotValue: ReturnType<typeof snapshotFixture>,
+      localDate: string,
+    ) => boolean>(runtimeFiles, 'validFullBundleReadyV2_', { DAILY_V2: daily });
+
+    expect(validateBundle(pending, snapshot, pending.localDate)).toBe(false);
+
+    snapshot.generatedAt = 75;
+    const recovered = runResolvedRecovery(pending, snapshot);
+    expect(recovered.error?.message)
+      .toBe('Resolved sent date 2026-07-14 has no matching persisted bundle to reconcile');
+    expect(recovered.events).not.toContain('history');
+    expect(recovered.events).not.toContain('mail');
+  });
+
   it('keeps the marker when the current wardrobe changed or the persisted bundle was tampered', () => {
     const pending = pendingFixture('2026-07-14', true);
     const changedSnapshot = snapshotFixture(pending);

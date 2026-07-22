@@ -72,7 +72,7 @@ function runCuratorV2_(snapshot, weather, history, selectedCandidates, critic) {
     'Write the customer-facing copy for each selected outfit.',
     'Copy each candidateId, archetype, and itemIds exactly in the same order. In colorHook, name the exact visible colors/details and at least two items that create the relationship.',
     'Do not use generic language such as "keeps it clean," "lets the top pop," or "ties everything together." Produce concise customer-facing explanations only; do not reveal chain-of-thought.',
-    'WEATHER:\n' + JSON.stringify(modelWeatherViewV2_(weather)),
+    'WEATHER:\n' + JSON.stringify(modelWeatherViewForOutfitModelsV2_(weather)),
     'DAILY HISTORY:\n' + JSON.stringify(modelFacingHistoryV2_(history, snapshot)),
     historyGuidanceV2_(),
     'FINAL SELECTED OUTFITS:\n' + JSON.stringify(modelFacingCandidatesV2_(selectedCandidates, snapshot)),

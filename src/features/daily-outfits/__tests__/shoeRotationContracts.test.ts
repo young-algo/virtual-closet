@@ -82,6 +82,27 @@ describe('shoe rotation policy', () => {
     expect(result.allowedGeneratedShoeIds).toEqual(['s2', 's3', 's4']);
   });
 
+  it('always reserves fallback capacity for the seeded anchor from a tied oldest tier', () => {
+    const tiedHistory = {
+      exactOutfitsPrevious14Days: snapshot.items.map(({ id }) => ({
+        localDate: '2026-07-15',
+        itemIds: [id],
+      })),
+    };
+
+    Array.from({ length: 50 }, (_, index) => `tied-oldest-${index}`).forEach(wardrobeFingerprint => {
+      const result = context(
+        { ...snapshot, wardrobeFingerprint },
+        '2026-07-21',
+        tiedHistory,
+      );
+
+      expect(result.freshShoeIds).toEqual([]);
+      expect(result.allowedGeneratedShoeIds).toHaveLength(3);
+      expect(result.allowedGeneratedShoeIds).toContain(result.easyAnchorShoeId);
+    });
+  });
+
   it('keeps shoes available regardless of poor or absent rain safety', () => {
     const result = context({
       wardrobeFingerprint: 'rain-does-not-matter',

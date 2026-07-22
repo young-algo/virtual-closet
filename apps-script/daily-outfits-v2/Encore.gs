@@ -353,17 +353,29 @@ function selectEncoreForBundleV2_(snapshot, weather, history, excludedShoeIds) {
   }
 }
 
-function validPersistedEncoreV2_(encore, snapshot, weather) {
+function validPersistedEncoreV2_(encore, snapshot, weather, history, excludedShoeIds) {
   if (!validEncoreRecordV2_(encore) || !ownEncoreKeyV2_(encore, 'outfitId') ||
       typeof encore.outfitId !== 'string' || !encore.outfitId || !ownEncoreKeyV2_(encore, 'name') ||
       typeof encore.name !== 'string' || !encore.name || !ownEncoreKeyV2_(encore, 'candidateId') ||
       encore.candidateId !== 'encore:' + encore.outfitId || !ownEncoreKeyV2_(encore, 'itemIds') ||
       !validEncoreArrayV2_(encore.itemIds) ||
-      !validEncoreWeatherV2_(weather)) return false;
+      !validEncoreWeatherV2_(weather) || !validEncoreRecordV2_(history) ||
+      !ownEncoreKeyV2_(history, 'exactOutfitsPrevious14Days') ||
+      !validEncoreArrayV2_(history.exactOutfitsPrevious14Days) ||
+      !validEncoreArrayV2_(excludedShoeIds) ||
+      !excludedShoeIds.every(function(id) { return typeof id === 'string' && Boolean(id); })) return false;
   var itemMap = encoreInventoryIndexV2_(snapshot);
   var outfitIdCounts = encoreOutfitIdCountsV2_(snapshot);
   if (!itemMap || !outfitIdCounts) return false;
   var matching = snapshot.tasteExamples.filter(function(outfit) { return outfit && outfit.id === encore.outfitId; });
   if (matching.length !== 1 || !validEncoreSavedOutfitV2_(matching[0], snapshot, itemMap, outfitIdCounts, weather)) return false;
-  return matching[0].name === encore.name && JSON.stringify(matching[0].itemIds) === JSON.stringify(encore.itemIds);
+  if (matching[0].name !== encore.name || JSON.stringify(matching[0].itemIds) !== JSON.stringify(encore.itemIds)) return false;
+  var shoeId = shoeIdFromItemIdsV2_(encore.itemIds, snapshot);
+  try {
+    var rotation = shoeRotationContextV2_(snapshot, weather.localDate, history);
+    return Boolean(shoeId) && rotation.freshShoeIds.indexOf(shoeId) >= 0 &&
+      excludedShoeIds.indexOf(shoeId) < 0;
+  } catch (_ignored) {
+    return false;
+  }
 }

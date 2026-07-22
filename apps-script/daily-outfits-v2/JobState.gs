@@ -154,6 +154,7 @@ function validPersistedHistoryV2_(history) {
   var validExactOutfits = ownDailyJobKeyV2_(history, 'exactOutfitsPrevious14Days') &&
     validOwnDailyArrayV2_(history.exactOutfitsPrevious14Days, undefined, function(entry) {
       return validOwnDailyRecordV2_(entry) && ownNonEmptyDailyStringV2_(entry, 'localDate') &&
+        validDailySendPropertyDateV2_(entry.localDate) &&
         ownNonEmptyDailyStringV2_(entry, 'archetype') && ownDailyJobKeyV2_(entry, 'itemIds') &&
         validOwnDailyStringArrayV2_(entry.itemIds, true) && entry.itemIds.length > 0;
     });
@@ -166,7 +167,8 @@ function validPersistedHistoryV2_(history) {
       if (!validOwnDailyRecordV2_(entry) ||
           !['localDate', 'value', 'outfitName', 'archetype'].every(function(key) {
             return ownNonEmptyDailyStringV2_(entry, key);
-          }) || ['liked', 'disliked', 'wore'].indexOf(entry.value) < 0 ||
+          }) || !validDailySendPropertyDateV2_(entry.localDate) ||
+          ['liked', 'disliked', 'wore'].indexOf(entry.value) < 0 ||
           !ownDailyJobKeyV2_(entry, 'items') || !validOwnDailyStringArrayV2_(entry.items, true)) return false;
       return ['reason', 'note'].every(function(key) {
         if (!ownDailyJobKeyV2_(entry, key)) return !(key in entry);
@@ -699,8 +701,6 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
         !validOwnDailyObjectV2_(bundle, 'weather') ||
         !validPersistedWeatherV2_(bundle.weather, bundle.localDate) ||
         JSON.stringify(bundle.weather) !== JSON.stringify(pending.weather)) return false;
-    if (ownDailyJobKeyV2_(bundle, 'encore') &&
-        (typeof validPersistedEncoreV2_ !== 'function' || !validPersistedEncoreV2_(bundle.encore, snapshot, bundle.weather))) return false;
     assertDeterministicSelectionReadyV2_(pending, expectedLocalDate, snapshot.wardrobeFingerprint, snapshot);
     if (!validOwnDailyObjectV2_(pending, 'selection') || !validPersistedSelectionSummaryV2_(pending.selection) ||
         !validOwnDailyObjectV2_(bundle, 'coverage') ||
@@ -714,6 +714,14 @@ function validFullBundleReadyV2_(pending, snapshot, expectedLocalDate) {
         bundle.recommendations.length !== pending.selectedCandidates.length) return false;
     for (var index = 0; index < bundle.recommendations.length; index += 1) {
       if (!validPersistedRecommendationV2_(bundle.recommendations[index], pending.selectedCandidates[index])) return false;
+    }
+    if (ownDailyJobKeyV2_(bundle, 'encore')) {
+      var generatedShoeIds = bundle.recommendations.map(function(recommendation) {
+        return shoeIdFromItemIdsV2_(recommendation.itemIds, snapshot);
+      });
+      if (generatedShoeIds.some(function(id) { return !id; }) ||
+          typeof validPersistedEncoreV2_ !== 'function' ||
+          !validPersistedEncoreV2_(bundle.encore, snapshot, bundle.weather, pending.history, generatedShoeIds)) return false;
     }
     if (typeof validateFinalBundleV2_ !== 'function') return false;
     return validateFinalBundleV2_(

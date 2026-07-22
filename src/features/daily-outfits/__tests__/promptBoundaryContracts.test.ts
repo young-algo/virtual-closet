@@ -977,6 +977,83 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain('privateNote');
   });
 
+  it('removes derived active-rain shoe guidance from every model weather surface', () => {
+    const calls: Array<{ stage: string; prompt: string }> = [];
+    const model = evaluateAppsScript<{
+      deriveWeatherProfileV2_: (raw: object, config: object) => typeof richWeather;
+      plannerPartsV2_: (archetype: string, snapshotValue: object, weather: object, history: object) => Array<{ text?: string }>;
+      runCriticCandidatesV2_: (snapshotValue: object, weather: object, history: object, candidates: object[]) => object;
+      runCuratorV2_: (snapshotValue: object, weather: object, history: object, selected: object[], critic: object) => object;
+    }>(
+      ['Weather.gs', 'ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'Planner.gs', 'Critic.gs', 'Selection.gs', 'Curator.gs'],
+      '({ deriveWeatherProfileV2_, plannerPartsV2_, runCriticCandidatesV2_, runCuratorV2_ })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        loadSnapshotV2_: () => richSnapshot,
+        callGeminiV2_: (stage: string, parts: Array<{ text?: string }>) => {
+          calls.push({ stage, prompt: parts.map(part => part.text || '').join('\n') });
+          if (stage === 'critic') return { scores: [] };
+          if (stage === 'repair') return { scores: [criticScore('easy-1')] };
+          return {
+            recommendations: [{
+              candidateId: 'easy-1',
+              archetype: 'easy',
+              name: 'Utility Neutral',
+              itemIds: ['T004', 'B002', 'S009'],
+              colorHook: 'Cream in the top bridges the olive bottom and brown shoe.',
+              whyItWorks: 'The relaxed proportions align across all three pieces.',
+              weatherNote: 'The garments stay light and breathable across the day.',
+            }],
+          };
+        },
+      },
+    );
+    const rainyWeather = model.deriveWeatherProfileV2_({
+      hourly: {
+        time: ['2026-07-14T06:00'],
+        temperature_2m: [70],
+        apparent_temperature: [70],
+        relative_humidity_2m: [70],
+        precipitation_probability: [80],
+        precipitation: [0.1],
+        weather_code: [63],
+        wind_speed_10m: [5],
+        wind_gusts_10m: [8],
+      },
+      daily: {
+        time: ['2026-07-14'],
+        temperature_2m_max: [75],
+        temperature_2m_min: [65],
+        weather_code: [63],
+      },
+    }, {
+      locationLabel: 'Brooklyn, NY',
+      timezone: 'America/New_York',
+    });
+    expect(rainyWeather.plainEnglishSummary).toContain('rain-safe shoes matter');
+
+    const selected = internalCandidate();
+    const plannerPrompt = model.plannerPartsV2_('easy', richSnapshot, rainyWeather, richHistory)
+      .map(part => part.text || '').join('\n');
+    model.runCriticCandidatesV2_(richSnapshot, rainyWeather, richHistory, [selected]);
+    model.runCuratorV2_(richSnapshot, rainyWeather, richHistory, [selected], {
+      scores: [criticScore(selected.candidateId)],
+    });
+
+    const surfaces = {
+      planner: plannerPrompt,
+      critic: calls.find(call => call.stage === 'critic')?.prompt || '',
+      criticRepair: calls.find(call => call.stage === 'repair')?.prompt || '',
+      curator: calls.find(call => call.stage === 'curator')?.prompt || '',
+    };
+    Object.values(surfaces).forEach(prompt => {
+      expect(prompt).not.toContain('rain-safe shoes matter');
+      expect(prompt).toContain('Light, breathable pieces should carry the day');
+      expect(prompt).toContain('"rainExpected":true');
+    });
+  });
+
   it('fails closed when the required shoe-rotation policy is unavailable', () => {
     const plannerPartsWithoutRotation = new Function('DAILY_V2', 'console', `
       ${apps('Weather.gs')}

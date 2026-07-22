@@ -3349,6 +3349,67 @@ describe('Apps Script contracts', () => {
     expect(validateStage(args[0], duplicatePlannerId, args[1], args[2], args[3])).toBe(false);
   });
 
+  it.each([
+    ['malformed exact-outfit date', (history: ReturnType<typeof persistedHistoryFixture>) => {
+      history.exactOutfitsPrevious14Days.push({
+        localDate: 'not-a-date', archetype: 'easy', itemIds: ['shoe-0'],
+      });
+    }],
+    ['impossible exact-outfit date', (history: ReturnType<typeof persistedHistoryFixture>) => {
+      history.exactOutfitsPrevious14Days.push({
+        localDate: '2026-02-30', archetype: 'easy', itemIds: ['shoe-0'],
+      });
+    }],
+    ['malformed feedback date', (history: ReturnType<typeof persistedHistoryFixture>) => {
+      history.feedback.push({
+        localDate: 'not-a-date', value: 'liked', outfitName: 'Look', archetype: 'easy', items: ['shoe-0'],
+      });
+    }],
+    ['impossible feedback date', (history: ReturnType<typeof persistedHistoryFixture>) => {
+      history.feedback.push({
+        localDate: '2026-02-30', value: 'wore', outfitName: 'Look', archetype: 'easy', items: ['shoe-0'],
+      });
+    }],
+  ] as const)('fails closed on a %s during stage replay and shoe diagnostics', (_name, mutate) => {
+    const pending = {
+      qualityPolicyVersion: 4,
+      localDate: '2026-07-15',
+      wardrobeFingerprint: 'strict-history-dates',
+      weather: persistedWeatherFixture(),
+      history: persistedHistoryFixture(),
+    };
+    mutate(pending.history);
+    const snapshotValue = {
+      wardrobeFingerprint: pending.wardrobeFingerprint,
+      items: [{
+        id: 'shoe-0', shortLabel: 'S1', slot: 'shoes',
+        profile: { available: true, excludedFromDaily: false },
+      }],
+    };
+    const guards = evaluateAppsScript<{
+      validPersistedHistoryV2_: (history: object) => boolean;
+      validPersistedStagePrerequisitesV2_: (
+        stage: string, pendingValue: object, localDate: string, wardrobeFingerprint: string, snapshot: object,
+      ) => boolean;
+      safeDailyShoeRotationProjectionV2_: (
+        pendingValue: object, context: object, snapshot: object,
+      ) => object | null;
+    }>(
+      ['ItemIndex.gs', 'ShoeRotation.gs', 'JobState.gs', 'Diagnostics.gs'],
+      '({ validPersistedHistoryV2_, validPersistedStagePrerequisitesV2_, safeDailyShoeRotationProjectionV2_ })',
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes } },
+    );
+
+    expect(guards.validPersistedHistoryV2_(pending.history)).toBe(false);
+    expect(guards.validPersistedStagePrerequisitesV2_(
+      'weather-ready', pending, pending.localDate, pending.wardrobeFingerprint, snapshotValue,
+    )).toBe(false);
+    expect(guards.safeDailyShoeRotationProjectionV2_(pending, {
+      localDate: pending.localDate,
+      wardrobeFingerprint: pending.wardrobeFingerprint,
+    }, snapshotValue)).toBeNull();
+  });
+
   it('makes full-bundle and standalone guards inherit the complete selection graph', () => {
     const pendingValue = sendablePendingFixture() as Partial<ReturnType<typeof sendablePendingFixture>>;
     delete pendingValue.planners;

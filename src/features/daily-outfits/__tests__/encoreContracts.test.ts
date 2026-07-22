@@ -1072,12 +1072,19 @@ describe('Encore bundle assembly and persistence', () => {
   });
 
   it('rejects persisted Encore identity and eligibility mutations without reselecting', () => {
-    const validate = evaluateAppsScript<(encore: object, snapshotValue: object, weatherValue: object) => boolean>(
+    const validate = evaluateAppsScript<(
+      encore: object,
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object,
+      excludedShoeIds: string[],
+    ) => boolean>(
       ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
       'validPersistedEncoreV2_',
     );
     const encore = { outfitId: 'older', name: 'older', itemIds: ['top', 'bottom', 'shoe'], candidateId: 'encore:older' };
-    expect(validate(encore, snapshot, weather)).toBe(true);
+    const persistedHistory = { exactOutfitsPrevious14Days: [] };
+    expect(validate(encore, snapshot, weather, persistedHistory, [])).toBe(true);
 
     [
       { ...encore, outfitId: 'newer' },
@@ -1085,18 +1092,18 @@ describe('Encore bundle assembly and persistence', () => {
       { ...encore, candidateId: 'encore:newer' },
       { ...encore, itemIds: ['bottom', 'top', 'shoe'] },
       { ...encore, itemIds: ['top', 'bottom', 'absent'] },
-    ].forEach(mutated => expect(validate(mutated, snapshot, weather)).toBe(false));
+    ].forEach(mutated => expect(validate(mutated, snapshot, weather, persistedHistory, [])).toBe(false));
 
     expect(validate(encore, {
       ...snapshot,
       tasteExamples: [{ ...snapshot.tasteExamples[0], source: 'ai' }, snapshot.tasteExamples[1]],
-    }, weather)).toBe(false);
+    }, weather, persistedHistory, [])).toBe(false);
     expect(validate(encore, {
       ...snapshot,
       items: snapshot.items.map(item => item.id === 'top'
         ? { ...item, profile: { ...item.profile, available: false } }
         : item),
-    }, weather)).toBe(false);
+    }, weather, persistedHistory, [])).toBe(false);
   });
 
   it('resumes and sends an already-persisted Encore without rebuilding or reselecting', () => {
