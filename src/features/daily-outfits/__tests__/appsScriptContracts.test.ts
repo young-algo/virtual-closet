@@ -3862,7 +3862,7 @@ describe('Apps Script contracts', () => {
   it('fails closed for truthy but incomplete shoe-rotation history', () => {
     const pending = currentPendingFixture();
     pending.qualityPolicyVersion = 5;
-    pending.history = { exactOutfitsPrevious14Days: [] };
+    pending.history = { exactOutfitsPrevious14Days: [] } as unknown as typeof pending.history;
     const snapshot = {
       wardrobeFingerprint: pending.wardrobeFingerprint,
       generatedAt: Date.now(),
