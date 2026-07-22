@@ -4323,6 +4323,52 @@ describe('Apps Script contracts', () => {
     });
   });
 
+  it('passes every generated shoe to Encore as a same-day exclusion', () => {
+    const exclusions: unknown[][] = [];
+    const buildBundle = evaluateAppsScript<(
+      curated: object,
+      snapshotValue: object,
+      weatherValue: object,
+      historyValue: object,
+      selection: object,
+    ) => object>(
+      ['ShoeRotation.gs', 'JobState.gs'],
+      'buildBundleV2_',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4 },
+        newRunIdV2_: () => 'run-id',
+        selectEncoreForBundleV2_: (_snapshot: object, _weather: object, _history: object, excludedShoeIds: unknown[]) => {
+          exclusions.push(excludedShoeIds);
+          return null;
+        },
+      },
+    );
+    const bundleSnapshot = {
+      generatedAt: 100,
+      wardrobeFingerprint: 'wardrobe-v3',
+      items: [
+        { id: 'top', slot: 'top' },
+        { id: 'shoe', slot: 'shoes' },
+        { id: 'shoe-2', slot: 'shoes' },
+      ],
+    };
+    const selection = {
+      deliveryMode: 'complete',
+      selectedArchetypes: ['easy', 'polished-casual', 'expressive'],
+      omittedArchetypes: [],
+    };
+
+    buildBundle({
+      recommendations: [
+        { itemIds: ['top', 'shoe'] },
+        { itemIds: ['top', 'shoe-2'] },
+        { itemIds: ['top'] },
+      ],
+    }, bundleSnapshot, { localDate: '2026-07-15' }, {}, selection);
+
+    expect(exclusions).toEqual([['shoe', 'shoe-2']]);
+  });
+
   it('uses the deterministic usable-shoe threshold and permits necessary reuse without a legacy setting', () => {
     const fixture = finalPolicyFixture();
     const sharedShoeId = fixture.selected[0].shoeId;

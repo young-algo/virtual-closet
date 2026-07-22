@@ -74,8 +74,6 @@ function validEncoreProfileV2_(item) {
         typeof item.profile.breathability !== 'number' || !Number.isFinite(item.profile.breathability)) return false;
   }
   if (item.slot === 'bottom' && (!ownEncoreKeyV2_(item, 'category') || typeof item.category !== 'string')) return false;
-  if (item.slot === 'shoes' && (!ownEncoreKeyV2_(item.profile, 'rainSafety') ||
-      ['good', 'acceptable', 'poor', 'unknown'].indexOf(item.profile.rainSafety) < 0)) return false;
   return true;
 }
 
@@ -257,7 +255,7 @@ function laterValidEncoreDateV2_(propertyDate, historyDate) {
   return propertyDate > historyDate ? propertyDate : historyDate;
 }
 
-function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
+function selectEncoreV2_(snapshot, weather, history, lastEncoreDate, excludedShoeIds) {
   try {
     if (!validEncoreRecordV2_(snapshot) || !validEncoreWeatherV2_(weather) ||
         !validEncoreArrayV2_(snapshot.tasteExamples) || !validEncoreArrayV2_(history)) return null;
@@ -273,6 +271,9 @@ function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
 
     var retained = encoreHistoricalEntriesV2_(history, weather.localDate);
     if (!retained) return null;
+    var rotation = shoeRotationContextV2_(snapshot, weather.localDate, retained);
+    var freshShoes = new Set(rotation.freshShoeIds);
+    var excludedShoes = new Set(Array.isArray(excludedShoeIds) ? excludedShoeIds : []);
     var dislikedEncoreIds = Object.create(null);
     if (ownEncoreKeyV2_(snapshot, 'dislikedEncoreIdsV2')) {
       if (!validDislikedEncoreIdsV2_(snapshot.dislikedEncoreIdsV2)) return null;
@@ -291,6 +292,8 @@ function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
 
     var eligible = snapshot.tasteExamples.filter(function(outfit) {
       if (!validEncoreSavedOutfitV2_(outfit, snapshot, itemMap, outfitIdCounts, weather)) return false;
+      var shoeId = shoeIdFromItemIdsV2_(outfit.itemIds, snapshot);
+      if (!shoeId || !freshShoes.has(shoeId) || excludedShoes.has(shoeId)) return false;
       var coreKey = encoreCoreKeyV2_(outfit.itemIds, snapshot);
       if (!coreKey || ownEncoreKeyV2_(recentCoreKeys, coreKey)) return false;
       var candidateId = 'encore:' + outfit.id;
@@ -327,7 +330,7 @@ function selectEncoreV2_(snapshot, weather, history, lastEncoreDate) {
   }
 }
 
-function selectEncoreForBundleV2_(snapshot, weather, history) {
+function selectEncoreForBundleV2_(snapshot, weather, history, excludedShoeIds) {
   try {
     var retained = Array.isArray(history) ? history : loadHistoryV2_();
     var properties = getDailyPropertiesV2_();
@@ -344,7 +347,7 @@ function selectEncoreForBundleV2_(snapshot, weather, history) {
       mostRecentHistoryEncoreDateV2_(historical)
     );
     var selectorSnapshot = Object.assign({}, snapshot, { dislikedEncoreIdsV2: mergedLedger });
-    return selectEncoreV2_(selectorSnapshot, weather, retained, lastEncoreDate);
+    return selectEncoreV2_(selectorSnapshot, weather, retained, lastEncoreDate, excludedShoeIds);
   } catch (_ignored) {
     return null;
   }

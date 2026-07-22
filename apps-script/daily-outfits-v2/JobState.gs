@@ -768,8 +768,11 @@ function buildBundleV2_(curated, snapshot, weather, history, selection) {
     wardrobeFingerprint: snapshot.wardrobeFingerprint,
     modelRunId: newRunIdV2_()
   };
+  var generatedShoeIds = curated.recommendations.map(function(recommendation) {
+    return shoeIdFromItemIdsV2_(recommendation.itemIds, snapshot);
+  }).filter(Boolean);
   var encore = typeof selectEncoreForBundleV2_ === 'function'
-    ? selectEncoreForBundleV2_(snapshot, weather, history)
+    ? selectEncoreForBundleV2_(snapshot, weather, history, generatedShoeIds)
     : null;
   if (encore) bundle.encore = encore;
   return bundle;

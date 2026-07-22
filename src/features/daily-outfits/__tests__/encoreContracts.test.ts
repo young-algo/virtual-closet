@@ -41,8 +41,9 @@ const selectEncoreV2_ = evaluateAppsScript<(
   weather: object,
   history: object[],
   lastEncoreDate: string | null,
+  excludedShoeIds?: string[],
 ) => Record<string, unknown> | null>(
-  ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+  ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
   'selectEncoreV2_',
 );
 
@@ -76,7 +77,6 @@ describe('Encore selection', () => {
   it.each([
     ['AI source', { ...snapshot, tasteExamples: [saved('ai', 1, ['top', 'bottom', 'shoe'], 'ai')] }, weather, [], null],
     ['missing item', { ...snapshot, tasteExamples: [saved('missing', 1, ['top', 'bottom', 'absent'])] }, weather, [], null],
-    ['weather unsafe', { ...snapshot, tasteExamples: [saved('wet', 1, ['top', 'bottom', 'unsafe'])] }, { ...weather, rainExpected: true }, [], null],
     ['recent core trio', { ...snapshot, tasteExamples: [saved('older', 1)] }, weather, [{ localDate: '2026-07-10', recommendations: [{ candidateId: 'past', itemIds: ['top', 'bottom', 'shoe'] }], feedback: [] }], null],
     ['disliked encore', snapshot, weather, [{ localDate: '2026-06-01', recommendations: [], feedback: [{ candidateId: 'encore:older', value: 'disliked' }, { candidateId: 'encore:newer', value: 'disliked' }] }], null],
     ['seven-day cadence', snapshot, weather, [], '2026-07-08'],
@@ -129,6 +129,29 @@ describe('Encore selection', () => {
     expect(weatherSafetyErrorsV2_({ itemIds: ['top', 'bottom', 'acceptable'] }, itemMap, candidateWeather, candidateSnapshot))
       .toEqual([]);
     expect(select(candidateSnapshot, candidateWeather)).toEqual(expect.objectContaining({ outfitId: 'acceptable-shoe' }));
+  });
+
+  it('accepts poor and missing rainSafety during rain', () => {
+    const changed = clone(snapshot);
+    changed.tasteExamples = [saved('manual', 1)];
+    changed.items.find(item => item.id === 'shoe')!.profile.rainSafety = 'poor';
+    expect(select(changed, { ...weather, rainExpected: true }))
+      .toEqual(expect.objectContaining({ outfitId: 'manual' }));
+    delete changed.items.find(item => item.id === 'shoe')!.profile.rainSafety;
+    expect(select(changed, { ...weather, rainExpected: true }))
+      .toEqual(expect.objectContaining({ outfitId: 'manual' }));
+  });
+
+  it('rejects a cooling or same-day generated shoe', () => {
+    const history = [{
+      localDate: '2026-07-13',
+      recommendations: [{ candidateId: 'other', itemIds: ['top-2', 'bottom-2', 'shoe'] }],
+      feedback: [],
+    }];
+    const candidateSnapshot = { ...snapshot, tasteExamples: [saved('manual', 1)] };
+
+    expect(select(candidateSnapshot, weather, history)).toBeNull();
+    expect(selectEncoreV2_(candidateSnapshot, weather, [], null, ['shoe'])).toBeNull();
   });
 
   it.each([
@@ -701,7 +724,7 @@ describe('Encore bundle assembly and persistence', () => {
       historyValue: unknown,
       selectionValue: typeof completeSelection,
     ) => Record<string, unknown>>(
-      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'],
       'buildBundleV2_',
       {
         DAILY_V2: daily,
@@ -742,7 +765,7 @@ describe('Encore bundle assembly and persistence', () => {
       weatherValue: object,
       historyValue: object[],
     ) => Record<string, unknown> | null>(
-      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
       'selectEncoreForBundleV2_',
       {
         getDailyPropertiesV2_: () => ({
@@ -765,7 +788,7 @@ describe('Encore bundle assembly and persistence', () => {
       weatherValue: object,
       historyValue: object[],
     ) => Record<string, unknown> | null>(
-      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
       'selectEncoreForBundleV2_',
       {
         getDailyPropertiesV2_: () => ({
@@ -807,7 +830,7 @@ describe('Encore bundle assembly and persistence', () => {
       weatherValue: object,
       historyValue: object[],
     ) => Record<string, unknown> | null>(
-      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
       'selectEncoreForBundleV2_',
       {
         getDailyPropertiesV2_: () => ({
@@ -833,7 +856,7 @@ describe('Encore bundle assembly and persistence', () => {
       weatherValue: object,
       historyValue: object[],
     ) => Record<string, unknown> | null>(
-      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
       'selectEncoreForBundleV2_',
       {
         getDailyPropertiesV2_: () => ({
@@ -851,7 +874,7 @@ describe('Encore bundle assembly and persistence', () => {
     );
     expect(() => parseLedger('{"encore:older":true}'))
       .toThrowError(/Corrupt DISLIKED_ENCORE_IDS_V2/);
-    expect(apps('Encore.gs')).toMatch(/function selectEncoreV2_\(snapshot, weather, history, lastEncoreDate\)/);
+    expect(apps('Encore.gs')).toMatch(/function selectEncoreV2_\(snapshot, weather, history, lastEncoreDate, excludedShoeIds\)/);
   });
 
   it('passes history and selection to all synchronous, manual, and scheduled bundle builds', () => {
@@ -1050,7 +1073,7 @@ describe('Encore bundle assembly and persistence', () => {
 
   it('rejects persisted Encore identity and eligibility mutations without reselecting', () => {
     const validate = evaluateAppsScript<(encore: object, snapshotValue: object, weatherValue: object) => boolean>(
-      ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Encore.gs'],
+      ['ItemIndex.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Encore.gs'],
       'validPersistedEncoreV2_',
     );
     const encore = { outfitId: 'older', name: 'older', itemIds: ['top', 'bottom', 'shoe'], candidateId: 'encore:older' };
