@@ -14,6 +14,7 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
    - `LOCATION_LABEL`, `LATITUDE`, `LONGITUDE`, `TIME_ZONE`
    - `DELIVERY_HOUR`, `DELIVERY_MINUTE`, `GENERATION_LEAD_MINUTES`
    - `APP_URL` — optional read-only link back to the closet
+   - `OPEN_METEO_API_KEY` — optional paid Open-Meteo key; when set, weather requests use `customer-api.open-meteo.com` with a per-key quota instead of the free per-IP endpoint
    - `DAILY_PLANNER_MODEL`, `DAILY_CRITIC_MODEL`, `DAILY_CURATOR_MODEL`, `DAILY_REPAIR_MODEL`
    - `DAILY_MODEL_TEMPERATURE` — optional; defaults to `0.9` for planners
    - `SEND_OPERATIONAL_ALERTS` — `true` or `false`
@@ -25,6 +26,10 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 5. Run `installDailyOutfitTrigger()` once from the Apps Script editor and approve Drive, external-request, email, and trigger scopes.
 6. In the React settings, run **Build visual inventory**, **Sync now**, **Validate server snapshot**, and **Generate test bundle** in order.
 7. Review the generated bundle without sending it. **Send test email** is a separate, opt-in action: obtain fresh confirmation immediately before using it, even if an earlier rollout discussion mentioned a test send.
+
+## Weather providers
+
+`fetchDailyWeatherV2()` returns a fresh same-day cached profile when one exists, then tries providers in order: Open-Meteo (free endpoint, or the customer endpoint when `OPEN_METEO_API_KEY` is set) and the National Weather Service (`api.weather.gov`, keyless, US coverage only). Open-Meteo's free tier limits by source IP, and Apps Script's `UrlFetchApp` egresses from Google's shared IP pool, so chronic HTTP 429 responses there are expected and are why the NWS fallback exists. Transport errors and 5xx responses get one in-run retry; 429 skips straight to the next provider. When every provider fails, the thrown error (and therefore the operational alert email) lists each provider's failure detail. The NWS path derives apparent temperature via NOAA heat-index/wind-chill formulas and represents hourly precipitation as a nominal 0.02 in when the precipitation probability is at least 50%, since its hourly feed omits amounts.
 
 ## Prerequisite — reviewed wardrobe profiles
 
