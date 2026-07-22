@@ -32,7 +32,7 @@ function historyGuidanceV2_() {
   return [
     'HOW TO USE DAILY HISTORY:',
     '- exactOutfitsPrevious14Days — combinations already emailed. Never repeat one exactly.',
-    '- itemUsagePrevious7Days — how often each item appeared in the last seven emails (exposure, not wear). Treat 3+ appearances as over-exposed unless itemFeedbackSignals shows Kevin actually wore it.',
+    '- itemUsagePrevious7Days — how often each item appeared in the previous seven calendar dates (exposure, not wear). Treat 3+ appearances as over-exposed unless itemFeedbackSignals shows Kevin actually wore it.',
     '- feedback — Kevin\'s explicit reactions. wore is the strongest positive evidence for that outfit\'s styling logic and its items. liked is positive. disliked is negative, and reason names the failing dimension (colors, too-warm, too-formal, …). Do not rebuild a disliked combination or repeat its failure pattern; do favor the visual logic of worn and liked outfits without copying them.'
   ].join('\n');
 }

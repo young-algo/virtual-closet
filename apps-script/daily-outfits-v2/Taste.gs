@@ -93,7 +93,12 @@ function dailyHistoryContextV2_(localDate, snapshot) {
   var maxDays = snapshot.settings && snapshot.settings.maxDailyHistoryDays ? snapshot.settings.maxDailyHistoryDays : 30;
   var history = allHistory.slice(-maxDays);
   var last14 = history.slice(-14);
-  var last7 = history.slice(-7);
+  var currentOrdinal = shoeRotationCalendarOrdinalV2_(localDate);
+  var last7 = history.filter(function(entry) {
+    var ordinal = shoeRotationCalendarOrdinalV2_(entry && entry.localDate);
+    var age = currentOrdinal === null || ordinal === null ? null : currentOrdinal - ordinal;
+    return age !== null && age >= 1 && age <= 7;
+  });
   var itemMap = itemMapV2_(snapshot);
   var usage = {};
   last7.forEach(function(entry) {

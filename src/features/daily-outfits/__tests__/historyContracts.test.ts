@@ -75,7 +75,7 @@ const contextFor = (entries: object[]) => evaluateAppsScript<(
   localDate: string,
   snapshotValue: HistorySnapshot
 ) => Record<string, any>>(
-  ['ItemIndex.gs', 'Taste.gs'],
+  ['ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs'],
   'dailyHistoryContextV2_',
   { loadHistoryV2_: () => entries, Utilities: utilities, console }
 );
@@ -132,7 +132,7 @@ const feedbackHistory = [
 const guidance = [
   'HOW TO USE DAILY HISTORY:',
   '- exactOutfitsPrevious14Days — combinations already emailed. Never repeat one exactly.',
-  '- itemUsagePrevious7Days — how often each item appeared in the last seven emails (exposure, not wear). Treat 3+ appearances as over-exposed unless itemFeedbackSignals shows Kevin actually wore it.',
+  '- itemUsagePrevious7Days — how often each item appeared in the previous seven calendar dates (exposure, not wear). Treat 3+ appearances as over-exposed unless itemFeedbackSignals shows Kevin actually wore it.',
   '- feedback — Kevin\'s explicit reactions. wore is the strongest positive evidence for that outfit\'s styling logic and its items. liked is positive. disliked is negative, and reason names the failing dimension (colors, too-warm, too-formal, …). Do not rebuild a disliked combination or repeat its failure pattern; do favor the visual logic of worn and liked outfits without copying them.'
 ].join('\n');
 
@@ -265,9 +265,9 @@ describe('daily history context', () => {
     expect(shortContext.itemFeedbackSignals).toEqual({ T001: { wore: 0, liked: 2, disliked: 0 } });
   });
 
-  it('counts exposure from the last seven entries and exact looks from the last fourteen, including Encore', () => {
+  it('counts exposure from the previous seven calendar dates and exact looks from the last fourteen entries, including Encore', () => {
     const entries = Array.from({ length: 15 }, (_, index) => ({
-      localDate: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      localDate: `2026-07-${String(index + 1).padStart(2, '0')}`,
       recommendations: [{
         candidateId: `look-${index}`,
         name: `Look ${index}`,
@@ -280,7 +280,7 @@ describe('daily history context', () => {
         itemIds: [bottomId, shoeId]
       }
     }));
-    const context = contextFor(entries)('2026-07-14', snapshot);
+    const context = contextFor(entries)('2026-07-16', snapshot);
 
     expect(context.exactOutfitsPrevious14Days).toHaveLength(28);
     expect(context.exactOutfitsPrevious14Days[1]).toEqual(expect.objectContaining({ archetype: 'encore' }));
@@ -289,6 +289,30 @@ describe('daily history context', () => {
       [shoeId]: 14,
       [bottomId]: 7
     });
+  });
+
+  it('does not include an eighth calendar day when a date was skipped', () => {
+    const entries = [
+      '2026-07-13',
+      '2026-07-12',
+      '2026-07-11',
+      '2026-07-10',
+      '2026-07-09',
+      '2026-07-08',
+      '2026-07-06',
+    ].map((localDate, index) => ({
+      localDate,
+      recommendations: [{
+        candidateId: `look-${index}`,
+        name: `Look ${index}`,
+        archetype: 'easy',
+        itemIds: index === 6 ? [bottomId] : [topId],
+      }],
+    }));
+
+    const context = contextFor(entries)('2026-07-14', snapshot);
+
+    expect(context.itemUsagePrevious7Days).toEqual({ [topId]: 6 });
   });
 
   it('uses only the exact previous calendar date and excludes shoes, layers, and verified-worn items from cooldown', () => {
