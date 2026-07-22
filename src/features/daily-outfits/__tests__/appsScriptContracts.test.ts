@@ -3859,6 +3859,40 @@ describe('Apps Script contracts', () => {
     expect(JSON.stringify(result.shoeRotation)).not.toContain('sneaker_');
   });
 
+  it('fails closed for truthy but incomplete shoe-rotation history', () => {
+    const pending = currentPendingFixture();
+    pending.qualityPolicyVersion = 5;
+    pending.history = { exactOutfitsPrevious14Days: [] };
+    const snapshot = {
+      wardrobeFingerprint: pending.wardrobeFingerprint,
+      generatedAt: Date.now(),
+      settings: {},
+      items: [{
+        id: 'sneaker_0',
+        slot: 'shoes',
+        shortLabel: 'S1',
+        profile: { available: true, excludedFromDaily: false },
+      }],
+    };
+    const diagnostics = evaluateAppsScript<() => Record<string, unknown>>(
+      ['ItemIndex.gs', 'ShoeRotation.gs', 'JobState.gs', 'Diagnostics.gs'],
+      'getDailyOutfitDiagnosticsV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 5, ARCHETYPES: dailyArchetypes },
+        loadSnapshotV2_: () => snapshot,
+        validateStoredSnapshotV2: () => ({ ok: true, generatedAt: 50, itemCount: 1, atlasPageCount: 1 }),
+        loadJobStateV2_: () => null,
+        loadPendingV2_: () => pending,
+        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        applySnapshotSettingsV2_: (config: unknown) => config,
+        localDateV2_: () => pending.localDate,
+        getDailyPropertiesV2_: () => ({ getProperty: () => null }),
+      },
+    );
+
+    expect(diagnostics().shoeRotation).toBeNull();
+  });
+
   it('returns safe defaults when persisted diagnostics JSON is malformed', () => {
     const properties = {
       getProperty: (key: string) => key === 'DAILY_PLANNER_MODEL' ? 'configured' : null,

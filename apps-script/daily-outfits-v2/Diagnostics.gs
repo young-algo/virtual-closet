@@ -138,7 +138,7 @@ function safeDailyShoeRotationProjectionV2_(pending, context, snapshot) {
     pending,
     context.localDate,
     context.wardrobeFingerprint
-  ) || !pending.history) return null;
+  ) || !validPersistedHistoryV2_(pending.history)) return null;
   return safeDailyDiagnosticLoadV2_(function() {
     return shoeRotationDiagnosticSummaryV2_(
       shoeRotationContextV2_(snapshot, context.localDate, pending.history),
