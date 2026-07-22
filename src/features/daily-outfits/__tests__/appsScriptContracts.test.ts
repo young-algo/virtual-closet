@@ -1022,7 +1022,7 @@ describe('Apps Script contracts', () => {
     const selectedResult = persistedSelectionFixture();
     const planners = persistedPlannersFixture();
     const snapshot = persistedSnapshotFixture({
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       candidates: planners.flatMap(response => response.candidates),
     });
     const basePending = {
@@ -1216,13 +1216,13 @@ describe('Apps Script contracts', () => {
     const selectedResult = persistedSelectionFixture();
     const planners = persistedPlannersFixture();
     const snapshot = persistedSnapshotFixture({
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       candidates: planners.flatMap(response => response.candidates),
     });
     const pending = {
       qualityPolicyVersion: 4,
       localDate: '2026-07-15',
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       weather: persistedWeatherFixture(),
       history: persistedHistoryFixture(),
       planners,
@@ -1231,6 +1231,8 @@ describe('Apps Script contracts', () => {
     const savedPending: unknown[] = [];
     let clockIndex = 0;
     const clock = [0, 1, 2, 300_000];
+    const TestDate = function(this: unknown, ...args: unknown[]) { return new Date(...args as []); } as unknown as DateConstructor;
+    Object.assign(TestDate, { now: () => clock[clockIndex++] ?? 300_000, UTC: Date.UTC });
     const advanceCritic = evaluateAppsScript<(
       state: Record<string, unknown>,
       snapshot: Record<string, unknown>,
@@ -1241,7 +1243,7 @@ describe('Apps Script contracts', () => {
       {
         DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
-        Date: { now: () => clock[clockIndex++] ?? 300_000 },
+        Date: TestDate,
         loadPendingV2_: () => structuredClone(pending),
         incrementAttemptV2_: (state: { attemptCounts: Record<string, number> }, stage: string) => {
           state.attemptCounts[stage] = (state.attemptCounts[stage] || 0) + 1;
@@ -1257,7 +1259,7 @@ describe('Apps Script contracts', () => {
       stage: 'critic-ready',
       qualityPolicyVersion: 4,
       localDate: '2026-07-15',
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       attemptCounts: {},
     }, snapshot, 0);
     expect(selected.state.stage).toBe('selection-ready');
@@ -4399,6 +4401,7 @@ describe('Apps Script contracts', () => {
       ]
     }));
     const finalSnapshot = {
+      wardrobeFingerprint: 'opaque-5',
       settings: {},
       items: selected.flatMap((candidate, index) => [
         { id: candidate.topId, slot: 'top', profile: { primaryColorFamily: `top-${index}`, silhouette: `top-shape-${index}`, warmth: 1, breathability: 4, available: true, excludedFromDaily: false } },
@@ -4423,7 +4426,7 @@ describe('Apps Script contracts', () => {
         weatherNote: 'Breathable and comfortable across the forecast window.'
       }))
     };
-    const weather = { morningFeelsLikeF: 60, middayFeelsLikeF: 70, eveningFeelsLikeF: 60, rainExpected: false, layerGuidance: 'none' };
+    const weather = { localDate: '2026-07-15', morningFeelsLikeF: 60, middayFeelsLikeF: 70, eveningFeelsLikeF: 60, rainExpected: false, layerGuidance: 'none' };
     const history = { exactOutfitsPrevious14Days: [], cooldownItemIds: [] };
     const selection = {
       deliveryMode: 'complete',
