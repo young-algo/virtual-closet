@@ -488,6 +488,49 @@ const dailySelectionRuntime = {
   COMPOSITE_WEIGHTS: dailyCompositeWeights,
 };
 
+const fixtureShoeRotationContext = evaluateAppsScript<(
+  snapshot: Record<string, unknown>,
+  localDate: string,
+  history: Record<string, unknown>,
+) => { easyAnchorShoeId: string }>(
+  ['ShoeRotation.gs'],
+  'shoeRotationContextV2_',
+);
+
+const alignSnapshotEasyAnchor = (
+  snapshot: Record<string, unknown>,
+  localDate: string,
+  history: Record<string, unknown>,
+  targetShoeId: string,
+  fingerprintPrefix = 'rotation-fixture',
+) => {
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    const wardrobeFingerprint = `${fingerprintPrefix}-${attempt}`;
+    snapshot.wardrobeFingerprint = wardrobeFingerprint;
+    if (fixtureShoeRotationContext(snapshot, localDate, history).easyAnchorShoeId === targetShoeId) {
+      return wardrobeFingerprint;
+    }
+  }
+  throw new Error(`fixture cannot anchor Easy on ${targetShoeId}`);
+};
+
+const alignPendingEasyAnchor = (
+  pending: ReturnType<typeof currentPendingFixture>,
+  snapshot: ReturnType<typeof persistedSnapshotFixture>,
+  targetShoeId: string,
+  fingerprintPrefix = pending.wardrobeFingerprint,
+) => {
+  const wardrobeFingerprint = alignSnapshotEasyAnchor(
+    snapshot,
+    pending.localDate,
+    pending.history,
+    targetShoeId,
+    fingerprintPrefix,
+  );
+  pending.wardrobeFingerprint = wardrobeFingerprint;
+  return wardrobeFingerprint;
+};
+
 const deterministicSelectionGuard = evaluateAppsScript<(
   pending: unknown,
   expectedLocalDate: string,
@@ -640,6 +683,9 @@ const persistedReplanFixture = (roundCount: 1 | 2) => {
     });
   });
   const snapshotValue = persistedSnapshotFixture(pending);
+  const easyAddition = pending.candidates.find(candidate => candidate.candidateId === 'easy-candidate-5');
+  if (!easyAddition) throw new Error('fixture Easy re-plan candidate is missing');
+  alignPendingEasyAnchor(pending, snapshotValue, easyAddition.shoeId);
   recomputePersistedSelectionFixture(pending, snapshotValue, replannedArchetypes);
   return { pending, snapshot: snapshotValue };
 };
@@ -770,6 +816,7 @@ const persistedExhaustiveTrioFixture = () => {
     duplicateCandidateIds: [] as string[],
   }));
   const snapshotValue = persistedSnapshotFixture(pending);
+  alignPendingEasyAnchor(pending, snapshotValue, 'easy-shared');
   const finalists = deterministicSelectionSelectors.finalists(
     pending.candidates,
     pending.critic.scores,
@@ -1283,7 +1330,7 @@ describe('Apps Script contracts', () => {
       {
         DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         DAILY_JOB_STAGES_V2_: ['idle', 'weather-ready', 'planners-ready', 'critic-ready', 'selection-ready', 'bundle-ready', 'sent', 'failed'],
-        Date: { now: () => clock[clockIndex++] ?? 300_000 },
+        Date: TestDate,
         loadPendingV2_: () => structuredClone({ ...pending, ...selectedResult }),
         incrementAttemptV2_: (state: { attemptCounts: Record<string, number> }, stage: string) => {
           state.attemptCounts[stage] = (state.attemptCounts[stage] || 0) + 1;
@@ -1304,7 +1351,7 @@ describe('Apps Script contracts', () => {
       stage: 'selection-ready',
       qualityPolicyVersion: 4,
       localDate: '2026-07-15',
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       attemptCounts: {},
     }, snapshot, 0);
     expect(bundled.state.stage).toBe('bundle-ready');
@@ -2099,7 +2146,7 @@ describe('Apps Script contracts', () => {
         getBooleanPropertyV2_: () => false,
         loadJobStateV2_: () => ({
           stage: 'bundle-ready', qualityPolicyVersion: 4, localDate: '2026-07-15',
-          wardrobeFingerprint: 'wardrobe-v3', attemptCounts: {},
+          wardrobeFingerprint: 'wardrobe-v3-28', attemptCounts: {},
         }),
         loadPendingV2_: () => structuredClone(baselinePending),
         mergeSnapshotFeedbackIntoHistoryV2_: () => { scheduledEvents.push('feedback-history'); },
@@ -2215,7 +2262,7 @@ describe('Apps Script contracts', () => {
       expect(savedStates).toEqual([expect.objectContaining({
         qualityPolicyVersion: 4,
         localDate: '2026-07-15',
-        wardrobeFingerprint: 'wardrobe-v3',
+        wardrobeFingerprint: 'wardrobe-v3-28',
         stage: 'idle',
         attemptCounts: {},
       })]);
@@ -2997,6 +3044,7 @@ describe('Apps Script contracts', () => {
     const valid = currentPendingFixture();
     rewriteSelectedOpaqueIds(valid);
     const validSnapshot = persistedSnapshotFixture(valid);
+    alignPendingEasyAnchor(valid, validSnapshot, valid.selectedCandidates[0].shoeId);
     expect(() => guard(valid, valid.localDate, valid.wardrobeFingerprint, validSnapshot)).not.toThrow();
 
     const { pending: validReplan, snapshot: replanSnapshot } = persistedReplanFixture(1);
@@ -3628,6 +3676,14 @@ describe('Apps Script contracts', () => {
       ...persistedSnapshotFixture(pending),
       generatedAt: Date.now(),
     };
+    pending.wardrobeFingerprint = alignSnapshotEasyAnchor(
+      currentSnapshot,
+      pending.localDate,
+      pending.history,
+      pending.selectedCandidates[0].shoeId,
+      privateId,
+    );
+    state.wardrobeFingerprint = pending.wardrobeFingerprint;
     recomputePersistedSelectionFixture(pending, currentSnapshot);
     const snapshotValidation = {
       ok: true,
@@ -3783,7 +3839,7 @@ describe('Apps Script contracts', () => {
       localDate: '2026-07-15',
       qualityPolicyVersion: 4,
       stage: 'selection-ready',
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       startedAt: 100,
       updatedAt: 200,
       attemptCounts: { 'selection-ready': 1 },
@@ -4281,6 +4337,13 @@ describe('Apps Script contracts', () => {
     const unavailable = fixture.snapshot.items.find(item => item.id === unavailableShoeId);
     if (!unavailable) throw new Error('fixture unavailable shoe is missing');
     unavailable.profile = { ...unavailable.profile, available: false };
+    alignSnapshotEasyAnchor(
+      fixture.snapshot,
+      fixture.weather.localDate,
+      fixture.history,
+      sharedShoeId,
+      'limited-shoe-fixture',
+    );
 
     expect(deterministicCandidateSetErrors(fixture.selected, fixture.snapshot, fixture.weather)).toEqual([]);
     expect(finalValidator(

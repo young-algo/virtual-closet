@@ -2019,6 +2019,7 @@ describe('prompt and response label boundary', () => {
       }
     });
     const selectionSnapshot = {
+      wardrobeFingerprint: 'targeted-replan-25',
       settings: {},
       tasteExamples: [],
       items: Array.from({ length: 20 }, (_, index) => [
@@ -2039,7 +2040,7 @@ describe('prompt and response label boundary', () => {
       planners: object[],
       critic: object
     ) => { candidates: Array<{ candidateId: string }>; critic: { scores: CriticScore[] } }>(
-      ['Config.gs', 'Critic.gs', 'Selection.gs'],
+      ['ShoeRotation.gs', 'Config.gs', 'Critic.gs', 'Selection.gs'],
       'runSelectionV2_',
       {
         console,
@@ -2059,7 +2060,7 @@ describe('prompt and response label boundary', () => {
 
     const result = runSelection(
       selectionSnapshot,
-      { rainExpected: false, layerGuidance: 'none' },
+      { localDate: '2026-07-15', rainExpected: false, layerGuidance: 'none' },
       { exactOutfitsPrevious14Days: [], cooldownItemIds: [] },
       archetypes.map(archetype => ({
         archetype,

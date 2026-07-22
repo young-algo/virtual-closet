@@ -79,9 +79,9 @@ const selectionFixture = () => {
       selectedCount: 3,
       selectedArchetypes: archetypes.slice(),
       omittedArchetypes: [] as string[],
-      eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
+      eligibleCountByArchetype: { easy: 1, 'polished-casual': 5, expressive: 5 },
       compositeById: Object.fromEntries(candidates.map(({ candidateId }) => [candidateId, allNineComposite])),
-      feasibleSetCount: 8,
+      feasibleSetCount: 4,
       replannedArchetypes: [] as string[],
     },
   };
@@ -133,6 +133,39 @@ const historyContextFixture = () => ({
   wornItemIds: [] as string[],
 });
 
+const fixtureShoeRotationContext = evaluateAppsScript<(
+  snapshot: Record<string, unknown>,
+  localDate: string,
+  history: Record<string, unknown>,
+) => { easyAnchorShoeId: string }>(
+  ['ShoeRotation.gs'],
+  'shoeRotationContextV2_',
+);
+
+const fixtureFingerprintForEasyAnchor = (
+  localDate: string,
+  history: ReturnType<typeof historyContextFixture>,
+  shoeIds: string[],
+  targetShoeId: string,
+) => {
+  const snapshot = {
+    wardrobeFingerprint: '',
+    items: Array.from(new Set(shoeIds)).map(id => ({
+      id,
+      slot: 'shoes',
+      profile: { available: true, excludedFromDaily: false },
+    })),
+  };
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    const wardrobeFingerprint = `send-recovery-fixture-${attempt}`;
+    snapshot.wardrobeFingerprint = wardrobeFingerprint;
+    if (fixtureShoeRotationContext(snapshot, localDate, history).easyAnchorShoeId === targetShoeId) {
+      return wardrobeFingerprint;
+    }
+  }
+  throw new Error(`fixture cannot anchor Easy on ${targetShoeId}`);
+};
+
 const pendingFixture = (localDate: string, withEncore: boolean) => {
   const planners = plannersFixture();
   const selected = selectionFixture();
@@ -179,6 +212,14 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
       itemIds: ['encore-top', 'encore-bottom', 'encore-shoe'],
     };
   }
+  const wardrobeFingerprint = fixtureFingerprintForEasyAnchor(
+    localDate,
+    pending.history,
+    pending.candidates.map(candidate => candidate.shoeId).concat(withEncore ? ['encore-shoe'] : []),
+    pending.selectedCandidates[0].shoeId,
+  );
+  pending.wardrobeFingerprint = wardrobeFingerprint;
+  pending.bundle.wardrobeFingerprint = wardrobeFingerprint;
   return pending;
 };
 
