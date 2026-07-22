@@ -1044,11 +1044,11 @@ describe('Apps Script contracts', () => {
     expect(weatherSafety({ itemIds: ['top-w3', 'bottom', 'safe-shoe'] }, byId, { ...weather, middayFeelsLikeF: 92.1 }, snapshot).join(' ')).toMatch(/warmth-3 top/);
   });
 
-  it('contains policy-v4 selection resume and send-after-success duplicate protections', () => {
+  it('contains policy-v5 selection resume and send-after-success duplicate protections', () => {
     const scheduler = apps('Scheduler.gs');
     const config = apps('Config.gs');
     const diagnostics = apps('Diagnostics.gs');
-    expect(config).toMatch(/QUALITY_POLICY_VERSION:\s*4/);
+    expect(config).toMatch(/QUALITY_POLICY_VERSION:\s*5/);
     expect(scheduler).toMatch(/LockService\.getScriptLock/);
     expect(scheduler).toMatch(/weather-ready/);
     expect(scheduler).toMatch(/planners-ready/);
@@ -2809,6 +2809,17 @@ describe('Apps Script contracts', () => {
     expect(validator(Object.create(pending), bundle)).toBe(false);
   });
 
+  it('rejects a structurally valid policy-v4 pending object at runtime policy version 5', () => {
+    const validator = evaluateAppsScript<(pending: unknown, localDate: string, wardrobeFingerprint: string) => boolean>(
+      ['JobState.gs'],
+      'validCurrentPendingV2_',
+      { DAILY_V2: { QUALITY_POLICY_VERSION: 5, ARCHETYPES: dailyArchetypes } },
+    );
+    const pending = currentPendingFixture();
+
+    expect(validator(pending, pending.localDate, pending.wardrobeFingerprint)).toBe(false);
+  });
+
   it('rejects persisted planner and replan candidates that do not resolve exactly to the current snapshot', () => {
     const valid = currentPendingFixture();
     const validSnapshot = persistedSnapshotFixture(valid);
@@ -3796,6 +3807,56 @@ describe('Apps Script contracts', () => {
     });
     expect(serialized).not.toContain('returnedCandidates');
     expect(serialized).not.toContain('scores');
+  });
+
+  it('projects redacted shoe-rotation diagnostics for a current pending bundle', () => {
+    const pending = currentPendingFixture();
+    pending.qualityPolicyVersion = 5;
+    pending.history = {
+      ...persistedHistoryFixture(),
+      exactOutfitsPrevious14Days: [{
+        localDate: '2026-07-14',
+        itemIds: ['sneaker_0'],
+        archetype: 'easy',
+      }],
+    };
+    const snapshot = {
+      wardrobeFingerprint: pending.wardrobeFingerprint,
+      generatedAt: Date.now(),
+      settings: {},
+      items: Array.from({ length: 5 }, (_, index) => ({
+        id: `sneaker_${index}`,
+        slot: 'shoes',
+        shortLabel: `S${index + 1}`,
+        profile: { available: true, excludedFromDaily: false },
+      })),
+    };
+    const diagnostics = evaluateAppsScript<() => Record<string, unknown>>(
+      ['ItemIndex.gs', 'ShoeRotation.gs', 'JobState.gs', 'Diagnostics.gs'],
+      'getDailyOutfitDiagnosticsV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 5, ARCHETYPES: dailyArchetypes },
+        loadSnapshotV2_: () => snapshot,
+        validateStoredSnapshotV2: () => ({ ok: true, generatedAt: 50, itemCount: 5, atlasPageCount: 1 }),
+        loadJobStateV2_: () => null,
+        loadPendingV2_: () => pending,
+        getDailyConfigV2_: () => ({ timezone: 'UTC' }),
+        applySnapshotSettingsV2_: (config: unknown) => config,
+        localDateV2_: () => pending.localDate,
+        getDailyPropertiesV2_: () => ({ getProperty: () => null }),
+      },
+    );
+
+    const result = diagnostics();
+    expect(result.shoeRotation).toEqual({
+      easyAnchorLabel: expect.stringMatching(/^S/),
+      availableShoeCount: 5,
+      freshShoeCount: 4,
+      coolingDownShoeCount: 1,
+      allowedGeneratedShoeCount: 4,
+      fallbackUsed: false,
+    });
+    expect(JSON.stringify(result.shoeRotation)).not.toContain('sneaker_');
   });
 
   it('returns safe defaults when persisted diagnostics JSON is malformed', () => {

@@ -1,6 +1,6 @@
 var DAILY_V2 = Object.freeze({
   SNAPSHOT_VERSION: 2,
-  QUALITY_POLICY_VERSION: 4,
+  QUALITY_POLICY_VERSION: 5,
   SNAPSHOT_FILE: 'virtual-closet-daily-v2-snapshot.json',
   HISTORY_FILE: 'virtual-closet-daily-v2-history.json',
   WEATHER_FILE: 'virtual-closet-daily-v2-weather-cache.json',

@@ -133,6 +133,20 @@ function safeDailySelectionProjectionV2_(pending, context, snapshot) {
   };
 }
 
+function safeDailyShoeRotationProjectionV2_(pending, context, snapshot) {
+  if (!context || !snapshot || !validCurrentPendingV2_(
+    pending,
+    context.localDate,
+    context.wardrobeFingerprint
+  ) || !pending.history) return null;
+  return safeDailyDiagnosticLoadV2_(function() {
+    return shoeRotationDiagnosticSummaryV2_(
+      shoeRotationContextV2_(snapshot, context.localDate, pending.history),
+      snapshot
+    );
+  }, null);
+}
+
 function getDailyOutfitDiagnosticsV2() {
   var snapshot = safeDailyDiagnosticLoadV2_(function() { return loadSnapshotV2_(); }, null);
   var validation = safeDailyDiagnosticLoadV2_(function() { return validateStoredSnapshotV2(); }, null);
@@ -161,6 +175,7 @@ function getDailyOutfitDiagnosticsV2() {
     snapshot: safeDailySnapshotValidationProjectionV2_(validation),
     job: job,
     selection: safeDailySelectionProjectionV2_(pending, context, snapshot),
+    shoeRotation: safeDailyShoeRotationProjectionV2_(pending, context, snapshot),
     attemptCounts: safeDailyAttemptCountsV2_(state, job !== null),
     lastSentDate: lastSentDate,
     modelsConfigured: modelsConfigured,
