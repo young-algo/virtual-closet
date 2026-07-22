@@ -68,9 +68,10 @@ function plannerShoeRotationGuidanceV2_(archetype, rotation, snapshot) {
 
 function plannerRotationContextV2_(snapshot, weather, history, rotation) {
   if (rotation) return rotation;
-  return typeof shoeRotationContextV2_ === 'function'
-    ? shoeRotationContextV2_(snapshot, weather.localDate, history)
-    : null;
+  if (typeof shoeRotationContextV2_ !== 'function') {
+    throw new Error('Shoe rotation policy is required for planner execution');
+  }
+  return shoeRotationContextV2_(snapshot, weather.localDate, history);
 }
 
 function expectedEasyShoeIdV2_(archetype, rotation) {

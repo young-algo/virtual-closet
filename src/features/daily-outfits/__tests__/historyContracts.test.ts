@@ -45,7 +45,7 @@ const snapshot = {
       color: 'brown',
       description: 'Brown high top',
       thumbnailDataUrl: 'data:image/png;base64,Uw==',
-      profile: {}
+      profile: { available: true, excludedFromDaily: false }
     },
     {
       id: layerId,

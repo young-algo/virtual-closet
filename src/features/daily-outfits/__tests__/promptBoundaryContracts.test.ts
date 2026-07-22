@@ -977,6 +977,23 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain('privateNote');
   });
 
+  it('fails closed when the required shoe-rotation policy is unavailable', () => {
+    const plannerPartsWithoutRotation = new Function('DAILY_V2', 'console', `
+      ${apps('Weather.gs')}
+      ${apps('ItemIndex.gs')}
+      ${apps('Taste.gs')}
+      ${apps('Planner.gs')}
+      return plannerPartsV2_;
+    `)(
+      { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+      console,
+    ) as (archetype: string, snapshot: object, weather: object, history: object) => Array<{ text?: string }>;
+
+    expect(() => plannerPartsWithoutRotation('easy', richSnapshot, richWeather, richHistory)).toThrow(
+      'Shoe rotation policy is required for planner execution'
+    );
+  });
+
   it('anchors every Easy candidate on a label-only shoe contract without shoe rain metadata', () => {
     const rotationSnapshot = {
       wardrobeFingerprint: 'easy-anchor-contract',
@@ -1080,7 +1097,7 @@ describe('prompt and response label boundary', () => {
       items: Array.from({ length: 5 }, (_, index) => [
         { id: `top-${index}`, shortLabel: `T10${index}`, slot: 'top', profile: {} },
         { id: `bottom-${index}`, shortLabel: `B10${index}`, slot: 'bottom', profile: {} },
-        { id: `shoe-${index}`, shortLabel: `S10${index}`, slot: 'shoes', profile: {} }
+        { id: `shoe-${index}`, shortLabel: `S10${index}`, slot: 'shoes', profile: { available: true, excludedFromDaily: false } }
       ]).flat(),
       atlasPages: [],
       tasteExamples: []
@@ -1491,7 +1508,7 @@ describe('prompt and response label boundary', () => {
       items: Array.from({ length: 5 }, (_, index) => [
         { id: `top-${index}`, shortLabel: `T10${index}`, slot: 'top', profile: {} },
         { id: `bottom-${index}`, shortLabel: `B10${index}`, slot: 'bottom', profile: {} },
-        { id: `shoe-${index}`, shortLabel: `S10${index}`, slot: 'shoes', profile: {} }
+        { id: `shoe-${index}`, shortLabel: `S10${index}`, slot: 'shoes', profile: { available: true, excludedFromDaily: false } }
       ]).flat(),
       atlasPages: [],
       tasteExamples: []
@@ -1503,8 +1520,8 @@ describe('prompt and response label boundary', () => {
         archetype: 'easy',
         topId: `T10${index}`,
         bottomId: `B10${index}`,
-        shoeId: `S10${index}`,
-        itemIds: [`T10${index}`, `B10${index}`, `S10${index}`],
+        shoeId: 'S100',
+        itemIds: [`T10${index}`, `B10${index}`, 'S100'],
         name: `Valid candidate ${index}`,
         styleSummary: 'The proportions align cleanly across all three pieces.',
         colorStrategy: 'The top, bottom, and shoes share a deliberate tonal color relationship.',
