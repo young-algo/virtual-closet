@@ -89,7 +89,7 @@ function validSelectionItemProfileV2_(slot, profile) {
     return validSelectionProfileStringV2_(profile, 'primaryColorFamily') &&
       validSelectionProfileStringV2_(profile, 'silhouette');
   }
-  if (slot === 'shoes') return validSelectionProfileStringV2_(profile, 'rainSafety');
+  if (slot === 'shoes') return true;
   if (slot === 'layer') return validSelectionProfileNumberV2_(profile, 'warmth');
   return false;
 }
@@ -196,7 +196,7 @@ function selectionCandidateCountsV2_(groups) {
   return counts;
 }
 
-function candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, history) {
+function candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, history, rotation) {
   if (!validSelectionCandidateV2_(candidate)) return ['malformed candidate'];
   var errors = [];
   if (!validSelectionScoreV2_(score) || !criticScoreMeetsFinalFloorV2_(score)) {
@@ -210,6 +210,15 @@ function candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, hist
   if (!inventory) {
     errors.push('candidate contains missing, wrong-slot, or incomplete-profile inventory');
     return errors;
+  }
+  if (rotation) {
+    var allowedShoes = new Set(rotation.allowedGeneratedShoeIds);
+    if (!allowedShoes.has(candidate.shoeId)) {
+      errors.push('shoe is inside the seven-calendar-day rotation block');
+    }
+    if (candidate.archetype === 'easy' && candidate.shoeId !== rotation.easyAnchorShoeId) {
+      errors.push('Easy candidate does not use the daily shoe anchor');
+    }
   }
   var safeSnapshot = safeSelectionSnapshotV2_(snapshot);
   if (savedOutfitExactCopyV2_(candidate.itemIds || [], safeSnapshot)) errors.push('exact manual saved-outfit copy');
@@ -258,6 +267,7 @@ function chooseReplanArchetypeV2_(eligibleByArchetype, scores, excluded) {
 
 function selectFinalistsV2_(candidates, scores, snapshot, weather, history) {
   candidates = Array.isArray(candidates) ? candidates : [];
+  var rotation = shoeRotationContextV2_(snapshot, weather && weather.localDate, history);
   var scoreIndex = selectionScoreIndexV2_(scores);
   var candidateCounts = selectionCandidateCountsV2_([candidates]);
   var eligibleByArchetype = DAILY_V2.ARCHETYPES.reduce(function(result, archetype) {
@@ -272,7 +282,7 @@ function selectFinalistsV2_(candidates, scores, snapshot, weather, history) {
         !ownSelectionKeyV2_(scoreIndex.byId, candidate.candidateId)) return;
     var score = scoreIndex.byId[candidate.candidateId];
     compositeById[candidate.candidateId] = compositeScoreV2_(score);
-    if (!candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, history).length) {
+    if (!candidateEligibilityErrorsV2_(candidate, score, snapshot, weather, history, rotation).length) {
       eligibleByArchetype[candidate.archetype].push(candidate);
     }
   });
@@ -306,15 +316,12 @@ function selectFinalistsV2_(candidates, scores, snapshot, weather, history) {
   };
 }
 
-function usableWeatherSafeShoeCountV2_(snapshot, weather) {
+function usableShoeCountV2_(snapshot) {
   var ids = new Set();
-  var rainExpected = Boolean(weather && weather.rainExpected);
   (snapshot && Array.isArray(snapshot.items) ? snapshot.items : []).forEach(function(item) {
     var profile = item && item.profile;
     if (item && item.slot === 'shoes' && typeof item.id === 'string' && item.id &&
-        profile && profile.available === true && profile.excludedFromDaily !== true &&
-        validSelectionProfileStringV2_(profile, 'rainSafety') &&
-        (!rainExpected || profile.rainSafety !== 'poor')) ids.add(item.id);
+        profile && profile.available === true && profile.excludedFromDaily !== true) ids.add(item.id);
   });
   return ids.size;
 }
@@ -409,7 +416,7 @@ function candidateSetErrorsV2_(set, snapshot, weather, expectedArchetypes) {
   }
   if (new Set(tops).size !== set.length) errors.push('tops must be unique');
   if (new Set(bottoms).size !== set.length) errors.push('bottoms must be unique');
-  if (usableWeatherSafeShoeCountV2_(snapshot, weather) >= set.length &&
+  if (usableShoeCountV2_(snapshot) >= set.length &&
       new Set(shoes).size !== set.length) errors.push('shoes must be unique');
   if (new Set(stories).size !== set.length) errors.push('diversity stories must be distinct');
   for (var left = 0; left < set.length; left += 1) {

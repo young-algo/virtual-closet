@@ -149,7 +149,7 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
   const pending = {
     qualityPolicyVersion: 4,
     localDate,
-    wardrobeFingerprint: 'wardrobe-v3',
+    wardrobeFingerprint: 'wardrobe-v3-15',
     weather,
     history: historyContextFixture(),
     planners,
@@ -167,7 +167,7 @@ const pendingFixture = (localDate: string, withEncore: boolean) => {
       recommendations,
       generatedAt: 200,
       snapshotGeneratedAt: 50,
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-15',
       modelRunId: 'run-id',
     } as Record<string, unknown>,
   };
@@ -190,7 +190,7 @@ const deterministicSelectionSelectors = {
     weather: Record<string, unknown>,
     history: Record<string, unknown>,
   ) => Record<string, unknown>>(
-    ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
+    ['ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
     'selectFinalistsV2_',
     { DAILY_V2: daily },
   ),
@@ -200,7 +200,7 @@ const deterministicSelectionSelectors = {
     snapshot: Record<string, unknown>,
     weather: Record<string, unknown>,
   ) => { selectedCandidates: Array<Record<string, unknown>>; feasibleSetCount: number } | null>(
-    ['ItemIndex.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
+    ['ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
     'selectExhaustedFinalSetV2_',
     { DAILY_V2: daily },
   ),
@@ -361,7 +361,7 @@ const partialPendingFixture = (count: 1 | 2, withEncore: boolean) => {
   return { pending, snapshot };
 };
 
-const runtimeFiles = ['ItemIndex.gs', 'Taste.gs', 'Selection.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'];
+const runtimeFiles = ['ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'Selection.gs', 'FinalValidation.gs', 'Encore.gs', 'JobState.gs'];
 
 const runResolvedRecovery = (
   pending: ReturnType<typeof pendingFixture>,

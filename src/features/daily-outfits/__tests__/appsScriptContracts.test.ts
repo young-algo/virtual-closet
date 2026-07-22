@@ -9,9 +9,13 @@ const evaluateAppsScript = <T>(
   exported: string,
   globals: Record<string, unknown> = {},
 ) => {
-  const runtimeFiles = files.includes('JobState.gs') && !files.includes('Selection.gs')
+  const jobRuntimeFiles = files.includes('JobState.gs') && !files.includes('Selection.gs')
     ? ['Selection.gs', ...files]
     : files;
+  const runtimeFiles = (jobRuntimeFiles.includes('Selection.gs') || jobRuntimeFiles.includes('FinalValidation.gs')) &&
+    !jobRuntimeFiles.includes('ShoeRotation.gs')
+    ? ['ShoeRotation.gs', ...jobRuntimeFiles]
+    : jobRuntimeFiles;
   const runtimeGlobals: Record<string, unknown> = {
     savedOutfitExactCopyV2_: () => null,
     weatherSafetyErrorsV2_: () => [],
@@ -65,6 +69,7 @@ const finalValidator = new Function(`
     })}
   };
   function itemMapV2_(snapshot) { var map = Object.create(null); snapshot.items.forEach(function(item) { map[item.id] = item; }); return map; }
+  ${apps('ShoeRotation.gs')}
   ${apps('Taste.gs')}
   ${apps('Selection.gs')}
   ${apps('FinalValidation.gs')}
@@ -191,9 +196,9 @@ const persistedSelectionFixture = () => {
       selectedCount: 3,
       selectedArchetypes: dailyArchetypes.slice(),
       omittedArchetypes: [] as string[],
-      eligibleCountByArchetype: { easy: 5, 'polished-casual': 5, expressive: 5 },
+      eligibleCountByArchetype: { easy: 1, 'polished-casual': 5, expressive: 5 },
       compositeById: Object.fromEntries(candidates.map(({ candidateId }) => [candidateId, allNineComposite])),
-      feasibleSetCount: 8,
+      feasibleSetCount: 4,
       replannedArchetypes: [] as string[],
     },
   };
@@ -202,7 +207,7 @@ const persistedSelectionFixture = () => {
 const currentPendingFixture = () => ({
   qualityPolicyVersion: 4,
   localDate: '2026-07-15',
-  wardrobeFingerprint: 'wardrobe-v3',
+  wardrobeFingerprint: 'wardrobe-v3-28',
   weather: persistedWeatherFixture(),
   history: persistedHistoryFixture(),
   planners: persistedPlannersFixture(),
@@ -310,7 +315,7 @@ const sendablePendingFixture = () => {
   return {
     qualityPolicyVersion: 4,
     localDate: '2026-07-15',
-    wardrobeFingerprint: 'wardrobe-v3',
+    wardrobeFingerprint: 'wardrobe-v3-28',
     weather,
     history,
     planners,
@@ -328,7 +333,7 @@ const sendablePendingFixture = () => {
       recommendations,
       generatedAt: 200,
       snapshotGeneratedAt: 50,
-      wardrobeFingerprint: 'wardrobe-v3',
+      wardrobeFingerprint: 'wardrobe-v3-28',
       modelRunId: 'run-id',
     },
   };
@@ -983,7 +988,7 @@ describe('Apps Script contracts', () => {
       { id: 'layer-w4', slot: 'layer', category: 'Jackets', profile: { warmth: 4, breathability: 3 } }
     ]).map(entry => [entry.id, entry]));
     const weather = { morningFeelsLikeF: 55, eveningFeelsLikeF: 55, middayFeelsLikeF: 85, rainExpected: false };
-    expect(weatherSafety({ itemIds: ['top', 'bottom', 'shoe'] }, byId, { ...weather, rainExpected: true }, snapshot).join(' ')).toMatch(/rain-unsafe/);
+    expect(weatherSafety({ itemIds: ['top', 'bottom', 'shoe'] }, byId, { ...weather, rainExpected: true }, snapshot)).toEqual([]);
     expect(weatherSafety({ itemIds: ['top', 'bottom', 'safe-shoe', 'layer-w4'] }, byId, weather, snapshot)).toEqual([]);
     expect(weatherSafety({ itemIds: ['top', 'bottom', 'safe-shoe', 'layer-w4'] }, byId, { ...weather, middayFeelsLikeF: 85.1 }, snapshot).join(' ')).toMatch(/warmth-4 layer/);
     expect(weatherSafety({ itemIds: ['top-w4', 'bottom', 'safe-shoe'] }, byId, weather, snapshot)).toEqual([]);
@@ -4133,6 +4138,26 @@ describe('Apps Script contracts', () => {
     )).toEqual([]);
   });
 
+  it('rejects final shoes outside the generated rotation pool and an Easy anchor mismatch', () => {
+    const fixture = finalPolicyFixture();
+    fixture.history.exactOutfitsPrevious14Days.push({
+      localDate: '2026-07-14',
+      itemIds: ['historical-top', 'historical-bottom', fixture.selected[0].shoeId],
+      archetype: 'easy',
+    });
+    const errors = finalValidator(
+      fixture.curated,
+      fixture.snapshot,
+      fixture.weather,
+      fixture.history,
+      fixture.selected,
+      fixture.critic,
+      fixture.selection,
+    );
+    expect(errors).toContain('recommendation[0] uses a shoe outside the daily rotation pool');
+    expect(errors).toContain('recommendation[0] does not use the daily Easy shoe anchor');
+  });
+
   it('rejects mismatched partial coverage, order, identity, count, and unnecessary shoe reuse', () => {
     const base = finalPolicyFixture();
     const fixture = finalPolicyFixture();
@@ -4192,13 +4217,13 @@ describe('Apps Script contracts', () => {
       .map(id => id === replacedShoeId ? retainedShoeId : id);
     repeatedShoe.curated.recommendations[1].itemIds = repeatedShoe.curated.recommendations[1].itemIds
       .map(id => id === replacedShoeId ? retainedShoeId : id);
-    expect(validate(repeatedShoe)).toContain('shoes must be unique when enough weather-safe options exist');
+    expect(validate(repeatedShoe)).toContain('shoes must be unique when enough available options exist');
     repeatedShoe.snapshot.items.forEach(item => {
       if (item.slot === 'shoes' && item.id !== retainedShoeId) {
         item.profile = { ...item.profile, available: false };
       }
     });
-    expect(validate(repeatedShoe)).not.toContain('shoes must be unique when enough weather-safe options exist');
+    expect(validate(repeatedShoe)).not.toContain('shoes must be unique when enough available options exist');
   });
 
   it.each([1, 2, 3])('persists exact coverage for a %i-look bundle', count => {

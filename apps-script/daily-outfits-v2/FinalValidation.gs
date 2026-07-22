@@ -66,7 +66,6 @@ function weatherSafetyErrorsV2_(recommendation, itemMap, weather, snapshot) {
   }).filter(Boolean);
   var top = selected.find(function(item) { return item.slot === 'top'; });
   var bottom = selected.find(function(item) { return item.slot === 'bottom'; });
-  var shoes = selected.find(function(item) { return item.slot === 'shoes'; });
   var layer = selected.find(function(item) { return item.slot === 'layer'; });
   if (bottom && bottom.category === 'Shorts' && weather.middayFeelsLikeF < 48) errors.push('shorts are unsafe below a 48°F adjusted midday apparent temperature');
   if (!layer && Math.min(weather.morningFeelsLikeF, weather.eveningFeelsLikeF) < 40 && top && top.profile.warmth <= 2) errors.push('a layer is required for a cold morning or evening');
@@ -75,10 +74,6 @@ function weatherSafetyErrorsV2_(recommendation, itemMap, weather, snapshot) {
   if (top && top.profile.warmth >= 4 && weather.middayFeelsLikeF > 85) errors.push('a warmth-4 top is unsafe above 85°F');
   if (top && top.profile.warmth === 3 && weather.middayFeelsLikeF > 92) errors.push('a warmth-3 top is unsafe above 92°F');
   if (top && layer && top.profile.breathability <= 2 && layer.profile.warmth >= 4 && weather.middayFeelsLikeF > 80) errors.push('the top and layer combination is not breathable enough');
-  if (shoes && shoes.profile.rainSafety === 'poor' && weather.rainExpected) {
-    var safer = snapshot.items.filter(function(item) { return item.slot === 'shoes' && item.profile.rainSafety !== 'poor'; });
-    if (safer.length) errors.push('rain-unsafe shoes selected while safer shoes are available');
-  }
   return errors;
 }
 
@@ -121,6 +116,13 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
   var diversityStories = Object.create(null);
   var layerUse = Object.create(null);
   var historyKeys = exactHistoryKeysV2_(history);
+  var rotation = null;
+  try {
+    rotation = shoeRotationContextV2_(snapshot, weather.localDate, history);
+  } catch (error) {
+    errors.push('shoe rotation context is invalid: ' + error.message);
+  }
+  var allowedShoes = new Set(rotation ? rotation.allowedGeneratedShoeIds : []);
 
   recommendations.forEach(function(rec, index) {
     var path = 'recommendation[' + index + ']';
@@ -146,6 +148,13 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     var top = selected.find(function(item) { return item && item.slot === 'top'; });
     var bottom = selected.find(function(item) { return item && item.slot === 'bottom'; });
     var shoe = selected.find(function(item) { return item && item.slot === 'shoes'; });
+    if (shoe && !allowedShoes.has(shoe.id)) {
+      errors.push(path + ' uses a shoe outside the daily rotation pool');
+    }
+    if (candidate && candidate.archetype === 'easy' && rotation &&
+        candidate.shoeId !== rotation.easyAnchorShoeId) {
+      errors.push(path + ' does not use the daily Easy shoe anchor');
+    }
     if (top && ownFinalValidationKeyV2_(tops, top.id)) errors.push('tops must be unique across final recommendations');
     if (bottom && ownFinalValidationKeyV2_(bottoms, bottom.id)) errors.push('bottoms must be unique across final recommendations');
     if (top) tops[top.id] = true;
@@ -185,8 +194,8 @@ function validateFinalBundleV2_(curated, snapshot, weather, history, selectedCan
     errors = errors.concat(weatherSafetyErrorsV2_(rec, itemMap, weather, snapshot).map(function(error) { return path + ': ' + error; }));
   });
   if (Object.keys(shoes).length < selectedCount &&
-      usableWeatherSafeShoeCountV2_(snapshot, weather) >= selectedCount) {
-    errors.push('shoes must be unique when enough weather-safe options exist');
+      usableShoeCountV2_(snapshot) >= selectedCount) {
+    errors.push('shoes must be unique when enough available options exist');
   }
   Object.keys(layerUse).forEach(function(id) {
     if (layerUse[id] > 1 &&

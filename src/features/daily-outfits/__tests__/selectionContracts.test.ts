@@ -98,6 +98,7 @@ const idsBySlot = {
 };
 
 const baseSnapshot = {
+  wardrobeFingerprint: 'wardrobe-9',
   settings: {},
   tasteExamples: [],
   items: [
@@ -109,6 +110,7 @@ const baseSnapshot = {
 };
 
 const baseWeather = {
+  localDate: '2026-07-14',
   rainExpected: false,
   layerGuidance: 'none',
   middayFeelsLikeF: 70,
@@ -194,7 +196,7 @@ const api = evaluateAppsScript<{
     excluded: string[]
   ) => string | null;
 }>(
-  ['Config.gs', 'ItemIndex.gs', 'Critic.gs', 'Taste.gs', 'FinalValidation.gs', 'Selection.gs'],
+  ['Config.gs', 'ItemIndex.gs', 'Critic.gs', 'Taste.gs', 'ShoeRotation.gs', 'FinalValidation.gs', 'Selection.gs'],
   '({ weights: DAILY_V2.COMPOSITE_WEIGHTS, compositeScoreV2_, selectFinalistsV2_, selectFinalSetV2_, candidateSetErrorsV2_, selectExhaustedFinalSetV2_, deliveryCoverageForCandidatesV2_, chooseReplanArchetypeV2_ })',
   {
     console,
@@ -299,13 +301,13 @@ describe('candidate eligibility and per-archetype ordering', () => {
         item('d', 'shoes')
       ]
     };
-    const candidate = makeCandidate('pipe-history', 'easy', 'a|b', 'c', 'd');
+    const candidate = makeCandidate('pipe-history', 'polished-casual', 'a|b', 'c', 'd');
     const collidingHistory = {
       exactOutfitsPrevious14Days: [{ itemIds: ['a', 'b|c', 'd'] }],
       cooldownItemIds: []
     };
     expect(finalists([candidate], [makeScore(candidate.candidateId)], snapshot, baseWeather, collidingHistory)
-      .eligibleCountByArchetype.easy).toBe(1);
+      .eligibleCountByArchetype['polished-casual']).toBe(1);
   });
 
   it('rejects a true exact-history repeat whose item ids contain delimiters', () => {
@@ -365,11 +367,24 @@ describe('candidate eligibility and per-archetype ordering', () => {
     const candidates = [
       makeCandidate('top', 'easy', 't1', 'b1', 's1', 'l1'),
       makeCandidate('bottom', 'easy', 't2', 'b2', 's2', 'l2'),
-      makeCandidate('shoe-layer', 'easy', 't3', 'b3', 's3', 'l3')
+      makeCandidate('shoe-layer', 'easy', 't3', 'b3', 's1', 'l3')
     ];
     const history = { exactOutfitsPrevious14Days: [], cooldownItemIds: ['t1', 'b2', 's3', 'l3'] };
     const result = finalists(candidates, candidates.map(value => makeScore(value.candidateId)), baseSnapshot, baseWeather, history);
     expect(result.finalistPools.easy.map(value => value.candidateId)).toEqual(['shoe-layer']);
+  });
+
+  it('rejects cooling shoes globally and requires the Easy anchor', () => {
+    const history = {
+      exactOutfitsPrevious14Days: [{ localDate: '2026-07-13', itemIds: ['t9', 'b9', 's2'] }],
+      cooldownItemIds: [],
+    };
+    const cooled = makeCandidate('cooled', 'polished-casual', 't2', 'b2', 's2');
+    expect(finalists([cooled], [makeScore('cooled')], baseSnapshot, baseWeather, history)
+      .eligibleCountByArchetype['polished-casual']).toBe(0);
+    const wrongEasy = makeCandidate('wrong-easy', 'easy', 't1', 'b1', 's3');
+    expect(finalists([wrongEasy], [makeScore('wrong-easy')], baseSnapshot, baseWeather, emptyHistory)
+      .eligibleCountByArchetype.easy).toBe(0);
   });
 
   it.each([
@@ -407,15 +422,13 @@ describe('candidate eligibility and per-archetype ordering', () => {
     expect(finalists([candidate], [makeScore('e1')], snapshot, { ...baseWeather, ...weatherPatch }).eligibleCountByArchetype.easy).toBe(1);
   });
 
-  it('rejects rain-unsafe shoes when a safer shoe exists and permits them otherwise', () => {
+  it('permits poor and missing rain-safety shoe profiles during rain', () => {
     const candidate = makeCandidate('e1', 'easy', 't1', 'b1', 's1');
-    let snapshot = updateItem(baseSnapshot, 's1', { profile: { rainSafety: 'poor' } });
-    expect(finalists([candidate], [makeScore('e1')], snapshot, { ...baseWeather, rainExpected: true }).eligibleCountByArchetype.easy).toBe(0);
-    snapshot = {
-      ...snapshot,
-      items: snapshot.items.map(value => value.slot === 'shoes' ? item(value.id, 'shoes', { ...value, profile: { ...value.profile, rainSafety: 'poor' } }) : value)
-    };
+    const snapshot = updateItem(baseSnapshot, 's1', { profile: { rainSafety: 'poor' } });
     expect(finalists([candidate], [makeScore('e1')], snapshot, { ...baseWeather, rainExpected: true }).eligibleCountByArchetype.easy).toBe(1);
+    const withoutRainSafety = removeItemProfileField(baseSnapshot, 's1', 'rainSafety');
+    expect(finalists([candidate], [makeScore('e1')], withoutRainSafety, { ...baseWeather, rainExpected: true })
+      .eligibleCountByArchetype.easy).toBe(1);
   });
 
   it.each([
@@ -435,7 +448,6 @@ describe('candidate eligibility and per-archetype ordering', () => {
     ['missing bottom story silhouette', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 'b1', 'silhouette'), baseWeather],
     ['missing top warmth', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 't1', 'warmth'), baseWeather],
     ['missing top breathability', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 'l1'), removeItemProfileField(updateItem(baseSnapshot, 'l1', { profile: { warmth: 4 } }), 't1', 'breathability'), { ...baseWeather, middayFeelsLikeF: 80.1 }],
-    ['missing shoe rainSafety', makeCandidate('invalid', 'easy', 't1', 'b1', 's1'), removeItemProfileField(baseSnapshot, 's1', 'rainSafety'), { ...baseWeather, rainExpected: true }],
     ['missing layer warmth', makeCandidate('invalid', 'easy', 't1', 'b1', 's1', 'l1'), removeItemProfileField(baseSnapshot, 'l1', 'warmth'), baseWeather]
   ])('fails closed without throwing for %s in finalists and direct final-set selection', (_name, candidate, snapshot, weather) => {
     const pools = onePerArchetype({ easy: candidate });
@@ -447,20 +459,20 @@ describe('candidate eligibility and per-archetype ordering', () => {
   });
 
   it('tolerates an unrelated shoe with no profile during rainy finalist safety checks', () => {
-    let snapshot = updateItem(baseSnapshot, 's1', { profile: { rainSafety: 'poor' } });
+    let snapshot = updateItem(baseSnapshot, 's5', { profile: { rainSafety: 'poor' } });
     snapshot = removeItemProfile(snapshot, 's2') as typeof baseSnapshot;
-    const candidate = makeCandidate('rain-profile-gap', 'easy', 't1', 'b1', 's1');
+    const candidate = makeCandidate('rain-profile-gap', 'easy', 't1', 'b1', 's5');
     expect(() => finalists([candidate], [makeScore(candidate.candidateId)], snapshot, { ...baseWeather, rainExpected: true })).not.toThrow();
     expect(finalists([candidate], [makeScore(candidate.candidateId)], snapshot, { ...baseWeather, rainExpected: true })
-      .eligibleCountByArchetype.easy).toBe(0);
+      .eligibleCountByArchetype.easy).toBe(1);
   });
 
   it('orders each archetype by composite, color intent, then candidate id', () => {
     const candidates = [
       makeCandidate('composite-low', 'easy', 't1', 'b1', 's1'),
-      makeCandidate('color-low', 'easy', 't2', 'b2', 's2'),
-      makeCandidate('z-color-high', 'easy', 't3', 'b3', 's3'),
-      makeCandidate('a-color-high', 'easy', 't4', 'b4', 's4')
+      makeCandidate('color-low', 'easy', 't2', 'b2', 's1'),
+      makeCandidate('z-color-high', 'easy', 't3', 'b3', 's1'),
+      makeCandidate('a-color-high', 'easy', 't4', 'b4', 's1')
     ];
     const scores = [
       makeScore('composite-low', { visualInterest: 7 }),
@@ -479,7 +491,7 @@ describe('candidate eligibility and per-archetype ordering', () => {
   it('uses a raw total string order for canonically equivalent candidate ids', () => {
     const candidates = [
       makeCandidate('\u00e9', 'easy', 't1', 'b1', 's1'),
-      makeCandidate('e\u0301', 'easy', 't2', 'b2', 's2')
+      makeCandidate('e\u0301', 'easy', 't2', 'b2', 's1')
     ];
     const scores = candidates.map(candidate => makeScore(candidate.candidateId));
     expect(finalists(candidates, scores).finalistPools.easy.map(value => value.candidateId)).toEqual(['e\u0301', '\u00e9']);
@@ -518,7 +530,7 @@ describe('candidate eligibility and per-archetype ordering', () => {
   it('handles prototype-key candidate ids without corrupting score or candidate maps', () => {
     const candidates = [
       makeCandidate('__proto__', 'easy', 't1', 'b1', 's1'),
-      makeCandidate('constructor', 'easy', 't2', 'b2', 's2')
+      makeCandidate('constructor', 'easy', 't2', 'b2', 's1')
     ];
     const result = finalists(candidates, candidates.map(value => makeScore(value.candidateId)));
     expect(result.finalistPools.easy.map(value => value.candidateId).sort()).toEqual(['__proto__', 'constructor'].sort());
@@ -669,16 +681,15 @@ describe('final set constraints, widening, and rank order', () => {
     expect(finalSet(pools, scoresForPools(pools)).selectedCandidates).toBeNull();
   });
 
-  it('requires unique shoes when at least three currently usable weather-safe shoes exist', () => {
+  it('requires unique shoes when at least three currently available shoes exist', () => {
     const pools = onePerArchetype({ 'polished-casual': makeCandidate('p1', 'polished-casual', 't2', 'b2', 's1') });
     expect(finalSet(pools, scoresForPools(pools)).selectedCandidates).toBeNull();
   });
 
   it.each([
-    ['unavailable shoes', { available: false }, false],
-    ['excluded shoes', { excludedFromDaily: true }, false],
-    ['rain-unsafe shoes during rain', { rainSafety: 'poor' }, true]
-  ])('does not count %s toward the three-usable-shoe threshold', (_name, profilePatch, rainExpected) => {
+    ['unavailable shoes', { available: false }],
+    ['excluded shoes', { excludedFromDaily: true }]
+  ])('does not count %s toward the three-available-shoe threshold', (_name, profilePatch) => {
     const pools = onePerArchetype({
       'polished-casual': makeCandidate('p1', 'polished-casual', 't2', 'b2', 's1'),
       expressive: makeCandidate('x1', 'expressive', 't3', 'b3', 's2')
@@ -686,7 +697,7 @@ describe('final set constraints, widening, and rank order', () => {
     let snapshot = structuredClone(baseSnapshot);
     snapshot.items = snapshot.items.filter(value => value.slot !== 'shoes' || ['s1', 's2', 's3'].includes(value.id));
     snapshot = updateItem(snapshot, 's3', { profile: profilePatch });
-    const result = finalSet(pools, scoresForPools(pools), snapshot, { ...baseWeather, rainExpected });
+    const result = finalSet(pools, scoresForPools(pools), snapshot, baseWeather);
     expect(result.selectedCandidates?.map(value => value.candidateId)).toEqual(['e1', 'p1', 'x1']);
   });
 
@@ -999,6 +1010,8 @@ describe('bounded targeted replan orchestration', () => {
     };
   };
 
+  const replanSnapshot = { ...baseSnapshot, wardrobeFingerprint: 'replan-1' };
+
   const initialCandidates = () => ['easy', 'polished-casual', 'expressive'].flatMap((archetype, group) =>
     Array.from({ length: 5 }, (_, index) => makeCandidate(
       `${archetype}-${index}`,
@@ -1039,7 +1052,7 @@ describe('bounded targeted replan orchestration', () => {
   ) => evaluateAppsScript<{
     runSelectionV2_: SelectionRun | null;
   }>(
-    ['Config.gs', 'Selection.gs'],
+    ['Config.gs', 'ShoeRotation.gs', 'Selection.gs'],
     `({
       runSelectionV2_: typeof runSelectionV2_ === 'function' ? runSelectionV2_ : null
     })`,
@@ -1069,7 +1082,7 @@ describe('bounded targeted replan orchestration', () => {
     if (!api.runSelectionV2_) return;
 
     const result = api.runSelectionV2_(
-      baseSnapshot,
+      replanSnapshot,
       baseWeather,
       emptyHistory,
       plannerResponses(initial),
@@ -1119,7 +1132,7 @@ describe('bounded targeted replan orchestration', () => {
     expect(api.runSelectionV2_).toBeTypeOf('function');
     if (!api.runSelectionV2_) return;
 
-    const result = api.runSelectionV2_(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+    const result = api.runSelectionV2_(replanSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
       scores: initial.map(candidate => makeScore(candidate.candidateId))
     });
     expect(scored).toEqual([accepted.map(candidate => candidate.candidateId)]);
@@ -1261,7 +1274,7 @@ describe('bounded targeted replan orchestration', () => {
     expect(api.runSelectionV2_).toBeTypeOf('function');
     if (!api.runSelectionV2_) return;
 
-    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+    expect(() => api.runSelectionV2_!(replanSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
       scores: initial.map(candidate => flatScore(candidate.candidateId, 2))
     })).toThrow(/^quality-exhausted-zero:/);
   });
@@ -1304,15 +1317,15 @@ describe('bounded targeted replan orchestration', () => {
     expect(api.runSelectionV2_).toBeTypeOf('function');
     if (!api.runSelectionV2_) return;
 
-    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(duplicateId), {
+    expect(() => api.runSelectionV2_!(replanSnapshot, baseWeather, emptyHistory, plannerResponses(duplicateId), {
       scores: duplicateId.map(candidate => makeScore(candidate.candidateId))
     })).toThrow(/duplicate candidateId/);
     const wrongPlannerGroup = plannerResponses(initial);
     wrongPlannerGroup[0].candidates[0] = { ...wrongPlannerGroup[0].candidates[0], archetype: 'expressive' };
-    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, wrongPlannerGroup, {
+    expect(() => api.runSelectionV2_!(replanSnapshot, baseWeather, emptyHistory, wrongPlannerGroup, {
       scores: initial.map(candidate => makeScore(candidate.candidateId))
     })).toThrow(/planner response.*wrong archetype/);
-    expect(() => api.runSelectionV2_!(baseSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
+    expect(() => api.runSelectionV2_!(replanSnapshot, baseWeather, emptyHistory, plannerResponses(initial), {
       scores: initial.map(candidate => makeScore(candidate.candidateId))
     })).toThrow(/targeted critic scores|exactly once/);
   });
