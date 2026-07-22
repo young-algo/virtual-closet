@@ -1,4 +1,4 @@
-function validatePlannerResponseV2_(response, archetype, snapshot) {
+function validatePlannerResponseV2_(response, archetype, snapshot, expectedEasyShoeId) {
   var errors = [];
   if (!response || response.archetype !== archetype) errors.push('response archetype must be ' + archetype);
   if (!response || !Array.isArray(response.candidates) || response.candidates.length !== 5) return errors.concat(['exactly five candidates are required']);
@@ -25,6 +25,10 @@ function validatePlannerResponseV2_(response, archetype, snapshot) {
       if (!item) errors.push(path + '.' + pair[0] + ' is an invented id');
       else if (item.slot !== pair[1]) errors.push(path + '.' + pair[0] + ' uses the wrong slot');
     });
+    if (archetype === 'easy' && typeof expectedEasyShoeId === 'string' &&
+        expectedEasyShoeId && candidate.shoeId !== expectedEasyShoeId) {
+      errors.push(path + '.shoeId must use the required Easy shoe anchor');
+    }
     var expected = [candidate.topId, candidate.bottomId, candidate.shoeId].concat(candidate.layerId ? [candidate.layerId] : []);
     if (new Set(expected).size !== expected.length) errors.push(path + ' repeats an item within the outfit');
     if (!Array.isArray(candidate.itemIds) || candidate.itemIds.length !== expected.length || expected.some(function(id) { return candidate.itemIds.indexOf(id) < 0; })) errors.push(path + '.itemIds does not match its slots');

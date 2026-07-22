@@ -278,7 +278,7 @@ const criticCandidateRunner = (callGeminiV2_: (stage: string) => unknown) => eva
 
 const api = evaluateAppsScript<{
   modelWeatherViewV2_: (weather: object) => Record<string, unknown>;
-  modelProfileViewV2_: (profile: object) => Record<string, unknown>;
+  modelProfileViewV2_: (profile: object, snapshot?: object, slot?: string) => Record<string, unknown>;
   compactItemIndexV2_: (snapshot: object) => Array<Record<string, unknown>>;
   labelForItemIdV2_: (id: string, snapshot: object) => string | null;
   atlasPartsV2_: (snapshot: object) => Array<{ text?: string }>;
@@ -338,7 +338,6 @@ describe('model boundary views', () => {
     expect(item.profile).toEqual({
       warmth: 2,
       breathability: 3,
-      rainSafety: 'good',
       windProtection: 0,
       formality: 2,
       silhouette: 'regular',
@@ -348,6 +347,7 @@ describe('model boundary views', () => {
       accentColors: ['black']
     });
     expect(api.modelProfileViewV2_(snapshot.items[0].profile)).not.toHaveProperty('available');
+    expect(api.modelProfileViewV2_(snapshot.items[0].profile, snapshot, 'top')).toHaveProperty('rainSafety', 'good');
   });
 
   it('uses labels in atlas and candidate-image text', () => {
@@ -975,6 +975,103 @@ describe('prompt and response label boundary', () => {
     expect(serialized).not.toContain('excludedFromDaily');
     expect(serialized).not.toContain('privateOperationalFlag');
     expect(serialized).not.toContain('privateNote');
+  });
+
+  it('anchors every Easy candidate on a label-only shoe contract without shoe rain metadata', () => {
+    const rotationSnapshot = {
+      wardrobeFingerprint: 'easy-anchor-contract',
+      atlasPages: [],
+      tasteExamples: [],
+      items: Array.from({ length: 5 }, (_, index) => [
+        { id: `top-${index}`, shortLabel: `T${index + 1}`, slot: 'top', profile: { warmth: 1, breathability: 4, available: true, excludedFromDaily: false } },
+        { id: `bottom-${index}`, shortLabel: `B${index + 1}`, slot: 'bottom', profile: { warmth: 1, breathability: 4, available: true, excludedFromDaily: false } },
+        { id: `shoe-${index}`, shortLabel: `S${index + 1}`, slot: 'shoes', profile: { warmth: 1, breathability: 4, rainSafety: 'poor', available: true, excludedFromDaily: false } },
+      ]).flat(),
+    };
+    const rotationHistory = { exactOutfitsPrevious14Days: [], cooldownItemIds: [], wornItemIds: [] };
+    const planner = evaluateAppsScript<{
+      plannerPartsV2_: (archetype: string, snapshot: object, weather: object, history: object) => Array<{ text?: string }>;
+      shoeRotationContextV2_: (snapshot: object, localDate: string, history: object) => { easyAnchorShoeId: string };
+    }>(
+      ['Weather.gs', 'ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'PlannerValidation.gs', 'Planner.gs'],
+      '({ plannerPartsV2_, shoeRotationContextV2_ })',
+      { DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] }, console }
+    );
+
+    const rotation = planner.shoeRotationContextV2_(rotationSnapshot, richWeather.localDate, rotationHistory);
+    const prompt = planner.plannerPartsV2_('easy', rotationSnapshot, richWeather, rotationHistory)
+      .map(part => part.text || '').join('\n');
+    const label = rotationSnapshot.items.find(item => item.id === rotation.easyAnchorShoeId)?.shortLabel;
+
+    expect(prompt).toContain(`REQUIRED EASY SHOE ANCHOR: ${label}`);
+    expect(prompt).toContain('Use this shoe in all five Easy candidates');
+    expect(prompt).toContain('Precipitation must not influence footwear selection');
+    expect(prompt).not.toContain(rotation.easyAnchorShoeId);
+    expect(prompt).not.toContain('rainSafety');
+  });
+
+  it('keeps one deterministic Easy shoe anchor through both targeted replan rounds', () => {
+    const rotationSnapshot = {
+      wardrobeFingerprint: 'easy-replan-anchor',
+      atlasPages: [],
+      tasteExamples: [],
+      items: Array.from({ length: 5 }, (_, index) => [
+        { id: `top-${index}`, shortLabel: `T${index + 1}`, slot: 'top', profile: { warmth: 1, breathability: 4, available: true, excludedFromDaily: false } },
+        { id: `bottom-${index}`, shortLabel: `B${index + 1}`, slot: 'bottom', profile: { warmth: 1, breathability: 4, available: true, excludedFromDaily: false } },
+        { id: `shoe-${index}`, shortLabel: `S${index + 1}`, slot: 'shoes', profile: { warmth: 1, breathability: 4, rainSafety: 'poor', available: true, excludedFromDaily: false } },
+      ]).flat(),
+    };
+    const rotationHistory = { exactOutfitsPrevious14Days: [], cooldownItemIds: [], wornItemIds: [] };
+    const calls: string[] = [];
+    let anchorLabel = '';
+    const planner = evaluateAppsScript<{
+      replanArchetypeV2_: (
+        archetype: string, snapshot: object, weather: object, history: object, failureNotes: object[],
+        avoidItemIds: string[], usedCandidateIds: string[], round: number
+      ) => object;
+      shoeRotationContextV2_: (snapshot: object, localDate: string, history: object) => { easyAnchorShoeId: string };
+    }>(
+      ['Weather.gs', 'ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'PlannerValidation.gs', 'Planner.gs'],
+      '({ replanArchetypeV2_, shoeRotationContextV2_ })',
+      {
+        DAILY_V2: { ARCHETYPES: ['easy', 'polished-casual', 'expressive'] },
+        console,
+        getNumberPropertyV2_: () => 0.9,
+        callGeminiV2_: (_stage: string, parts: Array<{ text?: string }>) => {
+          calls.push(parts.map(part => part.text || '').join('\n'));
+          return {
+            archetype: 'easy',
+            candidates: Array.from({ length: 5 }, (_, index) => ({
+              candidateId: `easy-${index}`,
+              archetype: 'easy',
+              topId: `top-${index}`,
+              bottomId: `bottom-${index}`,
+              shoeId: anchorLabel,
+              itemIds: [`T${index + 1}`, `B${index + 1}`, anchorLabel],
+              name: `Easy ${index}`,
+              styleSummary: 'Easy proportions keep the outfit relaxed and deliberate.',
+              colorStrategy: 'The top accent repeats through the shoe trim for a specific visible connection.',
+              weatherSummary: 'Light layers suit the full forecast window.',
+              potentialRisks: [],
+              plannerConfidence: 0.9,
+            })),
+          };
+        },
+      }
+    );
+    const rotation = planner.shoeRotationContextV2_(rotationSnapshot, richWeather.localDate, rotationHistory);
+    const label = rotationSnapshot.items.find(item => item.id === rotation.easyAnchorShoeId)?.shortLabel;
+    anchorLabel = label || '';
+
+    planner.replanArchetypeV2_('easy', rotationSnapshot, richWeather, rotationHistory, [], [], [], 1);
+    planner.replanArchetypeV2_('easy', rotationSnapshot, richWeather, rotationHistory, [], [], [], 2);
+
+    expect(calls).toHaveLength(2);
+    calls.forEach(prompt => {
+      expect(prompt).toContain(`REQUIRED EASY SHOE ANCHOR: ${label}`);
+      expect(prompt).toContain('Use this shoe in all five Easy candidates');
+      expect(prompt).not.toContain(rotation.easyAnchorShoeId);
+    });
   });
 
   it('exposes the validator color-strategy bounds in initial and repair prompts', () => {
@@ -1779,6 +1876,8 @@ describe('prompt and response label boundary', () => {
     expect(primary).toContain('Score all 6 candidates independently');
     expect(primary).toContain('an honest low score is more useful than a generous one');
     expect(repair).toContain('an honest low score is more useful than a generous one');
+    expect(primary).toContain('Precipitation must not lower weather, wearability, or any other score because of footwear. Judge weather suitability from garments and layers only.');
+    expect(repair).toContain('Precipitation must not lower weather, wearability, or any other score because of footwear. Judge weather suitability from garments and layers only.');
     expect(primary).not.toMatch(/select exactly two|finalists per archetype/i);
     expect(repair).not.toMatch(/select exactly two|finalists per archetype|force a result/i);
     expect(primary).not.toContain(sneakerId);

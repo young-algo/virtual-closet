@@ -50,12 +50,40 @@ function extremeHeatPolishedCasualContractV2_(archetype, weather) {
   ].join('\n');
 }
 
-function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance) {
+function plannerShoeRotationGuidanceV2_(archetype, rotation, snapshot) {
+  var view = shoeRotationModelViewV2_(rotation, snapshot);
+  var lines = [
+    'FOOTWEAR ROTATION CONTRACT:',
+    '- Precipitation must not influence footwear selection, candidate risks, or weather summaries.',
+    '- Use only these allowed shoe labels today: ' + view.allowedShoeLabels.join(', ') + '.',
+    '- Do not use these cooling-down shoe labels: ' + (view.blockedShoeLabels.join(', ') || 'none') + '.'
+  ];
+  if (archetype === 'easy') {
+    lines.push('REQUIRED EASY SHOE ANCHOR: ' + view.easyAnchorLabel + '.');
+    lines.push('- Use this shoe in all five Easy candidates and build each top-bottom combination around its visible colors and character.');
+    lines.push('- Keep the shoe fixed while varying palette, proportion, silhouette, and optional layer materially.');
+  }
+  return lines.join('\n');
+}
+
+function plannerRotationContextV2_(snapshot, weather, history, rotation) {
+  if (rotation) return rotation;
+  return typeof shoeRotationContextV2_ === 'function'
+    ? shoeRotationContextV2_(snapshot, weather.localDate, history)
+    : null;
+}
+
+function expectedEasyShoeIdV2_(archetype, rotation) {
+  return archetype === 'easy' && rotation ? rotation.easyAnchorShoeId : undefined;
+}
+
+function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance, rotation) {
+  rotation = plannerRotationContextV2_(snapshot, weather, history, rotation);
   var prompt = [
     "You are planning Kevin's real wardrobe for an ordinary day with no inferred special event.",
     'Every available item is visible in the complete slot-specific atlases and JSON item index. Reference items only by their short label (T…, B…, L…, S…) exactly as printed in the index and atlases. Do not invent, shop, or omit an item because it is unfamiliar.',
     'Each item profile lists primaryColorFamily, secondaryColorFamily, and accentColors verified from its photographs when available. Treat those profile colors as ground truth for what colors exist; use the images to judge how the colors relate.',
-    'Weather appropriateness is mandatory. Visual coherence matters more than novelty. Daily history is a rotation signal, not an absolute prohibition, except exact combinations from the prior 14 days may not repeat.',
+    'Garment and layer weather suitability remain mandatory; footwear is precipitation-exempt. Visual coherence matters more than novelty. Daily history is a rotation signal, not an absolute prohibition, except exact combinations from the prior 14 days may not repeat.',
     'Saved outfits are style-grammar examples, never unlabeled templates. Never reproduce the exact core trio of a saved outfit. Sharing two core pieces is acceptable only when the third piece meaningfully changes the look.',
     'Build a deliberate palette before choosing ids. Every candidate needs a concrete cross-item color hook: an accent echo, tonal bridge, analogous relationship, complementary contrast, or precise trim/material link visible in the images. Merely saying that black, grey, or white pieces "let the top stand out" is not a color strategy.',
     'For a graphic, patterned, jersey, or multicolor top, inspect its secondary and accent colors. Prefer a bottom or shoe that subtly picks up one of those colors, or creates a controlled complementary relationship. Do not default both the bottom and shoes to achromatic black/grey/white when a more intentional color connection is available in the wardrobe.',
@@ -65,6 +93,7 @@ function plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidanc
     'ARCHETYPE BRIEF: ' + archetypeBriefV2_(archetype),
     'WEATHER PROFILE:\n' + JSON.stringify(modelWeatherViewV2_(weather))
   ];
+  if (rotation) prompt.push(plannerShoeRotationGuidanceV2_(archetype, rotation, snapshot));
   var extremeHeatContract = extremeHeatPolishedCasualContractV2_(archetype, weather);
   if (extremeHeatContract) prompt.push(extremeHeatContract);
   prompt = prompt.concat([
@@ -96,7 +125,7 @@ function resolvePlannerResponseForValidationV2_(response, snapshot) {
   return plannerResponseCanResolveLabelsV2_(response) ? resolveLabelsV2_(response, snapshot) : response;
 }
 
-function validatePlannerResponseSafelyV2_(response, archetype, snapshot) {
+function validatePlannerResponseSafelyV2_(response, archetype, snapshot, expectedEasyShoeId) {
   if (response && typeof response === 'object' && !Array.isArray(response) && Array.isArray(response.candidates)) {
     var recordsAreSafe = response.candidates.every(function(candidate) {
       return candidate && typeof candidate === 'object' && !Array.isArray(candidate) &&
@@ -105,7 +134,7 @@ function validatePlannerResponseSafelyV2_(response, archetype, snapshot) {
     });
     if (!recordsAreSafe) return ['planner candidates must be object records with array itemIds and potentialRisks'];
   }
-  return validatePlannerResponseV2_(response, archetype, snapshot);
+  return validatePlannerResponseV2_(response, archetype, snapshot, expectedEasyShoeId);
 }
 
 function repairPromptStringV2_(value, snapshot) {
@@ -157,8 +186,9 @@ function modelFacingInvalidPlannerCandidatesV2_(candidates, snapshot) {
   });
 }
 
-function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history, selectionGuidance) {
-  var parts = plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance);
+function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, weather, history, selectionGuidance, rotation) {
+  rotation = plannerRotationContextV2_(snapshot, weather, history, rotation);
+  var parts = plannerPartsV2_(archetype, snapshot, weather, history, selectionGuidance, rotation);
   invalidResponse = invalidResponse && typeof invalidResponse === 'object' && !Array.isArray(invalidResponse) ? invalidResponse : {};
   var modelInvalidResponse = {
     archetype: typeof invalidResponse.archetype === 'string' ? repairPromptStringV2_(invalidResponse.archetype, snapshot) : archetype,
@@ -167,7 +197,7 @@ function repairPlannerResponseV2_(archetype, invalidResponse, errors, snapshot, 
   parts.unshift({ text: 'Repair the planner response below. Fix every listed structural error while preserving strong valid candidates. Do not locally explain the repair.\nERRORS:\n' + repairPromptErrorsV2_(errors, snapshot).join('\n') + '\nINVALID RESPONSE:\n' + JSON.stringify(modelInvalidResponse) });
   var raw = callGeminiV2_('repair', parts, PLANNER_SCHEMA_V2, 0.25);
   var repaired = resolvePlannerResponseForValidationV2_(raw, snapshot);
-  var repairedErrors = validatePlannerResponseSafelyV2_(repaired, archetype, snapshot);
+  var repairedErrors = validatePlannerResponseSafelyV2_(repaired, archetype, snapshot, expectedEasyShoeIdV2_(archetype, rotation));
   if (repairedErrors.length) throw new Error(archetype + ' planner repair failed: ' + repairedErrors.join('; '));
   return repaired;
 }
@@ -203,21 +233,24 @@ function replanArchetypeV2_(archetype, snapshot, weather, history, failureNotes,
     'Your previous five candidates failed because:\n' + JSON.stringify(modelFacingReplanFailureNotesV2_(failureNotes, snapshot)),
     'Other looks in today\'s set already use these items; prefer alternatives:\n' + avoidLabels.join(', ')
   ].join('\n\n');
-  var parts = plannerPartsV2_(archetype, snapshot, weather, history, guidance);
+  var rotation = plannerRotationContextV2_(snapshot, weather, history);
+  var parts = plannerPartsV2_(archetype, snapshot, weather, history, guidance, rotation);
   var raw = callGeminiV2_('planner', parts, PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
   var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
-  var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
+  var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot, expectedEasyShoeIdV2_(archetype, rotation));
   return errors.length
-    ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history, guidance)
+    ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history, guidance, rotation)
     : response;
 }
 
 function runAllPlannersV2_(snapshot, weather, history) {
   var temperature = getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9);
+  var rotation = plannerRotationContextV2_(snapshot, weather, history);
+  if (rotation) console.log('Daily shoe rotation: ' + JSON.stringify(shoeRotationDiagnosticSummaryV2_(rotation, snapshot)));
   var calls = DAILY_V2.ARCHETYPES.map(function(archetype) {
     return {
       context: archetype,
-      parts: plannerPartsV2_(archetype, snapshot, weather, history),
+      parts: plannerPartsV2_(archetype, snapshot, weather, history, null, rotation),
       schema: PLANNER_SCHEMA_V2,
       temperature: temperature
     };
@@ -226,8 +259,8 @@ function runAllPlannersV2_(snapshot, weather, history) {
   return rawResponses.map(function(raw, index) {
     var archetype = DAILY_V2.ARCHETYPES[index];
     var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
-    var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
-    return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
+    var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot, expectedEasyShoeIdV2_(archetype, rotation));
+    return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history, null, rotation) : response;
   });
 }
 
@@ -236,10 +269,11 @@ function runPlannerV2(archetype) {
   var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
   var weather = fetchDailyWeatherV2();
   var history = dailyHistoryContextV2_(weather.localDate, snapshot);
-  var raw = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
+  var rotation = plannerRotationContextV2_(snapshot, weather, history);
+  var raw = callGeminiV2_('planner', plannerPartsV2_(archetype, snapshot, weather, history, null, rotation), PLANNER_SCHEMA_V2, getNumberPropertyV2_('DAILY_MODEL_TEMPERATURE', 0.9));
   var response = resolvePlannerResponseForValidationV2_(raw, snapshot);
-  var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot);
-  return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history) : response;
+  var errors = validatePlannerResponseSafelyV2_(response, archetype, snapshot, expectedEasyShoeIdV2_(archetype, rotation));
+  return errors.length ? repairPlannerResponseV2_(archetype, response, errors, snapshot, weather, history, null, rotation) : response;
 }
 
 function runAllPlannersV2() {

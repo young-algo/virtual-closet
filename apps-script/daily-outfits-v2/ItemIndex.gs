@@ -70,8 +70,9 @@ function historyTextForModelV2_(value, snapshot) {
   });
 }
 
-function modelProfileViewV2_(profile, snapshot) {
+function modelProfileViewV2_(profile, snapshot, slot) {
   var keys = ['warmth', 'breathability', 'rainSafety', 'windProtection', 'formality', 'silhouette', 'patternIntensity', 'primaryColorFamily', 'secondaryColorFamily', 'accentColors'];
+  if (slot === 'shoes') keys = keys.filter(function(key) { return key !== 'rainSafety'; });
   var numberKeys = ['warmth', 'breathability', 'windProtection', 'formality', 'patternIntensity'];
   var stringKeys = ['rainSafety', 'silhouette', 'primaryColorFamily', 'secondaryColorFamily'];
   return keys.reduce(function(view, key) {
@@ -98,7 +99,7 @@ function compactItemIndexV2_(snapshot) {
       if (typeof item[key] === 'string') view[key] = historyTextForModelV2_(item[key], snapshot);
     });
     view.styleCode = typeof item.styleCode === 'string' ? historyTextForModelV2_(item.styleCode, snapshot) : null;
-    view.profile = modelProfileViewV2_(item.profile, snapshot);
+    view.profile = modelProfileViewV2_(item.profile, snapshot, item.slot);
     return view;
   });
 }

@@ -30,7 +30,7 @@ const plannerValidator = new Function(`
   ${apps('Taste.gs')}
   ${apps('PlannerValidation.gs')}
   return validatePlannerResponseV2_;
-`)() as (response: unknown, archetype: string, snapshot: unknown) => string[];
+`)() as (response: unknown, archetype: string, snapshot: unknown, expectedEasyShoeId?: string) => string[];
 
 const weatherSafety = new Function(`
   var DAILY_V2 = { ARCHETYPES: ['easy','polished-casual','expressive'], REQUIRED_SLOTS: ['top','bottom','shoes'] };
@@ -848,6 +848,28 @@ describe('Apps Script contracts', () => {
     expect(plannerValidator(invented, 'easy', snapshot).join(' ')).toMatch(/invented id/);
     const duplicate = structuredClone(valid); duplicate.candidates[0].bottomId = 'top'; duplicate.candidates[0].itemIds = ['top', 'top', 'shoe'];
     expect(plannerValidator(duplicate, 'easy', snapshot).join(' ')).toMatch(/wrong slot|repeats/);
+  });
+
+  it('requires every Easy candidate to use the supplied shoe anchor', () => {
+    const anchored = {
+      archetype: 'easy',
+      candidates: Array.from({ length: 5 }, (_, index) => ({
+        ...candidate(index),
+        shoeId: 'shoe-0',
+        itemIds: [`top-${index}`, `bottom-${index}`, 'shoe-0'],
+      })),
+    };
+    expect(plannerValidator(anchored, 'easy', snapshot, 'shoe-0')).toEqual([]);
+
+    const wrongShoe = structuredClone(anchored);
+    wrongShoe.candidates[2] = {
+      ...wrongShoe.candidates[2],
+      shoeId: 'shoe-1',
+      itemIds: ['top-2', 'bottom-2', 'shoe-1'],
+    };
+    expect(plannerValidator(wrongShoe, 'easy', snapshot, 'shoe-0')).toContain(
+      'candidate[2].shoeId must use the required Easy shoe anchor'
+    );
   });
 
   it('blocks exact manual core trios but permits transformed and AI-sourced saves', () => {
