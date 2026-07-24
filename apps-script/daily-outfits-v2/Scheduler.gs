@@ -208,6 +208,13 @@ function runDailyOutfitScheduler() {
     var sendState = assertUnambiguousDailySendStateV2_(properties, localDate);
     var resolvedSentDate = sendState.marker || (sendState.lastSentDate === localDate ? localDate : null);
     if (resolvedSentDate) {
+      if (!sendState.marker && dailySendFinalizedV2_(resolvedSentDate)) {
+        // The in-progress marker is deleted only at the end of finalization, and the sent
+        // bundle is already recorded in history, so nothing is left to reconcile.
+        // Re-validating the sent bundle here would fail for the rest of the day whenever
+        // the wardrobe snapshot legitimately changes after the email went out.
+        return { ok: true, skipped: 'already-sent' };
+      }
       var reconciliation = reconcilePersistedSentBundleV2_(resolvedSentDate, snapshot);
       state = reconciliation.state;
       if (resolvedSentDate === localDate) {

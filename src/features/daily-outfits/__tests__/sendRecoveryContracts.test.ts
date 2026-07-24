@@ -905,6 +905,154 @@ describe('resolved send recovery', () => {
     expect(manual.events.at(-1)).toBe('lock:release');
   });
 
+  it('stays quiet for the rest of the day once the send is finalized and the wardrobe changes', () => {
+    const pending = pendingFixture('2026-07-14', false);
+    const snapshot = snapshotFixture(pending);
+    // The morning send finalized completely: marker deleted, LAST_SENT_DATE_V2 recorded.
+    const values: Record<string, string> = { LAST_SENT_DATE_V2: '2026-07-14' };
+    // Kevin edits an item after the email arrives, so the wardrobe re-syncs.
+    snapshot.wardrobeFingerprint = 'wardrobe-after-a-midday-edit';
+    const events: string[] = [];
+    const alerts: string[] = [];
+    const scope = {
+      DAILY_V2: daily,
+      LockService: { getScriptLock: () => ({
+        tryLock: () => true,
+        releaseLock: () => events.push('lock:release'),
+      }) },
+      assertFreshSnapshotV2_: () => snapshot,
+      loadSnapshotV2_: () => snapshot,
+      applySnapshotSettingsV2_: () => ({
+        recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC',
+        deliveryHour: 6, deliveryMinute: 45, generationLeadMinutes: 75,
+      }),
+      getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+      localDateV2_: () => '2026-07-14',
+      localMinutesV2_: () => 780, // 13:00, well past the 08:00 alert cutoff
+      getDailyPropertiesV2_: () => ({
+        getProperty: (key: string) => values[key] ?? null,
+        setProperty: (key: string, value: string) => { events.push(`set:${key}`); values[key] = value; },
+        deleteProperty: (key: string) => { events.push(`delete:${key}`); delete values[key]; },
+      }),
+      getBooleanPropertyV2_: () => false,
+      loadPendingV2_: () => structuredClone(pending),
+      loadJobStateV2_: () => ({
+        stage: 'sent',
+        qualityPolicyVersion: daily.QUALITY_POLICY_VERSION,
+        localDate: '2026-07-14',
+        wardrobeFingerprint: pending.wardrobeFingerprint,
+        attemptCounts: {},
+      }),
+      saveJobStateV2_: () => events.push('state'),
+      loadHistoryV2_: () => [{ localDate: '2026-07-14', recommendations: pending.bundle.recommendations }],
+      saveHistoryV2_: () => events.push('history'),
+      Utilities: utilities,
+      MailApp: { sendEmail: () => events.push('mail') },
+      sendDailyBundleNowV2_: () => events.push('mail'),
+      sendOperationalAlertV2_: (reason: string) => alerts.push(reason),
+      console: { error: () => undefined },
+    };
+
+    const result = evaluateAppsScript<() => unknown>(
+      [...runtimeFiles, 'Scheduler.gs'],
+      'runDailyOutfitScheduler',
+      scope,
+    )();
+
+    expect(result).toMatchObject({ ok: true, skipped: 'already-sent' });
+    expect(alerts).toEqual([]);
+    expect(events).not.toContain('mail');
+    expect(events).not.toContain('history');
+  });
+
+  it('returns the finalized bundle from the public sender after a midday wardrobe change', () => {
+    const pending = pendingFixture('2026-07-14', false);
+    const snapshot = snapshotFixture(pending);
+    const values: Record<string, string> = { LAST_SENT_DATE_V2: '2026-07-14' };
+    snapshot.wardrobeFingerprint = 'wardrobe-after-a-midday-edit';
+    const events: string[] = [];
+    const scope = {
+      DAILY_V2: daily,
+      LockService: { getScriptLock: () => ({
+        tryLock: () => true,
+        releaseLock: () => events.push('lock:release'),
+      }) },
+      assertFreshSnapshotV2_: () => snapshot,
+      loadSnapshotV2_: () => snapshot,
+      applySnapshotSettingsV2_: () => ({
+        recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC',
+      }),
+      getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+      localDateV2_: () => '2026-07-14',
+      getDailyPropertiesV2_: () => ({
+        getProperty: (key: string) => values[key] ?? null,
+        setProperty: (key: string, value: string) => { events.push(`set:${key}`); values[key] = value; },
+        deleteProperty: (key: string) => { events.push(`delete:${key}`); delete values[key]; },
+      }),
+      loadPendingV2_: () => structuredClone(pending),
+      loadJobStateV2_: () => null,
+      saveJobStateV2_: () => events.push('state'),
+      loadHistoryV2_: () => [{ localDate: '2026-07-14', recommendations: pending.bundle.recommendations }],
+      saveHistoryV2_: () => events.push('history'),
+      Utilities: utilities,
+      MailApp: { sendEmail: () => events.push('mail') },
+    };
+
+    const result = evaluateAppsScript<() => unknown>(
+      [...runtimeFiles, 'Email.gs'],
+      'sendDailyBundleNowV2',
+      scope,
+    )();
+
+    expect(result).toEqual(pending.bundle);
+    expect(events).not.toContain('mail');
+    expect(events).not.toContain('history');
+    expect(events.at(-1)).toBe('lock:release');
+  });
+
+  it('still fails closed in the public sender when no finalized bundle survives', () => {
+    const pending = pendingFixture('2026-07-14', false);
+    const snapshot = snapshotFixture(pending);
+    const values: Record<string, string> = { LAST_SENT_DATE_V2: '2026-07-14' };
+    const events: string[] = [];
+    const scope = {
+      DAILY_V2: daily,
+      LockService: { getScriptLock: () => ({
+        tryLock: () => true,
+        releaseLock: () => events.push('lock:release'),
+      }) },
+      assertFreshSnapshotV2_: () => snapshot,
+      loadSnapshotV2_: () => snapshot,
+      applySnapshotSettingsV2_: () => ({
+        recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC',
+      }),
+      getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
+      localDateV2_: () => '2026-07-14',
+      getDailyPropertiesV2_: () => ({
+        getProperty: (key: string) => values[key] ?? null,
+        setProperty: (key: string, value: string) => { events.push(`set:${key}`); values[key] = value; },
+        deleteProperty: (key: string) => { events.push(`delete:${key}`); delete values[key]; },
+      }),
+      // The send finalized, but the persisted bundle is gone.
+      loadPendingV2_: () => null,
+      loadJobStateV2_: () => null,
+      saveJobStateV2_: () => events.push('state'),
+      loadHistoryV2_: () => [{ localDate: '2026-07-14', recommendations: pending.bundle.recommendations }],
+      saveHistoryV2_: () => events.push('history'),
+      Utilities: utilities,
+      MailApp: { sendEmail: () => events.push('mail') },
+    };
+
+    expect(() => evaluateAppsScript<() => unknown>(
+      [...runtimeFiles, 'Email.gs'],
+      'sendDailyBundleNowV2',
+      scope,
+    )()).toThrowError('Sent bundle for 2026-07-14 is no longer available');
+    expect(events).not.toContain('mail');
+    expect(events).not.toContain('history');
+    expect(events.at(-1)).toBe('lock:release');
+  });
+
   it('does not let the internal sender replace a different resolved marker', () => {
     const pending = pendingFixture('2026-07-15', false);
     const snapshot = snapshotFixture(pending);

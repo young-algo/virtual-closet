@@ -821,6 +821,28 @@ function validSentBundleForReconciliationV2_(pending, snapshot, sentDate) {
   return validFullBundleReadyV2_(pending, validationSnapshot, sentDate);
 }
 
+function dailySendFinalizedV2_(sentDate) {
+  var history = null;
+  try { history = loadHistoryV2_(); } catch (_ignoredHistory) { return false; }
+  if (!Array.isArray(history)) return false;
+  return history.some(function(entry) {
+    return validOwnDailyRecordV2_(entry) &&
+      ownNonEmptyDailyStringV2_(entry, 'localDate') && entry.localDate === sentDate &&
+      ownDailyJobKeyV2_(entry, 'recommendations') &&
+      validOwnDailyArrayV2_(entry.recommendations) && entry.recommendations.length >= 1;
+  });
+}
+
+function persistedSentBundleV2_(sentDate) {
+  var pending = null;
+  try { pending = loadPendingV2_(); } catch (_ignoredPending) {}
+  if (!validOwnDailyObjectV2_(pending, 'bundle') ||
+      !validCurrentBundleV2_(pending, pending.bundle, sentDate)) {
+    throw new Error('Sent bundle for ' + sentDate + ' is no longer available');
+  }
+  return pending.bundle;
+}
+
 function reconcilePersistedSentBundleV2_(sentDate, snapshot) {
   var pending = null;
   try { pending = loadPendingV2_(); } catch (_ignoredPending) {}

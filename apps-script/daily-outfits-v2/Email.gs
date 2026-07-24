@@ -158,6 +158,12 @@ function sendDailyBundleNowV2() {
     var sendState = assertUnambiguousDailySendStateV2_(properties, currentLocalDate);
     var resolvedSentDate = sendState.marker || (sendState.lastSentDate === currentLocalDate ? currentLocalDate : null);
     if (resolvedSentDate) {
+      if (!sendState.marker && dailySendFinalizedV2_(resolvedSentDate)) {
+        // Finalization completed for currentLocalDate, so there is nothing to reconcile.
+        // Return the bundle that was actually sent instead of re-deriving it from a
+        // wardrobe snapshot that may have changed since.
+        return persistedSentBundleV2_(resolvedSentDate);
+      }
       var reconciliation = reconcilePersistedSentBundleV2_(resolvedSentDate, snapshot);
       return resolvedSentDate === currentLocalDate ? reconciliation.bundle : reconciliation;
     }
