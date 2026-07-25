@@ -87,6 +87,17 @@ function App() {
       try {
         let localSneakers: SneakerItem[] = JSON.parse(savedSneakers);
 
+        const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
+          'user_sneaker_1783863184667': 'sneaker_DO9404-400',
+          'user_sneaker_1783048231645': 'sneaker_IF0666-400'
+        };
+
+        // Migrate legacy IDs from previous catalog versions
+        localSneakers = localSneakers.map(item => ({
+          ...item,
+          id: SNEAKER_ID_MIGRATIONS[item.id] || item.id
+        }));
+
         // Drop entries removed from the base manifest, then merge in new manifest
         // pairs the user hasn't explicitly deleted. User-added pairs ('user_'
         // prefix) live only in localStorage and are always kept.
@@ -136,7 +147,12 @@ function App() {
     const savedPacked = localStorage.getItem('closet_packed_items');
     if (savedPacked) {
       try {
-        const packedIds: string[] = JSON.parse(savedPacked);
+        const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
+          'user_sneaker_1783863184667': 'sneaker_DO9404-400',
+          'user_sneaker_1783048231645': 'sneaker_IF0666-400'
+        };
+        const rawPackedIds: string[] = JSON.parse(savedPacked);
+        const packedIds = rawPackedIds.map(id => SNEAKER_ID_MIGRATIONS[id] || id);
         // Map saved IDs back to our active items state, across both closets
         const savedItems = localStorage.getItem('closet_items');
         const activeItems: ClosetItem[] = savedItems ? JSON.parse(savedItems) : closetData;
@@ -157,7 +173,15 @@ function App() {
     const savedOutfits = localStorage.getItem('closet_outfits');
     if (savedOutfits) {
       try {
-        return JSON.parse(savedOutfits);
+        const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
+          'user_sneaker_1783863184667': 'sneaker_DO9404-400',
+          'user_sneaker_1783048231645': 'sneaker_IF0666-400'
+        };
+        const parsedOutfits: Outfit[] = JSON.parse(savedOutfits);
+        return parsedOutfits.map(outfit => ({
+          ...outfit,
+          itemIds: outfit.itemIds.map(id => SNEAKER_ID_MIGRATIONS[id] || id)
+        }));
       } catch (e) {
         console.error('Failed to parse outfits from localStorage', e);
       }
