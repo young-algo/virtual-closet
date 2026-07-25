@@ -1813,6 +1813,7 @@ describe('Apps Script contracts', () => {
           applySnapshotSettingsV2_: (value: unknown) => value,
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => {
             events.push('mail');
@@ -1879,6 +1880,7 @@ describe('Apps Script contracts', () => {
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => {
             events.push('mail');
@@ -1955,6 +1957,7 @@ describe('Apps Script contracts', () => {
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => events.push('mail') },
           loadHistoryV2_: () => structuredClone(history),
@@ -2103,6 +2106,7 @@ describe('Apps Script contracts', () => {
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => { events.push('mail'); } },
           loadHistoryV2_: () => [],
@@ -2152,6 +2156,7 @@ describe('Apps Script contracts', () => {
         mergeEmailFeedbackIntoHistoryV2_: () => { scheduledEvents.push('feedback-history'); },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
         savedOutfitExactCopyV2_: () => null,
+        feedbackLinkUrlV2_: () => 'https://example.com/feedback',
         MailApp: { sendEmail: () => { scheduledEvents.push('mail'); } },
         loadHistoryV2_: () => [],
         saveHistoryV2_: () => { scheduledEvents.push('sent-history'); },

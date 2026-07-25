@@ -5,7 +5,8 @@ const storeScope = (overrides: Record<string, unknown> = {}) => ({
   DAILY_V2: {
     EMAIL_FEEDBACK_FILE: 'virtual-closet-daily-v2-email-feedback.json',
     MAX_EMAIL_FEEDBACK_AGE_DAYS: 30,
-    FEEDBACK_VALUES: ['liked', 'disliked', 'wore']
+    FEEDBACK_VALUES: ['liked', 'disliked', 'wore'],
+    FEEDBACK_CONTENTION_MS: 10000
   },
   loadEmailFeedbackV2_: () => [],
   saveEmailFeedbackV2_: vi.fn(),
@@ -108,6 +109,62 @@ describe('feedback upsert', () => {
     );
     expect(() => upsert('2026-07-25', 'easy-1', 'wore', 1))
       .toThrow('Corrupt email feedback store');
+  });
+
+  it('warns on contending writes: different value within the contention window', () => {
+    const save = vi.fn();
+    const warn = vi.fn();
+    const existing = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'liked', createdAt: 1000 }];
+    const upsert = evaluateAppsScript<(d: string, c: string, v: string, t: number) => void>(
+      ['Feedback.gs'], 'upsertEmailFeedbackV2_',
+      storeScope({
+        loadEmailFeedbackV2_: () => existing,
+        saveEmailFeedbackV2_: save,
+        console: { warn: warn, log: vi.fn() }
+      })
+    );
+    upsert('2026-07-25', 'easy-1', 'disliked', 9000);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = warn.mock.calls[0][0] as string;
+    expect(message).toContain('2026-07-25');
+    expect(message).toContain('easy-1');
+    expect(message).toContain('liked');
+    expect(message).toContain('disliked');
+    expect(save).toHaveBeenCalledWith([
+      { localDate: '2026-07-25', candidateId: 'easy-1', value: 'disliked', createdAt: 9000 }
+    ]);
+  });
+
+  it('does not warn when the same verb is rewritten within the contention window', () => {
+    const save = vi.fn();
+    const warn = vi.fn();
+    const existing = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'liked', createdAt: 1000 }];
+    const upsert = evaluateAppsScript<(d: string, c: string, v: string, t: number) => void>(
+      ['Feedback.gs'], 'upsertEmailFeedbackV2_',
+      storeScope({
+        loadEmailFeedbackV2_: () => existing,
+        saveEmailFeedbackV2_: save,
+        console: { warn: warn, log: vi.fn() }
+      })
+    );
+    upsert('2026-07-25', 'easy-1', 'liked', 9000);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when a different verb arrives outside the contention window', () => {
+    const save = vi.fn();
+    const warn = vi.fn();
+    const existing = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'liked', createdAt: 1000 }];
+    const upsert = evaluateAppsScript<(d: string, c: string, v: string, t: number) => void>(
+      ['Feedback.gs'], 'upsertEmailFeedbackV2_',
+      storeScope({
+        loadEmailFeedbackV2_: () => existing,
+        saveEmailFeedbackV2_: save,
+        console: { warn: warn, log: vi.fn() }
+      })
+    );
+    upsert('2026-07-25', 'easy-1', 'disliked', 11001);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
@@ -412,5 +469,44 @@ describe('doGet feedback handler', () => {
     });
     const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', false);
     expect(runGet(scope, token).html).toContain("isn't valid");
+  });
+});
+
+describe('email feedback rendering', () => {
+  // No escapeHtmlV2_ override: Email.gs declares it, and a function declaration
+  // in the concatenated source shadows any same-named injected parameter.
+  const emailScope = () => tokenScope();
+
+  it('renders three links per look', () => {
+    const html = evaluateAppsScript<(d: string, c: string, t: boolean) => string>(
+      ['Email.gs', 'Feedback.gs'], 'feedbackRowHtmlV2_', emailScope()
+    )('2026-07-25', 'easy-1', false);
+    expect(html.match(/<a href="https:/g)).toHaveLength(3);
+    expect(html).toContain('LIKE');
+    expect(html).toContain('NOT FOR ME');
+    expect(html).toContain('WORE THIS');
+  });
+
+  it('gives each link a tappable target', () => {
+    const html = evaluateAppsScript<(d: string, c: string, t: boolean) => string>(
+      ['Email.gs', 'Feedback.gs'], 'feedbackRowHtmlV2_', emailScope()
+    )('2026-07-25', 'easy-1', false);
+    expect(html.match(/display:inline-block;padding:14px 0/g)).toHaveLength(3);
+  });
+
+  it('renders three labelled plain-text links', () => {
+    const lines = evaluateAppsScript<(d: string, c: string, t: boolean) => string[]>(
+      ['Email.gs', 'Feedback.gs'], 'feedbackPlainLinesV2_', emailScope()
+    )('2026-07-25', 'easy-1', false);
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe('Rate this look:');
+    expect(lines.slice(1).every(line => line.includes('https://'))).toBe(true);
+  });
+
+  it('marks test-delivery links so the landing page records nothing', () => {
+    const live = evaluateAppsScript<(d: string, c: string, t: boolean) => string>(
+      ['Email.gs', 'Feedback.gs'], 'feedbackRowHtmlV2_', emailScope()
+    );
+    expect(live('2026-07-25', 'easy-1', true)).not.toBe(live('2026-07-25', 'easy-1', false));
   });
 });

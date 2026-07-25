@@ -465,6 +465,8 @@ describe('Encore email rendering', () => {
       },
       getDailyConfigV2_: () => ({ appUrl: '' }),
       validFullBundleReadyV2_: () => true,
+      feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+        `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
       console,
     },
   );
@@ -521,6 +523,8 @@ describe('Encore email rendering', () => {
         getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '' }),
         applySnapshotSettingsV2_: (value: unknown) => value,
         validFullBundleReadyV2_: () => true,
+        feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+          `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
         MailApp: { sendEmail: (value: Record<string, unknown>) => deliveries.push(value) },
         console,
       },
@@ -1254,6 +1258,8 @@ describe('Encore bundle assembly and persistence', () => {
         Utilities: { formatDate: () => 'Tuesday, July 14' },
         MailApp: { sendEmail: () => events.push('mail') },
         recordSentBundleV2_: () => events.push('history'),
+        feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+          `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
       },
     );
 

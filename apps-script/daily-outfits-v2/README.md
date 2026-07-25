@@ -15,7 +15,6 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
    - `RECIPIENT_EMAIL` — defaults to `kevincollinsturner@gmail.com`
    - `LOCATION_LABEL`, `LATITUDE`, `LONGITUDE`, `TIME_ZONE`
    - `DELIVERY_HOUR`, `DELIVERY_MINUTE`, `GENERATION_LEAD_MINUTES`
-   - `APP_URL` — optional read-only link back to the closet
    - `OPEN_METEO_API_KEY` — optional paid Open-Meteo key; when set, weather requests use `customer-api.open-meteo.com` with a per-key quota instead of the free per-IP endpoint
    - `DAILY_PLANNER_MODEL`, `DAILY_CRITIC_MODEL`, `DAILY_CURATOR_MODEL`, `DAILY_REPAIR_MODEL`
    - `DAILY_MODEL_TEMPERATURE` — optional; defaults to `0.9` for planners

@@ -41,9 +41,19 @@ function upsertEmailFeedbackV2_(localDate, candidateId, value, createdAt) {
   var entry = { localDate: localDate, candidateId: candidateId, value: value, createdAt: createdAt };
   if (!validFeedbackEntryV2_(entry)) throw new Error('Invalid feedback signal');
   var stored = readEmailFeedbackStoreV2_();
+  var replaced = null;
   var next = stored.filter(function(existing) {
-    return !(existing.localDate === localDate && existing.candidateId === candidateId);
+    if (existing.localDate === localDate && existing.candidateId === candidateId) {
+      replaced = existing;
+      return false;
+    }
+    return true;
   });
+  if (replaced && replaced.value !== value &&
+      Math.abs(createdAt - replaced.createdAt) <= DAILY_V2.FEEDBACK_CONTENTION_MS) {
+    console.warn('Feedback contention for ' + localDate + ' / ' + candidateId + ': ' +
+      replaced.value + ' -> ' + value);
+  }
   next.push(entry);
   saveEmailFeedbackV2_(next);
 }

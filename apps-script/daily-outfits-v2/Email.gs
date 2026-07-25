@@ -12,6 +12,30 @@ function archetypeEmailLabelV2_(value) {
   return value === 'polished-casual' ? 'POLISHED CASUAL' : value.toUpperCase();
 }
 
+var FEEDBACK_EMAIL_LABELS_V2 = [
+  ['liked', 'LIKE'],
+  ['disliked', 'NOT FOR ME'],
+  ['wore', 'WORE THIS']
+];
+
+function feedbackRowHtmlV2_(localDate, candidateId, testMode) {
+  var cells = FEEDBACK_EMAIL_LABELS_V2.map(function(pair) {
+    return '<td style="width:33%;text-align:center">' +
+      '<a href="' + escapeHtmlV2_(feedbackLinkUrlV2_(localDate, candidateId, pair[0], testMode)) +
+      '" style="display:inline-block;padding:14px 0;font:600 10px monospace;letter-spacing:2px;color:#111;text-decoration:none">' +
+      pair[1] + '</a></td>';
+  }).join('');
+  return '<table role="presentation" cellpadding="0" cellspacing="0" ' +
+    'style="width:100%;table-layout:fixed;margin-top:16px;border-top:1px solid #deddd8"><tr>' +
+    cells + '</tr></table>';
+}
+
+function feedbackPlainLinesV2_(localDate, candidateId, testMode) {
+  return ['Rate this look:'].concat(FEEDBACK_EMAIL_LABELS_V2.map(function(pair) {
+    return '  ' + pair[1] + ' -> ' + feedbackLinkUrlV2_(localDate, candidateId, pair[0], testMode);
+  }));
+}
+
 function generatedOutfitCountCopyV2_(count) {
   if (count === 1) return "Today's outfit";
   if (count === 2 || count === 3) return "Today's " + count + " outfits";
@@ -89,6 +113,7 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
     if (rec.colorHook) plain.push('Color hook: ' + rec.colorHook);
     plain.push(rec.whyItWorks, 'Weather: ' + rec.weatherNote);
     pieces.forEach(function(item) { plain.push(item.slot.charAt(0).toUpperCase() + item.slot.slice(1) + ' — ' + item.name); });
+    feedbackPlainLinesV2_(bundle.localDate, rec.candidateId, testMode).forEach(function(line) { plain.push(line); });
     plain.push('');
     return '<section style="padding:32px 0;border-top:1px solid #deddd8">' +
       '<div style="font:600 10px monospace;letter-spacing:2px;color:#777">0' + (index + 1) + ' ' + archetypeEmailLabelV2_(rec.archetype) + '</div>' +
@@ -98,12 +123,12 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
       '<p style="margin:' + (rec.colorHook ? '6px' : '20px') + ' 0 8px;font:400 15px/1.6 Arial,sans-serif;color:#222">' + escapeHtmlV2_(rec.whyItWorks) + '</p>' +
       '<p style="margin:0 0 16px;font:400 13px/1.5 Arial,sans-serif;color:#666"><strong>Weather:</strong> ' + escapeHtmlV2_(rec.weatherNote) + '</p>' +
       '<p style="margin:0;font:400 12px/1.7 monospace;color:#777">' + pieces.map(function(item) { return escapeHtmlV2_(item.slot.toUpperCase() + ' — ' + item.name); }).join('<br>') + '</p>' +
+      feedbackRowHtmlV2_(bundle.localDate, rec.candidateId, testMode) +
       '</section>';
   }).join('');
   var encoreSection = renderEncoreEmailV2_(bundle, snapshot, plain, inlineImages);
   var date = new Date(bundle.localDate + 'T12:00:00');
   var dateLabel = Utilities.formatDate(date, bundle.weather.timezone, 'EEEE, MMMM d');
-  var appLink = getDailyConfigV2_().appUrl ? '<p style="margin:30px 0 0"><a href="' + escapeHtmlV2_(getDailyConfigV2_().appUrl) + '" style="font:600 11px monospace;color:#111;letter-spacing:1px">OPEN LATEST BUNDLE →</a></p>' : '';
   var html = '<!doctype html><html><body style="margin:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:42px 24px;font-family:Arial,sans-serif;color:#111">' +
     (testMode ? '<div style="padding:9px 12px;background:#111;color:#fff;font:600 10px monospace;letter-spacing:2px">TEST DELIVERY</div>' : '') +
     '<div style="padding:26px 0 32px"><div style="font:600 11px monospace;letter-spacing:4px">WARDROBE</div><p style="margin:10px 0 24px;color:#666;font-size:13px">' + escapeHtmlV2_(dateLabel + ' · ' + bundle.weather.locationLabel) + '</p>' +
@@ -115,7 +140,7 @@ function renderDailyEmailV2_(bundle, snapshot, testMode, pending, expectedLocalD
       ? '<p style="margin:0 0 24px;color:#666;font:400 13px/1.6 Arial,sans-serif">' +
           escapeHtmlV2_(omissionCopy) + '</p>'
       : '') + '</div>' +
-    sections + encoreSection + appLink + '<p style="margin:42px 0 0;color:#aaa;font:400 10px monospace">Generated from the complete synchronized wardrobe. Daily history remains separate from the on-demand stylist.</p></div></body></html>';
+    sections + encoreSection + '<p style="margin:42px 0 0;color:#aaa;font:400 10px monospace">Generated from the complete synchronized wardrobe. Daily history remains separate from the on-demand stylist.</p></div></body></html>';
   return { html: html, plain: plain.join('\n'), inlineImages: inlineImages };
 }
 

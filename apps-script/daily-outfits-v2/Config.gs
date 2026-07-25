@@ -26,7 +26,8 @@ var DAILY_V2 = Object.freeze({
   }),
   REQUIRED_SLOTS: ['top', 'bottom', 'shoes'],
   MAX_EMAIL_FEEDBACK_AGE_DAYS: 30,
-  FEEDBACK_VALUES: ['liked', 'disliked', 'wore']
+  FEEDBACK_VALUES: ['liked', 'disliked', 'wore'],
+  FEEDBACK_CONTENTION_MS: 10000
 });
 
 function getDailyPropertiesV2_() {
@@ -72,7 +73,6 @@ function getDailyConfigV2_() {
     deliveryHour: getNumberPropertyV2_('DELIVERY_HOUR', 6),
     deliveryMinute: getNumberPropertyV2_('DELIVERY_MINUTE', 45),
     generationLeadMinutes: getNumberPropertyV2_('GENERATION_LEAD_MINUTES', 75),
-    appUrl: getDailyPropertiesV2_().getProperty('APP_URL') || '',
     sendOperationalAlerts: getBooleanPropertyV2_('SEND_OPERATIONAL_ALERTS', false)
   };
 }
