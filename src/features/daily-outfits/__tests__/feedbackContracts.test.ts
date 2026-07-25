@@ -313,3 +313,104 @@ describe('feedback drain', () => {
     expect(saves.store).toHaveBeenCalledWith([queuedSignal]);
   });
 });
+
+describe('doGet feedback handler', () => {
+  const pageScope = (overrides: Record<string, unknown> = {}) => ({
+    ...tokenScope(),
+    HtmlService: { createHtmlOutput: (html: string) => ({ html }) },
+    escapeHtmlV2_: (value: string) => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'),
+    localDateV2_: () => '2026-07-25',
+    getDailyConfigV2_: () => ({ timezone: 'America/New_York' }),
+    loadHistoryV2_: () => [{
+      localDate: '2026-07-25',
+      recommendations: [{ candidateId: 'easy-1', name: 'Quiet Morning Ease', itemIds: ['a'] }]
+    }],
+    upsertEmailFeedbackV2_: vi.fn(),
+    ...overrides
+  });
+
+  const runGet = (scope: Record<string, unknown>, parameter: Record<string, string>) =>
+    evaluateAppsScript<(e: unknown) => { html: string }>(
+      ['Taste.gs', 'Feedback.gs', 'FeedbackPage.gs'], 'doGet', scope
+    )({ parameter });
+
+  const signWith = (scope: Record<string, unknown>) =>
+    evaluateAppsScript<(d: string, c: string, v: string, t: boolean) => { fb: string; s: string }>(
+      ['Feedback.gs'], 'signFeedbackTokenV2_', scope
+    );
+
+  it('records the signal and confirms it by name', () => {
+    // Spies on saveEmailFeedbackV2_ (the primitive upsertEmailFeedbackV2_ actually calls)
+    // rather than overriding upsertEmailFeedbackV2_ itself: Feedback.gs declares a real
+    // top-level upsertEmailFeedbackV2_ function, and once Feedback.gs is concatenated into
+    // the same evaluated source as FeedbackPage.gs, that declaration is hoisted and silently
+    // overwrites any scope-injected parameter of the same name (standard JS function-
+    // declaration-shadows-parameter semantics) — so a mock passed as upsertEmailFeedbackV2_
+    // is never actually invoked.
+    const scope = pageScope();
+    const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', false);
+    const result = runGet(scope, token);
+    expect(scope.saveEmailFeedbackV2_).toHaveBeenCalledWith([
+      { localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: expect.any(Number) }
+    ]);
+    expect(result.html).toContain('Recorded');
+    expect(result.html).toContain('wore this');
+    expect(result.html).toContain('Quiet Morning Ease');
+  });
+
+  it('offers the other two verbs as corrections', () => {
+    const scope = pageScope();
+    const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', false);
+    const html = runGet(scope, token).html;
+    expect(html).toContain('LIKE');
+    expect(html).toContain('NOT FOR ME');
+    expect(html).not.toContain('WORE THIS');
+    expect(html.match(/href="https:/g)).toHaveLength(2);
+  });
+
+  it('records nothing for a test-mode token', () => {
+    const scope = pageScope();
+    const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', true);
+    const html = runGet(scope, token).html;
+    expect(scope.saveEmailFeedbackV2_).not.toHaveBeenCalled();
+    expect(html).toContain('Test delivery');
+    expect(html).not.toContain('href="https:');
+  });
+
+  it('falls back to the date when the history entry does not exist yet', () => {
+    const scope = pageScope({ loadHistoryV2_: () => [] });
+    const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', false);
+    const html = runGet(scope, token).html;
+    expect(scope.saveEmailFeedbackV2_).toHaveBeenCalledOnce();
+    expect(html).toContain('Recorded');
+    expect(html).toContain('2026-07-25');
+  });
+
+  it('renders one generic page for a tampered signature', () => {
+    const scope = pageScope();
+    const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', false);
+    const html = runGet(scope, { fb: token.fb, s: 'AAAA' }).html;
+    expect(html).toContain("isn't valid");
+    expect(html).not.toContain('easy-1');
+  });
+
+  it('renders the identical page for an out-of-window date', () => {
+    const scope = pageScope();
+    const stale = signWith(scope)('2026-01-01', 'easy-1', 'wore', false);
+    const bad = runGet(scope, { fb: stale.fb, s: 'AAAA' }).html;
+    const staleHtml = runGet(scope, stale).html;
+    expect(staleHtml).toBe(bad);
+  });
+
+  it('renders the generic page when no parameters are supplied', () => {
+    expect(runGet(pageScope(), {}).html).toContain("isn't valid");
+  });
+
+  it('does not write when the store throws', () => {
+    const scope = pageScope({
+      loadEmailFeedbackV2_: () => { throw new Error('Corrupt email feedback store'); }
+    });
+    const token = signWith(scope)('2026-07-25', 'easy-1', 'wore', false);
+    expect(runGet(scope, token).html).toContain("isn't valid");
+  });
+});
