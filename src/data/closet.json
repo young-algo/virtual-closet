@@ -1785,5 +1785,49 @@
       "confidence": 0.75,
       "updatedAt": 1784130453747
     }
+  },
+  {
+    "id": "item_nike_velocity_golf_shorts_black",
+    "name": "Nike Velocity Dri-FIT Golf Shorts",
+    "category": "Shorts",
+    "color": "Black",
+    "brand": "Nike",
+    "image": "/closet/item_nike_velocity_golf_shorts_black.jpg",
+    "description": "Lightweight black performance golf shorts crafted from moisture-wicking Dri-FIT fabric, featuring a comfortable waistband, side slant pockets, and a clean tailored silhouette.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964720000
+    }
+  },
+  {
+    "id": "item_nike_velocity_golf_shorts_navy",
+    "name": "Nike Velocity Dri-FIT Golf Shorts",
+    "category": "Shorts",
+    "color": "Navy",
+    "brand": "Nike",
+    "image": "/closet/item_nike_velocity_golf_shorts_navy.jpg",
+    "description": "Obsidian navy blue lightweight Dri-FIT golf shorts featuring breathable moisture-wicking performance stretch fabric with a comfortable elasticated waistband and classic slant pockets.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 1,
+      "breathability": 4,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964720000
+    }
   }
 ]
