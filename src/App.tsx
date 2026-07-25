@@ -116,7 +116,7 @@ function App() {
         // to the style-code placeholder. In-app edits always win.
         localSneakers = localSneakers.map(item => {
           const base = baseManifestById.get(item.id);
-          if (item.id.startsWith('user_') || !base) {
+          if (!base) {
             return item;
           }
           return {
