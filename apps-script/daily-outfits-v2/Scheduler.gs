@@ -36,7 +36,7 @@ function generateDailyBundleNowV2() {
   if (!lock.tryLock(10000)) throw new Error('Another daily outfit job is already running');
   try {
     var snapshot = assertFreshSnapshotV2_(loadSnapshotV2_());
-    mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
+    mergeEmailFeedbackIntoHistoryV2_();
     var weather = fetchDailyWeatherV2();
     var result = generationBundlePipelineV2_(snapshot, weather);
     savePendingV2_(Object.assign({ localDate: weather.localDate, qualityPolicyVersion: DAILY_V2.QUALITY_POLICY_VERSION, wardrobeFingerprint: snapshot.wardrobeFingerprint, updatedAt: Date.now() }, result));
@@ -79,7 +79,7 @@ function generateDailyBundleStepV2() {
     }
 
     if (pending.manualStage === 'idle') {
-      mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
+      mergeEmailFeedbackIntoHistoryV2_();
       pending.weather = fetchDailyWeatherV2();
       pending.history = dailyHistoryContextV2_(pending.weather.localDate, snapshot);
       pending.manualStage = 'weather-ready';
@@ -140,7 +140,7 @@ function advanceDailyJobV2_(state, snapshot, startedAt) {
   while (enoughTime()) {
     incrementAttemptV2_(state, state.stage);
     if (state.stage === 'idle') {
-      mergeSnapshotFeedbackIntoHistoryV2_(snapshot);
+      mergeEmailFeedbackIntoHistoryV2_();
       var weather = fetchDailyWeatherV2();
       var history = dailyHistoryContextV2_(weather.localDate, snapshot);
       pending = { localDate: weather.localDate, qualityPolicyVersion: DAILY_V2.QUALITY_POLICY_VERSION, wardrobeFingerprint: snapshot.wardrobeFingerprint, weather: weather, history: history, updatedAt: Date.now() };

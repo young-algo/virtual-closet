@@ -229,12 +229,6 @@ function mergeDislikedEncoreIdsV2_(ledger, snapshot, retained) {
     merged[signal.candidateId] = true;
   };
   retained.forEach(function(entry) { entry.feedback.forEach(addSignal); });
-  if (ownEncoreKeyV2_(snapshot, 'dailyFeedback')) {
-    if (!validEncoreArrayV2_(snapshot.dailyFeedback)) {
-      throw new Error('Invalid snapshot dailyFeedback for Encore selection');
-    }
-    snapshot.dailyFeedback.forEach(addSignal);
-  }
   return Object.keys(merged).sort();
 }
 

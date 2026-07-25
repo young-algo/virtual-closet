@@ -178,20 +178,31 @@ function dailyHistoryContextV2_(localDate, snapshot) {
   };
 }
 
-function mergeSnapshotFeedbackIntoHistoryV2_(snapshot) {
+function mergeEmailFeedbackIntoHistoryV2_() {
+  var stored = readEmailFeedbackStoreV2_();
+  if (!stored.length) return false;
   var history = loadHistoryV2_();
   var changed = false;
-  (snapshot.dailyFeedback || []).forEach(function(feedback) {
-    var entry = history.find(function(value) { return value.localDate === feedback.localDate; });
-    if (!entry) return;
+  var retained = [];
+  stored.forEach(function(signal) {
+    var entry = history.find(function(value) { return value.localDate === signal.localDate; });
+    if (!entry) {
+      // The email ships before finalizeSentBundleV2_ writes history. Keep the
+      // signal queued rather than discarding it, and merge it on a later run.
+      retained.push(signal);
+      return;
+    }
+    var known = historyLooksV2_(entry).some(function(look) { return look.candidateId === signal.candidateId; });
+    if (!known) return;
     var before = entry.feedback || [];
-    var matching = before.filter(function(value) { return value.candidateId === feedback.candidateId; });
-    if (matching.length === 1 && JSON.stringify(matching[0]) === JSON.stringify(feedback)) return;
-    var after = before.filter(function(value) { return value.candidateId !== feedback.candidateId; });
-    after.push(feedback);
+    var matching = before.filter(function(value) { return value.candidateId === signal.candidateId; });
+    if (matching.length === 1 && JSON.stringify(matching[0]) === JSON.stringify(signal)) return;
+    var after = before.filter(function(value) { return value.candidateId !== signal.candidateId; });
+    after.push(signal);
     entry.feedback = after;
     changed = true;
   });
   if (changed) saveHistoryV2_(history);
+  if (retained.length !== stored.length) saveEmailFeedbackV2_(retained);
   return changed;
 }

@@ -205,3 +205,83 @@ describe('feedback token', () => {
     expect(() => sign()('2026-07-25', 'easy|1', 'wore', false)).toThrow();
   });
 });
+
+describe('feedback drain', () => {
+  const drainScope = (history: unknown[], stored: unknown[], saves: Record<string, ReturnType<typeof vi.fn>>) => ({
+    ...storeScope(),
+    loadHistoryV2_: () => history,
+    saveHistoryV2_: saves.history,
+    loadEmailFeedbackV2_: () => stored,
+    saveEmailFeedbackV2_: saves.store
+  });
+
+  it('merges a signal into its history entry and drains it', () => {
+    const history = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const stored = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 }];
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', drainScope(history, stored, saves)
+    );
+    expect(drain()).toBe(true);
+    expect(history[0].feedback).toEqual([
+      { localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 }
+    ]);
+    expect(saves.history).toHaveBeenCalledOnce();
+    expect(saves.store).toHaveBeenCalledWith([]);
+  });
+
+  it('retains a signal whose history entry does not exist yet', () => {
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const stored = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 }];
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', drainScope([], stored, saves)
+    );
+    expect(drain()).toBe(false);
+    expect(saves.history).not.toHaveBeenCalled();
+    expect(saves.store).not.toHaveBeenCalled();
+  });
+
+  it('replaces a prior signal for the same candidate', () => {
+    const history = [{
+      localDate: '2026-07-25',
+      recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }],
+      feedback: [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'liked', createdAt: 1 }]
+    }];
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const stored = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'disliked', createdAt: 20 }];
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', drainScope(history, stored, saves)
+    );
+    expect(drain()).toBe(true);
+    expect(history[0].feedback).toEqual([
+      { localDate: '2026-07-25', candidateId: 'easy-1', value: 'disliked', createdAt: 20 }
+    ]);
+  });
+
+  it('is a no-op when the stored signal already matches history', () => {
+    const signal = { localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 };
+    const history = [{
+      localDate: '2026-07-25',
+      recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }],
+      feedback: [signal]
+    }];
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', drainScope(history, [signal], saves)
+    );
+    expect(drain()).toBe(false);
+    expect(saves.history).not.toHaveBeenCalled();
+    expect(saves.store).toHaveBeenCalledWith([]);
+  });
+
+  it('drops a signal whose candidate is absent from that date, without stalling the queue', () => {
+    const history = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const stored = [{ localDate: '2026-07-25', candidateId: 'ghost-9', value: 'wore', createdAt: 10 }];
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', drainScope(history, stored, saves)
+    );
+    expect(drain()).toBe(false);
+    expect(saves.store).toHaveBeenCalledWith([]);
+  });
+});

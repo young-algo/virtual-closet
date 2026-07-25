@@ -240,18 +240,24 @@ describe('Daily V2 resilience contracts', () => {
     expect(lock.releaseLock).toHaveBeenCalledOnce();
   });
 
-  it('does not reorder or rewrite history when multiple synchronized feedback entries are byte-equal', () => {
-    const firstFeedback = { localDate: '2026-07-13', candidateId: 'easy-1', value: 'liked', createdAt: 1 };
-    const secondFeedback = { localDate: '2026-07-13', candidateId: 'easy-2', value: 'wore', createdAt: 2 };
-    const history = [{ localDate: '2026-07-13', feedback: [firstFeedback, secondFeedback] }];
+  it('does not rewrite history when the queued signal is already byte-equal', () => {
+    const signal = { localDate: '2026-07-13', candidateId: 'easy-1', value: 'wore', createdAt: 2 };
+    const history = [{
+      localDate: '2026-07-13',
+      recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }],
+      feedback: [signal]
+    }];
     const saveHistoryV2_ = vi.fn();
-    const merge = evaluateAppsScript<(snapshot: object) => boolean>(['Taste.gs'], 'mergeSnapshotFeedbackIntoHistoryV2_', {
+    const merge = evaluateAppsScript<() => boolean>(['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', {
+      DAILY_V2: { FEEDBACK_VALUES: ['liked', 'disliked', 'wore'], MAX_EMAIL_FEEDBACK_AGE_DAYS: 30 },
       loadHistoryV2_: () => history,
       saveHistoryV2_,
+      loadEmailFeedbackV2_: () => [signal],
+      saveEmailFeedbackV2_: vi.fn(),
       itemMapV2_: () => ({}),
     });
-    expect(merge({ dailyFeedback: [firstFeedback, secondFeedback] })).toBe(false);
+    expect(merge()).toBe(false);
     expect(saveHistoryV2_).not.toHaveBeenCalled();
-    expect(history[0].feedback).toEqual([firstFeedback, secondFeedback]);
+    expect(history[0].feedback).toEqual([signal]);
   });
 });

@@ -800,14 +800,12 @@ describe('Encore bundle assembly and persistence', () => {
         }),
       },
     );
-    const withSnapshotDislike = {
-      ...snapshot,
-      dailyFeedback: [{
-        localDate: '2026-05-01', candidateId: 'encore:older', value: 'disliked',
-      }],
-    };
+    const historicalDislike = [{
+      localDate: '2026-05-01', recommendations: [],
+      feedback: [{ candidateId: 'encore:older', value: 'disliked' }],
+    }];
 
-    expect(selectForBundle(withSnapshotDislike, weather, []))
+    expect(selectForBundle(snapshot, weather, historicalDislike))
       .toEqual(expect.objectContaining({ outfitId: 'newer' }));
     expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:older"]');
 
@@ -840,12 +838,10 @@ describe('Encore bundle assembly and persistence', () => {
       },
     );
 
-    expect(selectForBundle({
-      ...snapshot,
-      dailyFeedback: [{
-        localDate: '2026-05-01', candidateId: 'encore:older', value: 'disliked',
-      }],
-    }, weather, [])).toBeNull();
+    expect(selectForBundle(snapshot, weather, [{
+      localDate: '2026-05-01', recommendations: [],
+      feedback: [{ candidateId: 'encore:older', value: 'disliked' }],
+    }])).toBeNull();
     expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:older"]');
   });
 
