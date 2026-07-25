@@ -64,7 +64,7 @@
 ## Task 1: Feedback store and constants
 
 **Files:**
-- Modify: `apps-script/daily-outfits-v2/Config.gs:1-27` (constants), `apps-script/daily-outfits-v2/Config.gs:72` (drop `appUrl`)
+- Modify: `apps-script/daily-outfits-v2/Config.gs:1-27` (constants only — the `appUrl` removal belongs to Task 5)
 - Modify: `apps-script/daily-outfits-v2/DriveStore.gs` (append)
 - Create: `apps-script/daily-outfits-v2/Feedback.gs`
 - Create: `src/features/daily-outfits/__tests__/feedbackContracts.test.ts`
@@ -1182,8 +1182,8 @@ Expected: no new findings.
 
 - [ ] **Step 7: Confirm the stylist is untouched**
 
-Run: `git diff --name-only HEAD~5 -- src/components/AIStylist.tsx src/services/stylist.ts`
-Expected: no output.
+Run: `git diff --name-only main -- src/components/AIStylist.tsx src/services/stylist.ts`
+Expected: no output. Compare against the branch base, not a fixed `HEAD~N` offset — the commit count varies with how many fix commits earlier tasks needed.
 
 - [ ] **Step 8: Commit**
 
