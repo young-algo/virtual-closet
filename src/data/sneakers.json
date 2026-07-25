@@ -1222,5 +1222,115 @@
       "confidence": 0.75,
       "updatedAt": 1784172655000
     }
+  },
+  {
+    "id": "sneaker_FJ7098-400",
+    "name": "Nike Air Humara QS Polar Blue",
+    "category": "Sneakers",
+    "color": "polar, buff gold, light ultramarine, black",
+    "brand": "Nike",
+    "image": "/sneakers/FJ7098-400_A.png",
+    "description": "This trail-inspired retro sneaker features a vibrant Polar Blue mesh upper with textured overlays, black details, and a contrasting Buff Gold Swoosh and accents. Its rugged treaded sole and webbed lacing system read trail-ready and technical; suits outdoor style, Gorpcore, and active streetwear looks.",
+    "styleCode": "FJ7098-400",
+    "imageTop": "/sneakers/FJ7098-400_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "yellow",
+      "accentColors": [
+        "yellow",
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_FV6603-101",
+    "name": "Nike P-6000 Metallic Summit White",
+    "category": "Sneakers",
+    "color": "metallic summit white, pure platinum, wolf grey, white",
+    "brand": "Nike",
+    "image": "/sneakers/FV6603-101_A.png",
+    "description": "Drawing inspiration from 2000s Pegasus running shoes, this early-2000s tech runner pairs breathable white mesh with metallic silver and Pure Platinum leather overlays. Its layered geometric upper and cushioned foam midsole read athletic and retro-futuristic; suits Y2K runner, athleisure, and clean everyday looks.",
+    "styleCode": "FV6603-101",
+    "imageTop": "/sneakers/FV6603-101_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "silver",
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_IM0581-600",
+    "name": "Nike Dunk Low Protro Kobe Lower Merion Aces",
+    "category": "Sneakers",
+    "color": "team red, white, silver",
+    "brand": "Nike",
+    "image": "/sneakers/IM0581-600_A.png",
+    "description": "Celebrating Kobe Bryant's high school alma mater, this special-edition Dunk Low Protro features rich Team Red satin and smooth overlays with crisp white accents and Kobe's high school #33 embroidered on the heel. Its classic low-top silhouette and rich heritage palette read premium and historic; suits retro basketball, elevated sportswear, and statement casual looks.",
+    "styleCode": "IM0581-600",
+    "imageTop": "/sneakers/IM0581-600_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "silver"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_IQ3342-200",
+    "name": "Nike Dunk Low Retro Premium Classic Brown",
+    "category": "Sneakers",
+    "color": "classic brown, black, gum light brown",
+    "brand": "Nike",
+    "image": "/sneakers/IQ3342-200_A.png",
+    "description": "This premium edition Dunk Low pairs rich Classic Brown leather uppers with sleek black leather overlays and tonal Swooshes above a dark rubber outsole. Its warm monochromatic earth tones read sophisticated and understated; suits smart-casual outfits, earthy tones, and minimalist streetwear looks.",
+    "styleCode": "IQ3342-200",
+    "imageTop": "/sneakers/IQ3342-200_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "brown"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
   }
 ]

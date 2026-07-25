@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -22,7 +22,7 @@ describe('on-demand stylist isolation', () => {
 
   it('leaves the protected on-demand runtime files unreferenced by the Apps Script sidecar', () => {
     const appsScriptRoot = join(process.cwd(), 'apps-script/daily-outfits-v2');
-    const combined = readdirSync(appsScriptRoot).map(file => readFileSync(join(appsScriptRoot, file), 'utf8')).join('\n');
+    const combined = readdirSync(appsScriptRoot).filter(file => statSync(join(appsScriptRoot, file)).isFile()).map(file => readFileSync(join(appsScriptRoot, file), 'utf8')).join('\n');
     expect(combined).not.toMatch(/stylist_recent_item_ids|closet_outfits|generateOutfit|AIStylist/);
   });
 });
