@@ -24,6 +24,11 @@ const DELETED_IDS_KEY = 'closet_deleted_ids';
 const SNEAKER_ITEMS_KEY = 'sneaker_items';
 const SNEAKER_DELETED_IDS_KEY = 'sneaker_deleted_ids';
 
+const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
+  'user_sneaker_1783863184667': 'sneaker_DO9404-400',
+  'user_sneaker_1783048231645': 'sneaker_IF0666-400'
+};
+
 const defaultDeletedIds = (key: string): string[] =>
   key === SNEAKER_DELETED_IDS_KEY ? appDefaults.deletedSneakerIds : appDefaults.deletedItemIds;
 
@@ -85,56 +90,37 @@ function App() {
     const savedSneakers = localStorage.getItem(SNEAKER_ITEMS_KEY);
     if (savedSneakers) {
       try {
-        let localSneakers: SneakerItem[] = JSON.parse(savedSneakers);
+        const localSneakers: SneakerItem[] = JSON.parse(savedSneakers);
+        const manifestMap = new Map((sneakerData as SneakerItem[]).map(item => [item.id, item]));
+        const mergedMap = new Map<string, SneakerItem>();
 
-        const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
-          'user_sneaker_1783863184667': 'sneaker_DO9404-400',
-          'user_sneaker_1783048231645': 'sneaker_IF0666-400'
-        };
-
-        // Migrate legacy IDs from previous catalog versions
-        localSneakers = localSneakers.map(item => ({
-          ...item,
-          id: SNEAKER_ID_MIGRATIONS[item.id] || item.id
-        }));
-
-        // Drop entries removed from the base manifest, then merge in new manifest
-        // pairs the user hasn't explicitly deleted. User-added pairs ('user_'
-        // prefix) live only in localStorage and are always kept.
-        const baseManifestById = new Map((sneakerData as SneakerItem[]).map(item => [item.id, item]));
-        localSneakers = localSneakers.filter(item => {
-          if (!item.id.startsWith('user_')) {
-            return baseManifestById.has(item.id);
+        // Process localStorage sneakers, migrating legacy IDs and deduplicating
+        for (const item of localSneakers) {
+          const migratedId = SNEAKER_ID_MIGRATIONS[item.id] || item.id;
+          const base = manifestMap.get(migratedId);
+          if (base) {
+            mergedMap.set(migratedId, {
+              ...base,
+              name: item.name && item.name !== item.styleCode ? item.name : base.name,
+              color: item.color || base.color,
+              description: item.description || base.description,
+              image: item.image?.startsWith('data:') ? item.image : base.image,
+              imageTop: item.imageTop?.startsWith('data:') ? item.imageTop : base.imageTop
+            });
+          } else if (migratedId.startsWith('user_')) {
+            mergedMap.set(migratedId, { ...item, id: migratedId });
           }
-          return true;
-        });
+        }
 
-        // Adopt updated manifest image paths for manifest pairs. In-app photo
-        // replacements are data URLs and always win over the manifest.
-        // Manifest metadata (e.g. the AI enrichment pass) fills fields the
-        // user hasn't touched: blank color/description, and a name still equal
-        // to the style-code placeholder. In-app edits always win.
-        localSneakers = localSneakers.map(item => {
-          const base = baseManifestById.get(item.id);
-          if (!base) {
-            return item;
+        // Add any missing base manifest items not yet in localStorage
+        for (const item of (sneakerData as SneakerItem[])) {
+          if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
+            mergedMap.set(item.id, item);
           }
-          return {
-            ...item,
-            name: item.name === item.styleCode && base.name ? base.name : item.name,
-            color: item.color || base.color,
-            description: item.description || base.description,
-            image: item.image.startsWith('data:') ? item.image : base.image,
-            imageTop: item.imageTop?.startsWith('data:') ? item.imageTop : base.imageTop
-          };
-        });
-        localSneakers = fillManifestDailyProfiles(localSneakers, sneakerData as SneakerItem[]);
+        }
 
-        const localIds = new Set(localSneakers.map(item => item.id));
-        const newManifestItems = (sneakerData as SneakerItem[]).filter(
-          item => !localIds.has(item.id) && !deletedIds.has(item.id)
-        );
-        return [...newManifestItems, ...localSneakers];
+        const result = Array.from(mergedMap.values());
+        return fillManifestDailyProfiles(result, sneakerData as SneakerItem[]);
       } catch (e) {
         console.error('Failed to parse sneakers from localStorage', e);
       }
@@ -147,10 +133,6 @@ function App() {
     const savedPacked = localStorage.getItem('closet_packed_items');
     if (savedPacked) {
       try {
-        const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
-          'user_sneaker_1783863184667': 'sneaker_DO9404-400',
-          'user_sneaker_1783048231645': 'sneaker_IF0666-400'
-        };
         const rawPackedIds: string[] = JSON.parse(savedPacked);
         const packedIds = rawPackedIds.map(id => SNEAKER_ID_MIGRATIONS[id] || id);
         // Map saved IDs back to our active items state, across both closets
@@ -173,10 +155,6 @@ function App() {
     const savedOutfits = localStorage.getItem('closet_outfits');
     if (savedOutfits) {
       try {
-        const SNEAKER_ID_MIGRATIONS: Record<string, string> = {
-          'user_sneaker_1783863184667': 'sneaker_DO9404-400',
-          'user_sneaker_1783048231645': 'sneaker_IF0666-400'
-        };
         const parsedOutfits: Outfit[] = JSON.parse(savedOutfits);
         return parsedOutfits.map(outfit => ({
           ...outfit,
