@@ -209,6 +209,8 @@ describe('feedback token', () => {
 describe('feedback drain', () => {
   const drainScope = (history: unknown[], stored: unknown[], saves: Record<string, ReturnType<typeof vi.fn>>) => ({
     ...storeScope(),
+    getDailyConfigV2_: () => ({ timezone: 'America/New_York' }),
+    localDateV2_: () => '2026-07-25',
     loadHistoryV2_: () => history,
     saveHistoryV2_: saves.history,
     loadEmailFeedbackV2_: () => stored,
@@ -283,5 +285,31 @@ describe('feedback drain', () => {
     );
     expect(drain()).toBe(false);
     expect(saves.store).toHaveBeenCalledWith([]);
+  });
+
+  it('prunes a signal whose localDate has aged out of the retention window, without writing history', () => {
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const stored = [{ localDate: '2026-06-01', candidateId: 'easy-1', value: 'wore', createdAt: 10 }];
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', drainScope([], stored, saves)
+    );
+    expect(drain()).toBe(false);
+    expect(saves.history).not.toHaveBeenCalled();
+    expect(saves.store).toHaveBeenCalledWith([]);
+  });
+
+  it('queues exactly the pending signal and drains the other from a mixed store', () => {
+    const history = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
+    const saves = { history: vi.fn(), store: vi.fn() };
+    const drainable = { localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 };
+    const queuedSignal = { localDate: '2026-07-24', candidateId: 'easy-2', value: 'liked', createdAt: 5 };
+    const drain = evaluateAppsScript<() => boolean>(
+      ['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_',
+      drainScope(history, [drainable, queuedSignal], saves)
+    );
+    expect(drain()).toBe(true);
+    expect(history[0].feedback).toEqual([drainable]);
+    expect(saves.history).toHaveBeenCalledOnce();
+    expect(saves.store).toHaveBeenCalledWith([queuedSignal]);
   });
 });

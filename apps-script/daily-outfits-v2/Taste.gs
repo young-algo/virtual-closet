@@ -182,9 +182,15 @@ function mergeEmailFeedbackIntoHistoryV2_() {
   var stored = readEmailFeedbackStoreV2_();
   if (!stored.length) return false;
   var history = loadHistoryV2_();
+  var todayLocalDate = localDateV2_(new Date(), getDailyConfigV2_().timezone);
   var changed = false;
   var retained = [];
   stored.forEach(function(signal) {
+    if (!feedbackDateWithinWindowV2_(signal.localDate, todayLocalDate)) {
+      // Aged out of the retention window without a history entry ever
+      // materializing for it. Drop it here instead of queuing it forever.
+      return;
+    }
     var entry = history.find(function(value) { return value.localDate === signal.localDate; });
     if (!entry) {
       // The email ships before finalizeSentBundleV2_ writes history. Keep the
@@ -193,7 +199,11 @@ function mergeEmailFeedbackIntoHistoryV2_() {
       return;
     }
     var known = historyLooksV2_(entry).some(function(look) { return look.candidateId === signal.candidateId; });
-    if (!known) return;
+    if (!known) {
+      console.log('mergeEmailFeedbackIntoHistoryV2_: dropping signal for unknown candidate ' +
+        signal.candidateId + ' on ' + signal.localDate);
+      return;
+    }
     var before = entry.feedback || [];
     var matching = before.filter(function(value) { return value.candidateId === signal.candidateId; });
     if (matching.length === 1 && JSON.stringify(matching[0]) === JSON.stringify(signal)) return;
