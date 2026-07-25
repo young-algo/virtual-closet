@@ -10,6 +10,8 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 
    - `GEMINI_API_KEY`
    - `SYNC_SECRET` — at least 16 random characters, matching the browser setting
+   - `FEEDBACK_SECRET` — at least 16 random characters, distinct from `SYNC_SECRET`; signs the one-tap feedback links in the daily email
+   - `WEB_APP_URL` — the deployment's `/exec` URL, used to build feedback links
    - `RECIPIENT_EMAIL` — defaults to `kevincollinsturner@gmail.com`
    - `LOCATION_LABEL`, `LATITUDE`, `LONGITUDE`, `TIME_ZONE`
    - `DELIVERY_HOUR`, `DELIVERY_MINUTE`, `GENERATION_LEAD_MINUTES`
@@ -20,7 +22,7 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
    - `SEND_OPERATIONAL_ALERTS` — `true` or `false`
    - `SHADOW_MODE` — set `true` during the 3–5 morning rollout to generate and persist without sending
 
-   Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, `SEND_IN_PROGRESS_DATE_V2`, `LAST_ENCORE_DATE_V2`, and `DISLIKED_ENCORE_IDS_V2` are managed by the script. Do not pre-populate or routinely edit them.
+   Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, `SEND_IN_PROGRESS_DATE_V2`, `LAST_ENCORE_DATE_V2`, `DISLIKED_ENCORE_IDS_V2`, and `EMAIL_FEEDBACK_FILE_ID_V2` are managed by the script. Do not pre-populate or routinely edit them.
 
 4. Deploy as a Web app that executes as the owner. Copy its `/exec` URL into **Wardrobe → Daily email** in the React app.
 5. Run `installDailyOutfitTrigger()` once from the Apps Script editor and approve Drive, external-request, email, and trigger scopes.

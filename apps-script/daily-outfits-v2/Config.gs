@@ -6,6 +6,7 @@ var DAILY_V2 = Object.freeze({
   WEATHER_FILE: 'virtual-closet-daily-v2-weather-cache.json',
   JOB_FILE: 'virtual-closet-daily-v2-job-state.json',
   PENDING_FILE: 'virtual-closet-daily-v2-pending-bundle.json',
+  EMAIL_FEEDBACK_FILE: 'virtual-closet-daily-v2-email-feedback.json',
   MAX_SNAPSHOT_AGE_MS: 7 * 24 * 60 * 60 * 1000,
   MAX_WEATHER_AGE_MS: 6 * 60 * 60 * 1000,
   MAX_POST_BYTES: 45 * 1024 * 1024,
@@ -23,7 +24,9 @@ var DAILY_V2 = Object.freeze({
     silhouette: 0.08,
     formality: 0.05
   }),
-  REQUIRED_SLOTS: ['top', 'bottom', 'shoes']
+  REQUIRED_SLOTS: ['top', 'bottom', 'shoes'],
+  MAX_EMAIL_FEEDBACK_AGE_DAYS: 30,
+  FEEDBACK_VALUES: ['liked', 'disliked', 'wore']
 });
 
 function getDailyPropertiesV2_() {
