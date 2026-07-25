@@ -1,14 +1,207 @@
 [
   {
+    "id": "sneaker_FJ7098-400",
+    "name": "Nike Air Humara QS Polar Blue",
+    "category": "Sneakers",
+    "color": "polar, buff gold, light ultramarine, black",
+    "brand": "Nike",
+    "image": "/sneakers/FJ7098-400_A.png",
+    "description": "This trail-inspired retro sneaker features a vibrant Polar Blue mesh upper with textured overlays, black details, and a contrasting Buff Gold Swoosh and accents. Its rugged treaded sole and webbed lacing system read trail-ready and technical; suits outdoor style, Gorpcore, and active streetwear looks.",
+    "styleCode": "FJ7098-400",
+    "imageTop": "/sneakers/FJ7098-400_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "yellow",
+      "accentColors": [
+        "yellow",
+        "black"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_FV6603-101",
+    "name": "Nike P-6000 Metallic Summit White",
+    "category": "Sneakers",
+    "color": "metallic summit white, pure platinum, wolf grey, white",
+    "brand": "Nike",
+    "image": "/sneakers/FV6603-101_A.png",
+    "description": "Drawing inspiration from 2000s Pegasus running shoes, this early-2000s tech runner pairs breathable white mesh with metallic silver and Pure Platinum leather overlays. Its layered geometric upper and cushioned foam midsole read athletic and retro-futuristic; suits Y2K runner, athleisure, and clean everyday looks.",
+    "styleCode": "FV6603-101",
+    "imageTop": "/sneakers/FV6603-101_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "silver",
+        "grey"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_IM0581-600",
+    "name": "Nike Dunk Low Protro Kobe Lower Merion Aces",
+    "category": "Sneakers",
+    "color": "team red, white, silver",
+    "brand": "Nike",
+    "image": "/sneakers/IM0581-600_A.png",
+    "description": "Celebrating Kobe Bryant's high school alma mater, this special-edition Dunk Low Protro features rich Team Red satin and smooth overlays with crisp white accents and Kobe's high school #33 embroidered on the heel. Its classic low-top silhouette and rich heritage palette read premium and historic; suits retro basketball, elevated sportswear, and statement casual looks.",
+    "styleCode": "IM0581-600",
+    "imageTop": "/sneakers/IM0581-600_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "white",
+      "accentColors": [
+        "silver"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_IQ3342-200",
+    "name": "Nike Dunk Low Retro Premium Classic Brown",
+    "category": "Sneakers",
+    "color": "classic brown, black, gum light brown",
+    "brand": "Nike",
+    "image": "/sneakers/IQ3342-200_A.png",
+    "description": "This premium edition Dunk Low pairs rich Classic Brown leather uppers with sleek black leather overlays and tonal Swooshes above a dark rubber outsole. Its warm monochromatic earth tones read sophisticated and understated; suits smart-casual outfits, earthy tones, and minimalist streetwear looks.",
+    "styleCode": "IQ3342-200",
+    "imageTop": "/sneakers/IQ3342-200_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "brown"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784964649000
+    }
+  },
+  {
+    "id": "sneaker_FZ3863-300",
+    "name": "Nike C1TY Surplus",
+    "category": "Sneakers",
+    "color": "light army, cargo khaki, university gold, black",
+    "brand": "Nike",
+    "image": "/sneakers/FZ3863-300_A.png",
+    "description": "This low-top utility sneaker pairs breathable Light Army mesh with Cargo Khaki suede reinforcements, a black Swoosh and rugged lugged sole, plus University Gold hits at the heel and tongue. Its muted military palette reads practical and understated; suits workwear, utility streetwear, and relaxed casual looks.",
+    "styleCode": "FZ3863-300",
+    "imageTop": "/sneakers/FZ3863-300_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784172655000
+    }
+  },
+  {
+    "id": "sneaker_308497-060",
+    "name": "Air Jordan 4 Retro Bred",
+    "category": "Sneakers",
+    "color": "black, fire red, cement grey, summit white",
+    "brand": "Nike",
+    "image": "/sneakers/308497-060_A.png",
+    "description": "This iconic mid-top uses a black nubuck upper with Cement Grey hardware, Summit White midsole sections, and Fire Red branding and outsole accents. The high-contrast OG palette reads bold and nostalgic; suits retro basketball, sportswear, and statement streetwear looks.",
+    "styleCode": "308497-060",
+    "imageTop": "/sneakers/308497-060_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "grey",
+      "accentColors": [
+        "red",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 2,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784172655000
+    }
+  },
+  {
+    "id": "sneaker_DX0755-001",
+    "name": "Nike Air Max Plus Hyper Blue",
+    "category": "Sneakers",
+    "color": "black, chamois, sky blue, hyper blue, midnight navy, white",
+    "brand": "Nike",
+    "image": "/sneakers/DX0755-001_A.png",
+    "description": "This retro runner fades from Sky Blue to Hyper Blue across breathable mesh under black palm-inspired TPU ribs, with Midnight Navy, white, and Chamois yellow accents. Its sculpted Tuned Air sole and vivid gradient read energetic and technical; suits late-90s sportswear, techwear, and bold casual looks.",
+    "styleCode": "DX0755-001",
+    "imageTop": "/sneakers/DX0755-001_D.png",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "black",
+      "accentColors": [
+        "yellow",
+        "white"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 2,
+      "breathability": 4,
+      "windProtection": 1,
+      "rainSafety": "poor",
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1784172655000
+    }
+  },
+  {
     "id": "user_sneaker_1783863184667",
     "name": "Dunk Low - Run the Jewels",
     "category": "Sneakers",
     "color": "Deep Royal Blue, Active Pink, Blue Chill",
     "brand": "Nike",
-    "image": "/sneakers/user_user_sneaker_1783863184667_side.jpg",
+    "image": "/sneakers/DO9404-400_A.png",
     "description": "The Nike SB Dunk Low Run The Jewels are constructed with blue suede uppers that sit on top of a translucent blue outsole. Nike used pink suede on the Swoosh, and gold branded accents on the heel and tongue. The limited edition sneakers feature RTJ branding on the insoles.",
     "styleCode": "DO9404-400",
-    "imageTop": "/sneakers/user_user_sneaker_1783863184667_top.jpg",
+    "imageTop": "/sneakers/DO9404-400_D.png",
     "dailyProfile": {
       "silhouette": "unknown",
       "secondaryColorFamily": "blue",
@@ -145,10 +338,10 @@
     "category": "Sneakers",
     "color": "Blue Suede",
     "brand": "Nike",
-    "image": "/sneakers/user_user_sneaker_1783048231645_side.jpg",
+    "image": "/sneakers/IF0666-400_A.png",
     "description": "",
     "styleCode": "IF0666-400",
-    "imageTop": "/sneakers/user_user_sneaker_1783048231645_top.jpg",
+    "imageTop": "/sneakers/IF0666-400_D.png",
     "dailyProfile": {
       "silhouette": "regular",
       "secondaryColorFamily": "beige",
@@ -1138,199 +1331,6 @@
       "source": "ai-inferred",
       "confidence": 0.75,
       "updatedAt": 1784130932054
-    }
-  },
-  {
-    "id": "sneaker_FZ3863-300",
-    "name": "Nike C1TY Surplus",
-    "category": "Sneakers",
-    "color": "light army, cargo khaki, university gold, black",
-    "brand": "Nike",
-    "image": "/sneakers/FZ3863-300_A.png",
-    "description": "This low-top utility sneaker pairs breathable Light Army mesh with Cargo Khaki suede reinforcements, a black Swoosh and rugged lugged sole, plus University Gold hits at the heel and tongue. Its muted military palette reads practical and understated; suits workwear, utility streetwear, and relaxed casual looks.",
-    "styleCode": "FZ3863-300",
-    "imageTop": "/sneakers/FZ3863-300_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "black",
-      "accentColors": [
-        "yellow"
-      ],
-      "patternIntensity": 0,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 4,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784172655000
-    }
-  },
-  {
-    "id": "sneaker_308497-060",
-    "name": "Air Jordan 4 Retro Bred",
-    "category": "Sneakers",
-    "color": "black, fire red, cement grey, summit white",
-    "brand": "Nike",
-    "image": "/sneakers/308497-060_A.png",
-    "description": "This iconic mid-top uses a black nubuck upper with Cement Grey hardware, Summit White midsole sections, and Fire Red branding and outsole accents. The high-contrast OG palette reads bold and nostalgic; suits retro basketball, sportswear, and statement streetwear looks.",
-    "styleCode": "308497-060",
-    "imageTop": "/sneakers/308497-060_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "grey",
-      "accentColors": [
-        "red",
-        "white"
-      ],
-      "patternIntensity": 1,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 2,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784172655000
-    }
-  },
-  {
-    "id": "sneaker_DX0755-001",
-    "name": "Nike Air Max Plus Hyper Blue",
-    "category": "Sneakers",
-    "color": "black, chamois, sky blue, hyper blue, midnight navy, white",
-    "brand": "Nike",
-    "image": "/sneakers/DX0755-001_A.png",
-    "description": "This retro runner fades from Sky Blue to Hyper Blue across breathable mesh under black palm-inspired TPU ribs, with Midnight Navy, white, and Chamois yellow accents. Its sculpted Tuned Air sole and vivid gradient read energetic and technical; suits late-90s sportswear, techwear, and bold casual looks.",
-    "styleCode": "DX0755-001",
-    "imageTop": "/sneakers/DX0755-001_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "black",
-      "accentColors": [
-        "yellow",
-        "white"
-      ],
-      "patternIntensity": 1,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 4,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784172655000
-    }
-  },
-  {
-    "id": "sneaker_FJ7098-400",
-    "name": "Nike Air Humara QS Polar Blue",
-    "category": "Sneakers",
-    "color": "polar, buff gold, light ultramarine, black",
-    "brand": "Nike",
-    "image": "/sneakers/FJ7098-400_A.png",
-    "description": "This trail-inspired retro sneaker features a vibrant Polar Blue mesh upper with textured overlays, black details, and a contrasting Buff Gold Swoosh and accents. Its rugged treaded sole and webbed lacing system read trail-ready and technical; suits outdoor style, Gorpcore, and active streetwear looks.",
-    "styleCode": "FJ7098-400",
-    "imageTop": "/sneakers/FJ7098-400_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "yellow",
-      "accentColors": [
-        "yellow",
-        "black"
-      ],
-      "patternIntensity": 1,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 3,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784964649000
-    }
-  },
-  {
-    "id": "sneaker_FV6603-101",
-    "name": "Nike P-6000 Metallic Summit White",
-    "category": "Sneakers",
-    "color": "metallic summit white, pure platinum, wolf grey, white",
-    "brand": "Nike",
-    "image": "/sneakers/FV6603-101_A.png",
-    "description": "Drawing inspiration from 2000s Pegasus running shoes, this early-2000s tech runner pairs breathable white mesh with metallic silver and Pure Platinum leather overlays. Its layered geometric upper and cushioned foam midsole read athletic and retro-futuristic; suits Y2K runner, athleisure, and clean everyday looks.",
-    "styleCode": "FV6603-101",
-    "imageTop": "/sneakers/FV6603-101_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "grey",
-      "accentColors": [
-        "silver",
-        "grey"
-      ],
-      "patternIntensity": 1,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 4,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784964649000
-    }
-  },
-  {
-    "id": "sneaker_IM0581-600",
-    "name": "Nike Dunk Low Protro Kobe Lower Merion Aces",
-    "category": "Sneakers",
-    "color": "team red, white, silver",
-    "brand": "Nike",
-    "image": "/sneakers/IM0581-600_A.png",
-    "description": "Celebrating Kobe Bryant's high school alma mater, this special-edition Dunk Low Protro features rich Team Red satin and smooth overlays with crisp white accents and Kobe's high school #33 embroidered on the heel. Its classic low-top silhouette and rich heritage palette read premium and historic; suits retro basketball, elevated sportswear, and statement casual looks.",
-    "styleCode": "IM0581-600",
-    "imageTop": "/sneakers/IM0581-600_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "white",
-      "accentColors": [
-        "silver"
-      ],
-      "patternIntensity": 0,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 3,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784964649000
-    }
-  },
-  {
-    "id": "sneaker_IQ3342-200",
-    "name": "Nike Dunk Low Retro Premium Classic Brown",
-    "category": "Sneakers",
-    "color": "classic brown, black, gum light brown",
-    "brand": "Nike",
-    "image": "/sneakers/IQ3342-200_A.png",
-    "description": "This premium edition Dunk Low pairs rich Classic Brown leather uppers with sleek black leather overlays and tonal Swooshes above a dark rubber outsole. Its warm monochromatic earth tones read sophisticated and understated; suits smart-casual outfits, earthy tones, and minimalist streetwear looks.",
-    "styleCode": "IQ3342-200",
-    "imageTop": "/sneakers/IQ3342-200_D.png",
-    "dailyProfile": {
-      "silhouette": "regular",
-      "secondaryColorFamily": "black",
-      "accentColors": [
-        "brown"
-      ],
-      "patternIntensity": 0,
-      "formality": 1,
-      "warmth": 2,
-      "breathability": 3,
-      "windProtection": 1,
-      "rainSafety": "poor",
-      "source": "ai-inferred",
-      "confidence": 0.75,
-      "updatedAt": 1784964649000
     }
   }
 ]
