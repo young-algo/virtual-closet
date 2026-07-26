@@ -23,14 +23,34 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 
    Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, `SEND_IN_PROGRESS_DATE_V2`, `LAST_ENCORE_DATE_V2`, `DISLIKED_ENCORE_IDS_V2`, and `EMAIL_FEEDBACK_FILE_ID_V2` are managed by the script. Do not pre-populate or routinely edit them.
 
-4. Deploy as a Web app that executes as the owner. Copy its `/exec` URL into **Wardrobe → Daily email** in the React app.
+4. Deploy as a Web app that executes as the owner, with access set to **Anyone**. Anonymous access is already required for the React app's `doPost` calls, and the feedback links depend on it too. Copy its `/exec` URL into both **Wardrobe → Daily email** in the React app and the `WEB_APP_URL` Script Property.
 5. Run `installDailyOutfitTrigger()` once from the Apps Script editor and approve Drive, external-request, email, and trigger scopes.
 6. In the React settings, run **Build visual inventory**, **Sync now**, **Validate server snapshot**, and **Generate test bundle** in order.
 7. Review the generated bundle without sending it. **Send test email** is a separate, opt-in action: obtain fresh confirmation immediately before using it, even if an earlier rollout discussion mentioned a test send.
 
+Redeploying matters for the feedback links specifically. The time-driven trigger runs HEAD, but the web app serves the *deployed* version, so `clasp push` alone leaves `doGet` unreachable and every link in the morning email dead. Run `clasp deploy -i <deploymentId>` to update the existing deployment in place and preserve the `/exec` URL. Pin clasp to v3.
+
+After deploying, send a test delivery and confirm the links render and report `Test delivery — not recorded`. Then confirm that a real morning email records a tap, and that the signal appears in the next day's `dailyHistoryContextV2_` output via **Inspect diagnostics**.
+
 ## Weather providers
 
 `fetchDailyWeatherV2()` returns a fresh same-day cached profile when one exists, then tries providers in order: Open-Meteo (free endpoint, or the customer endpoint when `OPEN_METEO_API_KEY` is set) and the National Weather Service (`api.weather.gov`, keyless, US coverage only). Open-Meteo's free tier limits by source IP, and Apps Script's `UrlFetchApp` egresses from Google's shared IP pool, so chronic HTTP 429 responses there are expected and are why the NWS fallback exists. Transport errors and 5xx responses get one in-run retry; 429 skips straight to the next provider. When every provider fails, the thrown error (and therefore the operational alert email) lists each provider's failure detail. The NWS path derives apparent temperature via NOAA heat-index/wind-chill formulas and represents hourly precipitation as a nominal 0.02 in when the precipitation probability is at least 50%, since its hourly feed omits amounts.
+
+## Outfit feedback
+
+Every generated look in the daily email carries three one-tap links: `LIKE`, `NOT FOR ME`, `WORE THIS`. Encore looks carry none, because saving an outfit is already the taste signal and unsaving it is the way to retire one.
+
+Each link is an HMAC-signed token naming exactly one `(localDate, candidateId, value)` triple, verified by `doGet` against `FEEDBACK_SECRET`. `doGet` serves feedback only; generation and sending remain `doPost` actions behind `SYNC_SECRET`. Every failure mode — bad signature, malformed payload, unknown verb, out-of-window date, missing parameters — renders one identical invalid-link page, so the endpoint reveals nothing to a prober.
+
+A tap upserts into `virtual-closet-daily-v2-email-feedback.json` and lands on a page confirming what was stored, with the other two verbs as one-tap corrections. Last write wins per `(localDate, candidateId)`.
+
+The store is a durable inbox rather than a direct history write. The daily email is sent before `finalizeSentBundleV2_` creates the history entry, so a tap in that window has nothing to attach to. `mergeEmailFeedbackIntoHistoryV2_()` drains the inbox at the start of each generation run: a signal whose history entry exists is merged and removed, and one whose entry does not yet exist stays queued for a later run. A signal naming a candidate absent from that date's looks is dropped rather than written.
+
+Tokens do not expire. Replay is bounded by `DAILY_V2.MAX_EMAIL_FEEDBACK_AGE_DAYS` (30), checked against the current local date without loading the wardrobe snapshot.
+
+Test deliveries render the links for layout parity, but their tokens carry a test flag: the landing page reports `Test delivery — not recorded` and writes nothing.
+
+`upsertEmailFeedbackV2_` is a read-modify-write with no `LockService` guard, and `doGet` takes none either. Its contention detector warns when a *differing* verb lands on the same `(localDate, candidateId)` within `DAILY_V2.FEEDBACK_CONTENTION_MS` (10000 ms) — enough to catch a link scanner that fetches the three links sequentially. It does not catch two requests executing in parallel: both read the store before either writes, neither sees the other's entry, and one write is lost with no warning at all. A quiet log is not proof that no contention happened.
 
 ## Prerequisite — reviewed wardrobe profiles
 
