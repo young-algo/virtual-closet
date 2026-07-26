@@ -82,7 +82,7 @@ describe('feedback upsert', () => {
     const existing = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'liked', createdAt: 50 }];
     const upsert = evaluateAppsScript<(d: string, c: string, v: string, t: number) => void>(
       ['Feedback.gs'], 'upsertEmailFeedbackV2_',
-      storeScope({ loadEmailFeedbackV2_: () => existing, saveEmailFeedbackV2_: save })
+      storeScope({ loadEmailFeedbackV2_: () => existing, saveEmailFeedbackV2_: save, console: { warn: vi.fn() } })
     );
     upsert('2026-07-25', 'easy-1', 'disliked', 200);
     expect(save).toHaveBeenCalledWith([
@@ -165,6 +165,22 @@ describe('feedback upsert', () => {
     );
     upsert('2026-07-25', 'easy-1', 'disliked', 11001);
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns at exactly the contention window boundary (10000ms)', () => {
+    const save = vi.fn();
+    const warn = vi.fn();
+    const existing = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'liked', createdAt: 1000 }];
+    const upsert = evaluateAppsScript<(d: string, c: string, v: string, t: number) => void>(
+      ['Feedback.gs'], 'upsertEmailFeedbackV2_',
+      storeScope({
+        loadEmailFeedbackV2_: () => existing,
+        saveEmailFeedbackV2_: save,
+        console: { warn: warn, log: vi.fn() }
+      })
+    );
+    upsert('2026-07-25', 'easy-1', 'disliked', 11000);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -472,6 +488,15 @@ describe('doGet feedback handler', () => {
   });
 });
 
+describe('feedback vocabulary parity', () => {
+  it('keeps the email label verbs in sync with DAILY_V2.FEEDBACK_VALUES, in order', () => {
+    const feedbackValues = evaluateAppsScript<string[]>(['Config.gs'], 'DAILY_V2.FEEDBACK_VALUES');
+    const emailVerbs = evaluateAppsScript<[string, string][]>(['Email.gs'], 'FEEDBACK_EMAIL_LABELS_V2')
+      .map(pair => pair[0]);
+    expect(emailVerbs).toEqual(feedbackValues);
+  });
+});
+
 describe('email feedback rendering', () => {
   // No escapeHtmlV2_ override: Email.gs declares it, and a function declaration
   // in the concatenated source shadows any same-named injected parameter.
@@ -508,5 +533,111 @@ describe('email feedback rendering', () => {
       ['Email.gs', 'Feedback.gs'], 'feedbackRowHtmlV2_', emailScope()
     );
     expect(live('2026-07-25', 'easy-1', true)).not.toBe(live('2026-07-25', 'easy-1', false));
+  });
+});
+
+describe('email feedback rendering — full-email integration', () => {
+  // Exercises feedbackRowHtmlV2_ / feedbackPlainLinesV2_ through the real
+  // renderDailyEmailV2_ assembly, not as isolated units, so a mutation that moves the
+  // feedback row into the Encore section (or drops the plain-text call) is actually caught.
+  const render = evaluateAppsScript<(
+    bundle: Record<string, unknown>,
+    snapshotValue: object,
+    testMode: boolean,
+    pending: object,
+    expectedLocalDate: string,
+  ) => { html: string; plain: string; inlineImages: Record<string, unknown> }>(
+    ['ItemIndex.gs', 'Email.gs'],
+    'renderDailyEmailV2_',
+    {
+      Utilities: {
+        newBlob: (_bytes: unknown, mime: string, name: string) => ({ mime, name }),
+        base64Decode: () => [],
+        formatDate: () => 'Saturday, July 25',
+      },
+      getDailyConfigV2_: () => ({ appUrl: '' }),
+      validFullBundleReadyV2_: () => true,
+      feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+        `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
+      console,
+    },
+  );
+
+  const items = [
+    { id: 'top', slot: 'top', name: 'Tee', thumbnailDataUrl: 'data:image/jpeg;base64,QQ==' },
+    { id: 'bottom', slot: 'bottom', name: 'Jeans', thumbnailDataUrl: 'data:image/jpeg;base64,QQ==' },
+    { id: 'shoe', slot: 'shoes', name: 'Boots', thumbnailDataUrl: 'data:image/jpeg;base64,QQ==' },
+  ];
+
+  const weatherForEmail = {
+    locationLabel: 'Brooklyn, NY',
+    timezone: 'America/New_York',
+    morningFeelsLikeF: 70,
+    highTemperatureF: 82,
+    maxRainProbability: 0,
+    plainEnglishSummary: 'Light pieces.',
+    weatherPhrase: 'clear skies',
+    windy: false,
+  };
+
+  const recommendation = (archetype: 'easy' | 'polished-casual' | 'expressive', index: number) => ({
+    candidateId: `look-${index}`,
+    archetype,
+    name: `Look ${index + 1}`,
+    itemIds: ['top', 'bottom', 'shoe'],
+    colorHook: 'Navy against cream.',
+    whyItWorks: 'The proportions and colors work together.',
+    weatherNote: 'Comfortable for the forecast.',
+  });
+
+  const bundle = {
+    localDate: '2026-07-25',
+    weather: weatherForEmail,
+    coverage: { deliveryMode: 'complete', selectedArchetypes: ['easy', 'polished-casual', 'expressive'], omittedArchetypes: [] },
+    recommendations: [
+      recommendation('easy', 0),
+      recommendation('polished-casual', 1),
+      recommendation('expressive', 2),
+    ],
+    encore: {
+      outfitId: 'saved-1',
+      candidateId: 'encore:saved-1',
+      name: 'Saved One',
+      itemIds: ['top', 'bottom', 'shoe'],
+    },
+  };
+
+  it('emits exactly 3x3 feedback links across three looks in HTML, none inside the Encore section', () => {
+    const rendered = render(bundle, { items }, false, { bundle }, '2026-07-25');
+
+    expect(rendered.html.match(/<a href="https:/g)).toHaveLength(9);
+
+    const encoreHeadingIndex = rendered.html.indexOf('ENCORE — FROM YOUR SAVED OUTFITS');
+    expect(encoreHeadingIndex).toBeGreaterThan(-1);
+    const encoreSectionHtml = rendered.html.slice(rendered.html.lastIndexOf('<section', encoreHeadingIndex));
+    expect(encoreSectionHtml.match(/<a href="https:/g)).toBeNull();
+
+    // The Encore section still renders normally — heading and items are present,
+    // only the feedback links were excluded.
+    expect(encoreSectionHtml).toContain('Saved One');
+    expect(encoreSectionHtml).toContain('TOP — Tee');
+  });
+
+  it('emits exactly 3x3 feedback lines across three looks in plain text, none after the Encore heading', () => {
+    const rendered = render(bundle, { items }, false, { bundle }, '2026-07-25');
+
+    const encoreHeadingIndex = rendered.plain.indexOf('ENCORE — FROM YOUR SAVED OUTFITS');
+    expect(encoreHeadingIndex).toBeGreaterThan(-1);
+
+    const beforeEncore = rendered.plain.slice(0, encoreHeadingIndex);
+    const fromEncoreOn = rendered.plain.slice(encoreHeadingIndex);
+
+    expect(beforeEncore.match(/Rate this look:/g)).toHaveLength(3);
+    expect(beforeEncore.match(/https:\/\//g)).toHaveLength(9);
+    expect(fromEncoreOn.match(/https:\/\//g)).toBeNull();
+
+    // The Encore section still renders normally in plain text too.
+    expect(fromEncoreOn).toContain('Saved One');
+    expect(fromEncoreOn).toContain('TOP — Tee');
   });
 });
