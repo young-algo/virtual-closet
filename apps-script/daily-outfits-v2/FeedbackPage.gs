@@ -4,7 +4,8 @@ function feedbackLookNameV2_(localDate, candidateId) {
   var history;
   try {
     history = loadHistoryV2_();
-  } catch (_ignored) {
+  } catch (error) {
+    console.warn('feedbackLookNameV2_: could not read history to resolve a look name: ' + error.message);
     return null;
   }
   var entry = (history || []).find(function(value) { return value.localDate === localDate; });

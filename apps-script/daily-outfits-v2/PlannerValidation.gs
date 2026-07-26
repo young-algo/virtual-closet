@@ -16,6 +16,15 @@ function validatePlannerResponseV2_(response, archetype, snapshot, expectedEasyS
       if (historyTextForModelV2_(candidate.candidateId, snapshot) !== candidate.candidateId) {
         errors.push(path + '.candidateId contains an unsafe model token');
       }
+      // The email feedback token payload is "v1|<localDate>|<candidateId>|<value>|<test?1:0>",
+      // so a "|" (or any other character outside this set) in a model-generated candidateId
+      // would make signFeedbackTokenV2_ throw at render time, after the bundle is already
+      // persisted — unrecoverable that day, since retries replay the same poisoned bundle.
+      // Rejecting it here instead means the planner simply re-runs. ":" stays legal because
+      // Encore candidateIds are "encore:" + the saved outfit id.
+      if (!/^[A-Za-z0-9:_-]+$/.test(candidate.candidateId)) {
+        errors.push(path + '.candidateId must contain only letters, digits, ":", "_", or "-"');
+      }
     }
     if (candidate.archetype !== archetype) errors.push(path + ' has the wrong archetype');
     var slots = [['topId', 'top'], ['bottomId', 'bottom'], ['shoeId', 'shoes']];

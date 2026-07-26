@@ -396,6 +396,27 @@ describe('feedback drain', () => {
   });
 });
 
+describe('feedbackLookNameV2_', () => {
+  it('warns rather than failing silently when history cannot be read', () => {
+    // The signal is already written by the time this resolves a display name, so nothing
+    // is lost by falling back to null — but a persistent Drive fault would otherwise present
+    // as "names never resolve" with zero trace to diagnose it by.
+    const warn = vi.fn();
+    const lookName = evaluateAppsScript<(localDate: string, candidateId: string) => string | null>(
+      ['Taste.gs', 'FeedbackPage.gs'], 'feedbackLookNameV2_',
+      {
+        loadHistoryV2_: () => { throw new Error('Drive unavailable'); },
+        console: { warn }
+      }
+    );
+    expect(lookName('2026-07-25', 'easy-1')).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = warn.mock.calls[0][0] as string;
+    expect(message).toContain('feedbackLookNameV2_');
+    expect(message).toContain('Drive unavailable');
+  });
+});
+
 describe('doGet feedback handler', () => {
   const pageScope = (overrides: Record<string, unknown> = {}) => ({
     ...tokenScope(),
@@ -648,5 +669,94 @@ describe('email feedback rendering — full-email integration', () => {
     // The Encore section still renders normally in plain text too.
     expect(fromEncoreOn).toContain('Saved One');
     expect(fromEncoreOn).toContain('TOP — Tee');
+  });
+});
+
+describe('feedback drain reaches dailyHistoryContextV2_ (the seam)', () => {
+  // This is the spec's decisive test ("Testing" section, last bullet): a `wore` tap
+  // must reach dailyHistoryContextV2_ as an itemFeedbackSignals entry and exempt those
+  // items from cooldownItemIds. The drain tests above stop at saveHistoryV2_, and
+  // historyContracts.test.ts drives dailyHistoryContextV2_ against hand-written history
+  // fixtures the drain never produced. Each half is tested; the seam between them is not
+  // — which is exactly how this feature was silently dead before this branch.
+  //
+  // Both functions are pulled out of ONE evaluateAppsScript scope so loadHistoryV2_
+  // returns the SAME in-memory `history` array to the drain and to the context builder —
+  // the drain's mutation is what the context builder reads, not a copy of it.
+  const topId = 'user_closet_seam_top';
+  const bottomId = 'user_closet_seam_bottom';
+
+  const snapshot = {
+    settings: { timezone: 'America/New_York', maxDailyHistoryDays: 30 },
+    items: [
+      { id: topId, shortLabel: 'T001', slot: 'top', brand: 'Nike', name: 'ACG Tee', color: 'cream' },
+      { id: bottomId, shortLabel: 'B001', slot: 'bottom', brand: 'Dickies', name: 'Double Knee', color: 'brown' }
+    ],
+    atlasPages: [],
+    tasteExamples: []
+  };
+
+  const utilities = {
+    parseDate: (value: string) => new Date(`${value.slice(0, 10)}T12:00:00Z`),
+    formatDate: (date: Date) => date.toISOString().slice(0, 10)
+  };
+
+  // See the identical annotation note on DrainHistoryEntry above: the drain mutates
+  // this array in place, adding `feedback`, and without the annotation the literal's
+  // inferred type lacks that property, which fails `tsc -b` while still passing Vitest.
+  type SeamHistoryEntry = {
+    localDate: string;
+    recommendations: Array<{ candidateId: string; name: string; archetype: string; itemIds: string[] }>;
+    feedback?: Array<{ localDate: string; candidateId: string; value: string; createdAt: number }>;
+  };
+
+  it('a wore tap drained from the inbox lands in itemFeedbackSignals and exempts cooldown', () => {
+    const localDate = '2026-07-20';
+    const nextLocalDate = '2026-07-21';
+    const history: SeamHistoryEntry[] = [{
+      localDate,
+      recommendations: [{
+        candidateId: 'easy-1',
+        name: 'Quiet Morning Ease',
+        archetype: 'easy',
+        itemIds: [topId, bottomId]
+      }]
+    }];
+    const stored = [{ localDate, candidateId: 'easy-1', value: 'wore', createdAt: 10 }];
+    const saveHistory = vi.fn();
+    const saveStore = vi.fn();
+
+    const api = evaluateAppsScript<{
+      drain: () => boolean;
+      context: (localDateValue: string, snapshotValue: object) => Record<string, any>;
+    }>(
+      ['ItemIndex.gs', 'ShoeRotation.gs', 'Taste.gs', 'Feedback.gs'],
+      '({ drain: mergeEmailFeedbackIntoHistoryV2_, context: dailyHistoryContextV2_ })',
+      {
+        ...storeScope(),
+        loadHistoryV2_: () => history,
+        saveHistoryV2_: saveHistory,
+        loadEmailFeedbackV2_: () => stored,
+        saveEmailFeedbackV2_: saveStore,
+        localDateV2_: () => localDate,
+        getDailyConfigV2_: () => ({ timezone: 'America/New_York' }),
+        Utilities: utilities
+      }
+    );
+
+    expect(api.drain()).toBe(true);
+    expect(saveHistory).toHaveBeenCalledOnce();
+    expect(saveStore).toHaveBeenCalledWith([]);
+    expect(history[0].feedback).toEqual([
+      { localDate, candidateId: 'easy-1', value: 'wore', createdAt: 10 }
+    ]);
+
+    const result = api.context(nextLocalDate, snapshot);
+
+    expect(result.itemFeedbackSignals.T001.wore).toBe(1);
+    expect(result.itemFeedbackSignals.B001.wore).toBe(1);
+    expect(result.wornItemIds).toEqual(expect.arrayContaining([topId, bottomId]));
+    expect(result.cooldownItemIds).not.toContain(topId);
+    expect(result.cooldownItemIds).not.toContain(bottomId);
   });
 });

@@ -56,7 +56,7 @@ A new Drive file `virtual-closet-daily-v2-email-feedback.json` holds an array of
 
 - `value` is one of `liked`, `disliked`, `wore`, matching the vocabulary `dailyHistoryContextV2_` already accepts.
 - Upsert is last-write-wins on the `(localDate, candidateId)` pair.
-- Writes are wrapped in `LockService` to prevent lost updates from concurrent taps.
+- `upsertEmailFeedbackV2_` takes no lock, and neither does `doGet`. The only usable lock is the script lock, which the scheduler holds for up to five minutes during generation; taking it in `doGet` would make a tap during that window render "This link isn't valid" instead of recording. Two concurrent taps can still race: both read the store before either writes, and one write is lost silently. A same-`(localDate, candidateId)` contention detector warns when a *differing* verb lands within `DAILY_V2.FEEDBACK_CONTENTION_MS` of a prior one — enough to catch a link scanner fetching all three links in sequence, not enough to catch two truly parallel requests, and not enough to catch two writes of the *same* verb landing in that window (that path is intentionally silent, since it changes nothing).
 - A corrupt or non-conforming file throws, following `parseDislikedEncoreIdsV2_`. It is never silently reset.
 - Entries whose `localDate` falls outside the retention window are pruned during drain.
 
