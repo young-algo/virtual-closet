@@ -280,6 +280,15 @@ describe('feedback token', () => {
 });
 
 describe('feedback drain', () => {
+  // The drain mutates history entries in place, adding `feedback`. Without this
+  // annotation the array literals infer a type that lacks the property, so the
+  // post-drain assertions fail `tsc -b` while still passing under Vitest.
+  type DrainHistoryEntry = {
+    localDate: string;
+    recommendations: Array<{ candidateId: string; itemIds: string[] }>;
+    feedback?: Array<{ localDate: string; candidateId: string; value: string; createdAt: number }>;
+  };
+
   const drainScope = (history: unknown[], stored: unknown[], saves: Record<string, ReturnType<typeof vi.fn>>) => ({
     ...storeScope(),
     getDailyConfigV2_: () => ({ timezone: 'America/New_York' }),
@@ -291,7 +300,7 @@ describe('feedback drain', () => {
   });
 
   it('merges a signal into its history entry and drains it', () => {
-    const history = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
+    const history: DrainHistoryEntry[] = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
     const saves = { history: vi.fn(), store: vi.fn() };
     const stored = [{ localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 }];
     const drain = evaluateAppsScript<() => boolean>(
@@ -350,7 +359,7 @@ describe('feedback drain', () => {
   });
 
   it('drops a signal whose candidate is absent from that date, without stalling the queue', () => {
-    const history = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
+    const history: DrainHistoryEntry[] = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
     const saves = { history: vi.fn(), store: vi.fn() };
     const stored = [{ localDate: '2026-07-25', candidateId: 'ghost-9', value: 'wore', createdAt: 10 }];
     const drain = evaluateAppsScript<() => boolean>(
@@ -372,7 +381,7 @@ describe('feedback drain', () => {
   });
 
   it('queues exactly the pending signal and drains the other from a mixed store', () => {
-    const history = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
+    const history: DrainHistoryEntry[] = [{ localDate: '2026-07-25', recommendations: [{ candidateId: 'easy-1', itemIds: ['a'] }] }];
     const saves = { history: vi.fn(), store: vi.fn() };
     const drainable = { localDate: '2026-07-25', candidateId: 'easy-1', value: 'wore', createdAt: 10 };
     const queuedSignal = { localDate: '2026-07-24', candidateId: 'easy-2', value: 'liked', createdAt: 5 };
