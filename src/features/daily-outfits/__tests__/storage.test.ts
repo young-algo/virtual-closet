@@ -5,7 +5,6 @@ import {
   PROHIBITED_DAILY_WRITE_KEYS,
   loadLastDailyBundle,
   saveAtlasManifest,
-  saveDailyFeedback,
   saveDailySettings,
   saveDailySyncStatus,
   saveLastDailyBundle
@@ -24,7 +23,6 @@ beforeEach(() => {
 describe('daily-only storage', () => {
   it('writes exclusively to the v2 daily namespace', () => {
     saveDailySettings(DEFAULT_DAILY_OUTFIT_SETTINGS);
-    saveDailyFeedback([]);
     saveDailySyncStatus({ state: 'idle' });
     saveAtlasManifest(emptyAtlasManifest());
     saveLastDailyBundle(makeDailyBundle());

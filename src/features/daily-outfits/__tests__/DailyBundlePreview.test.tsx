@@ -3,11 +3,9 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import DailyBundlePreview from '../DailyBundlePreview';
-import DailyFeedbackControls from '../DailyFeedbackControls';
 import type {
   DailyBundleCoverageV2,
   DailyBundleV2,
-  DailyFeedbackV2,
   DailySourceItem,
 } from '../types';
 import { makeDailyBundle, makeMalformedDailyBundles } from './dailyBundleTestFixtures';
@@ -45,13 +43,11 @@ const bundle = (patch: Record<string, unknown> = {}) => ({
   ...patch,
 }) as unknown as DailyBundleV2;
 
-const render = (bundleValue: DailyBundleV2, feedback: DailyFeedbackV2[] = []) =>
+const render = (bundleValue: DailyBundleV2) =>
   renderToStaticMarkup(
     <DailyBundlePreview
       bundle={bundleValue}
       items={items}
-      feedback={feedback}
-      onFeedback={() => undefined}
     />,
   );
 
@@ -201,7 +197,7 @@ describe('DailyBundlePreview Encore', () => {
     expect(contrastRatio(listColor ?? '#ffffff', '#ece7da')).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('shows the exact label, static copy, safely rendered items, and Encore feedback identity', () => {
+  it('shows the exact label, static copy, and safely rendered items for Encore', () => {
     const encoreBundle = bundle({
       encore: {
         outfitId: 'saved-1',
@@ -210,14 +206,8 @@ describe('DailyBundlePreview Encore', () => {
         itemIds: ['top', 'missing', 'bottom', 'shoe'],
       },
     });
-    const feedback: DailyFeedbackV2[] = [{
-      localDate: '2026-07-14',
-      candidateId: 'encore:saved-1',
-      value: 'liked',
-      createdAt: 1,
-    }];
 
-    const html = render(encoreBundle, feedback);
+    const html = render(encoreBundle);
 
     expect(html).toContain('Encore — from your saved outfits');
     expect(html).toContain('Saved &lt;One&gt;');
@@ -225,8 +215,6 @@ describe('DailyBundlePreview Encore', () => {
     expect(html).toContain('Top &lt;One&gt;');
     expect(html).toContain('Bottom &amp; Two');
     expect(html).not.toContain('missing');
-    expect(html).toContain('aria-label="Feedback for Saved &lt;One&gt;"');
-    expect(html).toContain('class="is-selected" aria-pressed="true">Like</button>');
   });
 
   it('renders no Encore markup when the optional field is absent', () => {
@@ -247,25 +235,6 @@ describe('DailyBundlePreview Encore', () => {
     expect(() => render(malformed)).toThrowError(/DailyBundleV2/);
   });
 
-  it('passes the exact Encore candidate identity and name to the shared feedback controls', () => {
-    const encore = {
-      outfitId: 'saved-1', candidateId: 'encore:saved-1', name: 'Saved One', itemIds: [],
-    };
-    const encoreBundle = bundle({ encore });
-    const tree = DailyBundlePreview({
-      bundle: encoreBundle, items, feedback: [], onFeedback: () => undefined,
-    });
-    const control = elementsIn(tree).find(element => (
-      element.type === DailyFeedbackControls &&
-      (element.props as { recommendation?: unknown }).recommendation === encore
-    ));
-    if (!control) throw new Error('Expected Encore feedback controls');
-    const controlProps = control.props as { recommendation?: unknown; localDate?: unknown };
-
-    expect(controlProps.recommendation).toBe(encore);
-    expect(controlProps.localDate).toBe('2026-07-14');
-  });
-
   it('uses stable unique React keys for repeated resolvable Encore item references', () => {
     const tree = DailyBundlePreview({
       bundle: bundle({
@@ -274,8 +243,6 @@ describe('DailyBundlePreview Encore', () => {
         },
       }),
       items,
-      feedback: [],
-      onFeedback: () => undefined,
     });
     const imageKeys = elementsIn(tree)
       .filter(element => element.type === 'img')
@@ -284,7 +251,7 @@ describe('DailyBundlePreview Encore', () => {
     expect(imageKeys).toEqual(['top:0', 'top:1']);
   });
 
-  it('preserves the ordinary three generated looks and their feedback path', () => {
+  it('preserves the ordinary three generated looks', () => {
     const recommendations = (['easy', 'polished-casual', 'expressive'] as const).map((archetype, index) => ({
       candidateId: `look-${index}`,
       archetype,
@@ -294,17 +261,13 @@ describe('DailyBundlePreview Encore', () => {
       whyItWorks: 'The proportions and colors work together.',
       weatherNote: 'Comfortable for the forecast.',
     }));
-    const feedback: DailyFeedbackV2[] = [{
-      localDate: '2026-07-14', candidateId: 'look-1', value: 'wore', createdAt: 1,
-    }];
 
-    const html = render(bundle({ recommendations }), feedback);
+    const html = render(bundle({ recommendations }));
 
     expect(html.match(/<article class="daily-look">/g)).toHaveLength(3);
     expect(html).toContain('01 Easy');
     expect(html).toContain('02 Polished casual');
     expect(html).toContain('03 Expressive');
-    expect(html).toContain('class="is-selected" aria-pressed="true">I wore this</button>');
     expect(html).not.toContain('daily-encore');
   });
 
@@ -325,5 +288,11 @@ describe('DailyBundlePreview Encore', () => {
 
   it.each(makeMalformedDailyBundles())('rejects malformed preview payload before rendering: %s', (_name, malformed) => {
     expect(() => render(malformed as DailyBundleV2)).toThrowError(/DailyBundleV2/);
+  });
+
+  it('labels the preview as the last generated test bundle', () => {
+    const html = render(bundle());
+
+    expect(html).toContain('Last generated test bundle');
   });
 });

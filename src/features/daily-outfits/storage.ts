@@ -1,9 +1,8 @@
-import type { DailyAtlasManifestV2, DailyBundleV2, DailyFeedbackV2, DailyOutfitSettingsV2, DailySyncStatusV2 } from './types';
+import type { DailyAtlasManifestV2, DailyBundleV2, DailyOutfitSettingsV2, DailySyncStatusV2 } from './types';
 import { parseDailyBundleV2, tryParseCachedDailyBundleV2 } from './dailyBundleParser';
 
 export const DAILY_STORAGE_KEYS = {
   settings: 'daily_outfits_settings_v2',
-  feedback: 'daily_outfits_feedback_v2',
   lastBundle: 'daily_outfits_last_bundle_v2',
   syncStatus: 'daily_outfits_sync_status_v2',
   atlasManifest: 'daily_outfits_atlas_manifest_v2'
@@ -39,8 +38,6 @@ export const loadDailySettings = (defaults: DailyOutfitSettingsV2): DailyOutfitS
   ...readJson<Partial<DailyOutfitSettingsV2>>(DAILY_STORAGE_KEYS.settings, {})
 });
 export const saveDailySettings = (settings: DailyOutfitSettingsV2) => writeDailyJson(DAILY_STORAGE_KEYS.settings, settings);
-export const loadDailyFeedback = () => readJson<DailyFeedbackV2[]>(DAILY_STORAGE_KEYS.feedback, []);
-export const saveDailyFeedback = (feedback: DailyFeedbackV2[]) => writeDailyJson(DAILY_STORAGE_KEYS.feedback, feedback);
 export const loadLastDailyBundle = (): DailyBundleV2 | null => (
   tryParseCachedDailyBundleV2(readJson<unknown>(DAILY_STORAGE_KEYS.lastBundle, null))
 );
