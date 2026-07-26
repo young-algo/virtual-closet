@@ -194,6 +194,7 @@ export interface DailyOutfitDiagnosticsV2 {
   attemptCounts: Record<string, number>;
   lastSentDate: string | null;
   modelsConfigured: Record<string, boolean>;
+  feedbackConfigured: Record<string, boolean>;
   snapshotAgeHours: number | null;
 }
 

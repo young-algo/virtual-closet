@@ -1342,6 +1342,64 @@ describe('Apps Script contracts', () => {
     ]);
   });
 
+  it('continues past a throwing feedback-store drain on the scheduled path (advanceDailyJobV2_) too', () => {
+    // generateDailyBundleStepV2 is the manual step action; the 06:45 trigger runs
+    // runDailyOutfitScheduler, which drives this exact idle-stage branch via
+    // advanceDailyJobV2_. Both callsites wrap mergeEmailFeedbackIntoHistoryV2_ in
+    // try/catch, but until now only the manual path had a test proving a throw
+    // doesn't propagate. This drives advanceDailyJobV2_ directly with the stub
+    // throwing and asserts the job still advances to weather-ready.
+    const events: string[] = [];
+    const loggedErrors: string[] = [];
+    const savedStates: Record<string, unknown>[] = [];
+    const savedPending: unknown[] = [];
+    const clock = [0, 0, 0, 0];
+    let clockIndex = 0;
+    const advance = evaluateAppsScript<(
+      state: Record<string, unknown>,
+      snapshot: Record<string, unknown>,
+      startedAt: number,
+    ) => { state: Record<string, unknown>; pending: Record<string, unknown> }>(
+      ['JobState.gs', 'Scheduler.gs'],
+      'advanceDailyJobV2_',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        Date: { now: () => clock[clockIndex++] ?? 300_000 },
+        loadPendingV2_: () => null,
+        mergeEmailFeedbackIntoHistoryV2_: () => {
+          events.push('merge');
+          throw new Error('Corrupt email feedback store: invalid entry');
+        },
+        fetchDailyWeatherV2: () => { events.push('weather'); return persistedWeatherFixture(); },
+        dailyHistoryContextV2_: () => { events.push('history'); return persistedHistoryFixture(); },
+        savePendingV2_: (value: unknown) => {
+          savedPending.push(structuredClone(value));
+          return 'pending-file';
+        },
+        saveJobStateV2_: (value: Record<string, unknown>) => {
+          savedStates.push(structuredClone(value));
+          return 'job-file';
+        },
+        console: { error: (message: string) => loggedErrors.push(message) },
+      },
+    );
+
+    const result = advance({
+      stage: 'idle',
+      qualityPolicyVersion: 4,
+      localDate: '2026-07-15',
+      wardrobeFingerprint: 'wardrobe-v3',
+      attemptCounts: {},
+    }, { wardrobeFingerprint: 'wardrobe-v3' }, 0);
+
+    expect(result.state.stage).toBe('weather-ready');
+    expect(events).toEqual(['merge', 'weather', 'history']);
+    expect(loggedErrors).toEqual([
+      'Daily V2 feedback drain failed: Corrupt email feedback store: invalid entry',
+    ]);
+    expect(savedStates).toContainEqual(expect.objectContaining({ stage: 'weather-ready' }));
+  });
+
   it('persists the job selection transition and resumes it without rerunning selection', () => {
     const selectedResult = persistedSelectionFixture();
     const planners = persistedPlannersFixture();
