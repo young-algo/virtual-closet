@@ -26,7 +26,7 @@ var DAILY_V2 = Object.freeze({
   }),
   REQUIRED_SLOTS: ['top', 'bottom', 'shoes'],
   MAX_EMAIL_FEEDBACK_AGE_DAYS: 30,
-  FEEDBACK_VALUES: ['liked', 'disliked', 'wore'],
+  FEEDBACK_VALUES: ['wore', 'disliked', 'liked'],
   FEEDBACK_CONTENTION_MS: 10000
 });
 

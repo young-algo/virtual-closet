@@ -253,7 +253,7 @@ describe('Daily V2 resilience contracts', () => {
     }];
     const saveHistoryV2_ = vi.fn();
     const merge = evaluateAppsScript<() => boolean>(['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', {
-      DAILY_V2: { FEEDBACK_VALUES: ['liked', 'disliked', 'wore'], MAX_EMAIL_FEEDBACK_AGE_DAYS: 30 },
+      DAILY_V2: { FEEDBACK_VALUES: ['wore', 'disliked', 'liked'], MAX_EMAIL_FEEDBACK_AGE_DAYS: 30 },
       getDailyConfigV2_: () => ({ timezone: 'America/New_York' }),
       localDateV2_: () => '2026-07-13',
       shoeRotationCalendarOrdinalV2_: (localDate: string) =>

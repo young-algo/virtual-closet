@@ -12,10 +12,15 @@ function archetypeEmailLabelV2_(value) {
   return value === 'polished-casual' ? 'POLISHED CASUAL' : value.toUpperCase();
 }
 
+// Ordered so a link scanner fetching these in document order lands last on
+// 'liked', the cheapest verb to record falsely. 'wore' must not be last: it
+// both inflates itemFeedbackSignals and exempts its items from cooldown via
+// wornItemIds, which tells the planner an outfit was worn when it was not.
+// Kept in lockstep with DAILY_V2.FEEDBACK_VALUES; a contract test pins them.
 var FEEDBACK_EMAIL_LABELS_V2 = [
-  ['liked', 'LIKE'],
+  ['wore', 'WORE THIS'],
   ['disliked', 'NOT FOR ME'],
-  ['wore', 'WORE THIS']
+  ['liked', 'LIKE']
 ];
 
 function feedbackRowHtmlV2_(localDate, candidateId, testMode) {

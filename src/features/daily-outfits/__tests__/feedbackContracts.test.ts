@@ -5,7 +5,7 @@ const storeScope = (overrides: Record<string, unknown> = {}) => ({
   DAILY_V2: {
     EMAIL_FEEDBACK_FILE: 'virtual-closet-daily-v2-email-feedback.json',
     MAX_EMAIL_FEEDBACK_AGE_DAYS: 30,
-    FEEDBACK_VALUES: ['liked', 'disliked', 'wore'],
+    FEEDBACK_VALUES: ['wore', 'disliked', 'liked'],
     FEEDBACK_CONTENTION_MS: 10000
   },
   loadEmailFeedbackV2_: () => [],
@@ -524,6 +524,18 @@ describe('feedback vocabulary parity', () => {
     const emailVerbs = evaluateAppsScript<[string, string][]>(['Email.gs'], 'FEEDBACK_EMAIL_LABELS_V2')
       .map(pair => pair[0]);
     expect(emailVerbs).toEqual(feedbackValues);
+  });
+
+  // A link scanner fetching the three links in document order records all three,
+  // and last-write-wins means the final link decides the stored rating. 'wore' is
+  // the costliest verb to record falsely: it inflates itemFeedbackSignals AND
+  // exempts its items from cooldown via wornItemIds, telling the planner an outfit
+  // was worn when it was not. 'liked' only touches itemFeedbackSignals.
+  it('orders the verbs so a sequential prefetch lands on the cheapest one', () => {
+    const emailVerbs = evaluateAppsScript<[string, string][]>(['Email.gs'], 'FEEDBACK_EMAIL_LABELS_V2')
+      .map(pair => pair[0]);
+    expect(emailVerbs[emailVerbs.length - 1]).toBe('liked');
+    expect(emailVerbs.indexOf('wore')).toBeLessThan(emailVerbs.length - 1);
   });
 });
 
