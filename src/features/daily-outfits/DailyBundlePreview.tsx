@@ -1,5 +1,4 @@
-import type { DailyBundleV2, DailyFeedbackV2, DailySourceItem } from './types';
-import DailyFeedbackControls from './DailyFeedbackControls';
+import type { DailyBundleV2, DailySourceItem } from './types';
 import { parseCachedDailyBundleV2 } from './dailyBundleParser';
 import { productImageBlendMode } from '../../utils/productImagePresentation';
 
@@ -8,11 +7,9 @@ const ARCHETYPE_LABELS = { easy: 'Easy', 'polished-casual': 'Polished casual', e
 interface Props {
   bundle: DailyBundleV2;
   items: DailySourceItem[];
-  feedback: DailyFeedbackV2[];
-  onFeedback: (feedback: DailyFeedbackV2) => void;
 }
 
-export default function DailyBundlePreview({ bundle: bundleValue, items, feedback, onFeedback }: Props) {
+export default function DailyBundlePreview({ bundle: bundleValue, items }: Props) {
   const bundle = parseCachedDailyBundleV2(bundleValue);
   const generatedCountCopy = bundle.recommendations.length === 1
     ? "Today's outfit"
@@ -26,14 +23,11 @@ export default function DailyBundlePreview({ bundle: bundleValue, items, feedbac
   const encoreItems = Array.isArray(bundle.encore?.itemIds)
     ? bundle.encore.itemIds.map(id => byId.get(id)).filter((item): item is DailySourceItem => Boolean(item))
     : [];
-  const encoreFeedback = bundle.encore
-    ? feedback.find(entry => entry.localDate === bundle.localDate && entry.candidateId === bundle.encore?.candidateId)
-    : undefined;
   return (
     <section className="daily-preview" aria-labelledby="daily-preview-heading">
       <div className="daily-preview-heading">
         <div>
-          <span className="daily-kicker">Latest bundle</span>
+          <span className="daily-kicker">Last generated test bundle</span>
           <h3 id="daily-preview-heading">{new Date(`${bundle.localDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
         </div>
         <p>{Math.round(bundle.weather.morningFeelsLikeF)}° morning · {Math.round(bundle.weather.highTemperatureF)}° high · {Math.round(bundle.weather.maxRainProbability)}% rain</p>
@@ -44,7 +38,6 @@ export default function DailyBundlePreview({ bundle: bundleValue, items, feedbac
       <div className={`daily-looks is-${bundle.recommendations.length}`}>
         {bundle.recommendations.map((recommendation, index) => {
           const recommendationItems = recommendation.itemIds.map(id => byId.get(id)).filter((item): item is DailySourceItem => Boolean(item));
-          const selectedFeedback = feedback.find(entry => entry.localDate === bundle.localDate && entry.candidateId === recommendation.candidateId);
           return (
             <article key={recommendation.candidateId} className="daily-look">
               <div className="daily-look-label">0{index + 1} {ARCHETYPE_LABELS[recommendation.archetype]}</div>
@@ -65,7 +58,6 @@ export default function DailyBundlePreview({ bundle: bundleValue, items, feedbac
               <ul>
                 {recommendationItems.map(item => <li key={item.id}>{item.name}</li>)}
               </ul>
-              <DailyFeedbackControls localDate={bundle.localDate} recommendation={recommendation} feedback={selectedFeedback} onChange={onFeedback} />
             </article>
           );
         })}
@@ -88,12 +80,6 @@ export default function DailyBundlePreview({ bundle: bundleValue, items, feedbac
           <ul>
             {encoreItems.map((item, index) => <li key={`${item.id}:${index}`}>{item.name}</li>)}
           </ul>
-          <DailyFeedbackControls
-            localDate={bundle.localDate}
-            recommendation={bundle.encore}
-            feedback={encoreFeedback}
-            onChange={onFeedback}
-          />
         </article>
       )}
     </section>

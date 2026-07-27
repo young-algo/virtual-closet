@@ -3,18 +3,15 @@ import { Check, CloudSun, LoaderCircle, X } from 'lucide-react';
 import { buildDailySnapshot, type SnapshotBuildProgress } from './snapshotBuilder';
 import { DEFAULT_DAILY_OUTFIT_SETTINGS, isDailyServerConfigured } from './settings';
 import {
-  loadDailyFeedback,
   loadDailySettings,
   loadDailySyncStatus,
   loadLastDailyBundle,
-  saveDailyFeedback,
   saveDailySettings,
   saveDailySyncStatus
 } from './storage';
 import { callDailyServer, syncDailySnapshot, type DailyServerAction } from './syncClient';
 import type {
   DailyBundleV2,
-  DailyFeedbackV2,
   DailyOutfitDiagnosticsV2,
   DailyOutfitSettingsV2,
   DailySourceItem,
@@ -39,7 +36,6 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
   const dialogRef = useRef<HTMLDialogElement>(null);
   const firstAutomaticSync = useRef(true);
   const [settings, setSettings] = useState<DailyOutfitSettingsV2>(() => loadDailySettings(DEFAULT_DAILY_OUTFIT_SETTINGS));
-  const [feedback, setFeedback] = useState<DailyFeedbackV2[]>(loadDailyFeedback);
   const [bundle, setBundle] = useState<DailyBundleV2 | null>(loadLastDailyBundle);
   const [status, setStatus] = useState<DailySyncStatusV2>(loadDailySyncStatus);
   const [progress, setProgress] = useState<SnapshotBuildProgress | null>(null);
@@ -62,7 +58,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
 
   const buildSnapshot = useCallback(async () => {
     setStatus(previous => ({ ...previous, state: 'building', message: 'Preparing the complete wardrobe…' }));
-    const snapshot = await buildDailySnapshot(items, outfits, feedback, settings, setProgress);
+    const snapshot = await buildDailySnapshot(items, outfits, settings, setProgress);
     setStatus(previous => ({
       ...previous,
       state: 'idle',
@@ -73,7 +69,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
     }));
     setProgress(null);
     return snapshot;
-  }, [feedback, items, outfits, settings]);
+  }, [items, outfits, settings]);
 
   const runAction = async (action: 'build' | DailyServerAction) => {
     setBusyAction(action);
@@ -128,7 +124,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
     const delay = firstAutomaticSync.current ? 600 : 10_000;
     firstAutomaticSync.current = false;
     const timer = window.setTimeout(() => {
-      buildDailySnapshot(items, outfits, feedback, settings)
+      buildDailySnapshot(items, outfits, settings)
         .then(snapshot => syncDailySnapshot(snapshot, settings))
         .then(() => setStatus(loadDailySyncStatus()))
         .catch(error => {
@@ -138,7 +134,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
         });
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [configured, feedback, items, outfits, settings]);
+  }, [configured, items, outfits, settings]);
 
   const resolveLocation = async () => {
     setBusyAction('location');
@@ -160,12 +156,6 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
     } finally {
       setBusyAction(null);
     }
-  };
-
-  const handleFeedback = (entry: DailyFeedbackV2) => {
-    const next = [...feedback.filter(value => !(value.localDate === entry.localDate && value.candidateId === entry.candidateId)), entry];
-    setFeedback(next);
-    saveDailyFeedback(next);
   };
 
   const statusLabel = useMemo(() => {
@@ -246,7 +236,7 @@ export default function DailyOutfitSettings({ open, onClose, items, outfits }: P
           {diagnostics && <pre className="daily-diagnostics">{JSON.stringify(diagnostics, null, 2)}</pre>}
         </section>
 
-        {bundle && <DailyBundlePreview bundle={bundle} items={items} feedback={feedback} onFeedback={handleFeedback} />}
+        {bundle && <DailyBundlePreview bundle={bundle} items={items} />}
       </div>
     </dialog>
   );

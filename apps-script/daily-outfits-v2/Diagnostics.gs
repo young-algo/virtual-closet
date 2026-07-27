@@ -160,6 +160,11 @@ function getDailyOutfitDiagnosticsV2() {
     result[key] = Boolean(properties && safeDailyDiagnosticLoadV2_(function() { return properties.getProperty(key); }, null));
     return result;
   }, {});
+  var feedbackPropertyKeys = ['FEEDBACK_SECRET', 'WEB_APP_URL'];
+  var feedbackConfigured = feedbackPropertyKeys.reduce(function(result, key) {
+    result[key] = Boolean(properties && safeDailyDiagnosticLoadV2_(function() { return properties.getProperty(key); }, null));
+    return result;
+  }, {});
   var lastSentDate = properties
     ? safeDailyDiagnosticLoadV2_(function() { return properties.getProperty('LAST_SENT_DATE_V2'); }, null)
     : null;
@@ -179,6 +184,7 @@ function getDailyOutfitDiagnosticsV2() {
     attemptCounts: safeDailyAttemptCountsV2_(state, job !== null),
     lastSentDate: lastSentDate,
     modelsConfigured: modelsConfigured,
+    feedbackConfigured: feedbackConfigured,
     snapshotAgeHours: snapshotAgeHours
   };
 }

@@ -997,6 +997,34 @@ describe('Apps Script contracts', () => {
     expect(plannerValidator(stale, 'easy', privacySnapshot).join(' ')).toMatch(/candidateId.*unsafe model token/);
   });
 
+  it('rejects a candidateId containing the feedback-token delimiter or other unsafe characters', () => {
+    // candidateId is free-form Gemini output. feedbackLinkUrlV2_ -> signFeedbackTokenV2_ ->
+    // validFeedbackCandidateIdV2_ rejects "|" at render time, after the bundle is already
+    // persisted (state.stage === 'bundle-ready'), so retries would replay the same poisoned
+    // bundle with no path to a good email that day. This must be caught here instead, while
+    // the planner can still simply re-run.
+    const piped = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
+    piped.candidates[0] = { ...piped.candidates[0], candidateId: 'easy|1' };
+    expect(plannerValidator(piped, 'easy', snapshot).join(' ')).toMatch(
+      /candidate\[0\]\.candidateId must contain only letters, digits, ":", "_", or "-"/
+    );
+
+    const spaced = structuredClone(piped);
+    spaced.candidates[0].candidateId = 'easy 1';
+    expect(plannerValidator(spaced, 'easy', snapshot).join(' ')).toMatch(
+      /candidateId must contain only letters, digits, ":", "_", or "-"/
+    );
+  });
+
+  it('accepts a candidateId using the encore-style ":" delimiter alongside hyphens and underscores', () => {
+    // Real ids seen in this codebase: planner-generated forms like "easy-1" / "c0", and
+    // Encore.gs:293's 'encore:' + outfit.id where outfit.id is 'outfit_' + Date.now() (see
+    // App.tsx). The charset must accept all three without rejecting real candidateIds.
+    const response = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
+    response.candidates[0] = { ...response.candidates[0], candidateId: 'encore:outfit_1753400000000-a' };
+    expect(plannerValidator(response, 'easy', snapshot)).toEqual([]);
+  });
+
   it('does not collapse distinct planner combinations whose opaque ids contain delimiters', () => {
     const response = { archetype: 'easy', candidates: Array.from({ length: 5 }, (_, index) => candidate(index)) };
     response.candidates[0] = {
@@ -1093,7 +1121,7 @@ describe('Apps Script contracts', () => {
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => snapshot,
         loadSnapshotV2_: () => snapshot,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { mergeCalls += 1; },
+        mergeEmailFeedbackIntoHistoryV2_: () => { mergeCalls += 1; },
         applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
         getDailyConfigV2_: () => ({}),
         localDateV2_: () => '2026-07-15',
@@ -1131,7 +1159,7 @@ describe('Apps Script contracts', () => {
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => snapshot,
         loadSnapshotV2_: () => snapshot,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { mergeCalls += 1; },
+        mergeEmailFeedbackIntoHistoryV2_: () => { mergeCalls += 1; },
         applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
         getDailyConfigV2_: () => ({}),
         localDateV2_: () => '2026-07-15',
@@ -1203,7 +1231,7 @@ describe('Apps Script contracts', () => {
           events.push(`save:${pending.manualStage}`);
           return 'pending-file';
         },
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('merge'); },
+        mergeEmailFeedbackIntoHistoryV2_: () => { events.push('merge'); },
         fetchDailyWeatherV2: () => {
           events.push('weather');
           throw new Error('weather unavailable');
@@ -1239,7 +1267,7 @@ describe('Apps Script contracts', () => {
             wardrobeFingerprint: 'wardrobe-v3',
           };
         },
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('merge'); },
+        mergeEmailFeedbackIntoHistoryV2_: () => { events.push('merge'); },
         fetchDailyWeatherV2: () => {
           events.push('weather');
           return persistedWeatherFixture();
@@ -1257,6 +1285,119 @@ describe('Apps Script contracts', () => {
 
     expect(generate()).toEqual({ complete: false, stage: 'weather-ready', bundle: null });
     expect(events).toEqual(['load', 'merge', 'weather', 'history', 'save:weather-ready']);
+  });
+
+  it('continues past a throwing feedback-store drain instead of blocking the idle stage', () => {
+    // mergeEmailFeedbackIntoHistoryV2_ can throw on a corrupt Drive-backed inbox file
+    // (readEmailFeedbackStoreV2_ / getJsonFileByPropertyV2_). Every callsite wraps the
+    // call in try/catch so a bad inbox file logs and is skipped rather than blocking
+    // the morning send on every 10-minute tick until someone manually deletes the file.
+    const events: string[] = [];
+    const loggedErrors: string[] = [];
+    const generate = evaluateAppsScript<() => { complete: boolean; stage: string }>(
+      ['JobState.gs', 'Scheduler.gs'],
+      'generateDailyBundleStepV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
+        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+        assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
+        applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
+        getDailyConfigV2_: () => ({}),
+        localDateV2_: () => '2026-07-15',
+        loadPendingV2_: () => {
+          events.push('load');
+          return {
+            workflow: 'manual-v2',
+            qualityPolicyVersion: 4,
+            manualStage: 'idle',
+            localDate: '2026-07-15',
+            wardrobeFingerprint: 'wardrobe-v3',
+          };
+        },
+        mergeEmailFeedbackIntoHistoryV2_: () => {
+          events.push('merge');
+          throw new Error('Corrupt email feedback store: invalid entry');
+        },
+        fetchDailyWeatherV2: () => {
+          events.push('weather');
+          return persistedWeatherFixture();
+        },
+        dailyHistoryContextV2_: () => {
+          events.push('history');
+          return persistedHistoryFixture();
+        },
+        savePendingV2_: (pending: { manualStage: string }) => {
+          events.push(`save:${pending.manualStage}`);
+          return 'pending-file';
+        },
+        console: { error: (message: string) => loggedErrors.push(message) },
+      },
+    );
+
+    expect(generate()).toEqual({ complete: false, stage: 'weather-ready', bundle: null });
+    expect(events).toEqual(['load', 'merge', 'weather', 'history', 'save:weather-ready']);
+    expect(loggedErrors).toEqual([
+      'Daily V2 feedback drain failed: Corrupt email feedback store: invalid entry',
+    ]);
+  });
+
+  it('continues past a throwing feedback-store drain on the scheduled path (advanceDailyJobV2_) too', () => {
+    // generateDailyBundleStepV2 is the manual step action; the 06:45 trigger runs
+    // runDailyOutfitScheduler, which drives this exact idle-stage branch via
+    // advanceDailyJobV2_. Both callsites wrap mergeEmailFeedbackIntoHistoryV2_ in
+    // try/catch, but until now only the manual path had a test proving a throw
+    // doesn't propagate. This drives advanceDailyJobV2_ directly with the stub
+    // throwing and asserts the job still advances to weather-ready.
+    const events: string[] = [];
+    const loggedErrors: string[] = [];
+    const savedStates: Record<string, unknown>[] = [];
+    const savedPending: unknown[] = [];
+    const clock = [0, 0, 0, 0];
+    let clockIndex = 0;
+    const advance = evaluateAppsScript<(
+      state: Record<string, unknown>,
+      snapshot: Record<string, unknown>,
+      startedAt: number,
+    ) => { state: Record<string, unknown>; pending: Record<string, unknown> }>(
+      ['JobState.gs', 'Scheduler.gs'],
+      'advanceDailyJobV2_',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
+        Date: { now: () => clock[clockIndex++] ?? 300_000 },
+        loadPendingV2_: () => null,
+        mergeEmailFeedbackIntoHistoryV2_: () => {
+          events.push('merge');
+          throw new Error('Corrupt email feedback store: invalid entry');
+        },
+        fetchDailyWeatherV2: () => { events.push('weather'); return persistedWeatherFixture(); },
+        dailyHistoryContextV2_: () => { events.push('history'); return persistedHistoryFixture(); },
+        savePendingV2_: (value: unknown) => {
+          savedPending.push(structuredClone(value));
+          return 'pending-file';
+        },
+        saveJobStateV2_: (value: Record<string, unknown>) => {
+          savedStates.push(structuredClone(value));
+          return 'job-file';
+        },
+        console: { error: (message: string) => loggedErrors.push(message) },
+      },
+    );
+
+    const result = advance({
+      stage: 'idle',
+      qualityPolicyVersion: 4,
+      localDate: '2026-07-15',
+      wardrobeFingerprint: 'wardrobe-v3',
+      attemptCounts: {},
+    }, { wardrobeFingerprint: 'wardrobe-v3' }, 0);
+
+    expect(result.state.stage).toBe('weather-ready');
+    expect(events).toEqual(['merge', 'weather', 'history']);
+    expect(loggedErrors).toEqual([
+      'Daily V2 feedback drain failed: Corrupt email feedback store: invalid entry',
+    ]);
+    expect(savedStates).toContainEqual(expect.objectContaining({ stage: 'weather-ready' }));
   });
 
   it('persists the job selection transition and resumes it without rerunning selection', () => {
@@ -1437,7 +1578,7 @@ describe('Apps Script contracts', () => {
           LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
           assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
           loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
-          mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+          mergeEmailFeedbackIntoHistoryV2_: () => undefined,
           applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
           getDailyConfigV2_: () => ({}),
           localDateV2_: () => '2026-07-15',
@@ -1533,7 +1674,7 @@ describe('Apps Script contracts', () => {
         DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes, MIN_EXECUTION_REMAINING_MS: 45_000 },
         Date: { now: () => 0 },
         loadPendingV2_: () => null,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('history'); },
+        mergeEmailFeedbackIntoHistoryV2_: () => { events.push('history'); },
         fetchDailyWeatherV2: () => { events.push('weather'); return persistedWeatherFixture(); },
         savePendingV2_: () => 'pending-file',
         saveJobStateV2_: (value: Record<string, unknown>) => {
@@ -1590,7 +1731,7 @@ describe('Apps Script contracts', () => {
           attemptCounts: null,
         }),
         loadPendingV2_: () => null,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('merge'); },
+        mergeEmailFeedbackIntoHistoryV2_: () => { events.push('merge'); },
         sendDailyBundleNowV2_: () => { events.push('mail'); },
         recordSentBundleV2_: () => { events.push('record'); },
         savePendingV2_: () => 'pending-file',
@@ -1638,7 +1779,7 @@ describe('Apps Script contracts', () => {
           getDailyPropertiesV2_: () => properties,
           getBooleanPropertyV2_: () => false,
           assertUnambiguousDailySendStateV2_: () => ({ marker: null, lastSentDate: null }),
-          mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+          mergeEmailFeedbackIntoHistoryV2_: () => undefined,
           loadJobStateV2_: () => structuredClone(state),
           loadPendingV2_: () => ({
             qualityPolicyVersion: 4,
@@ -1813,6 +1954,7 @@ describe('Apps Script contracts', () => {
           applySnapshotSettingsV2_: (value: unknown) => value,
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => {
             events.push('mail');
@@ -1879,6 +2021,7 @@ describe('Apps Script contracts', () => {
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => {
             events.push('mail');
@@ -1955,6 +2098,7 @@ describe('Apps Script contracts', () => {
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => events.push('mail') },
           loadHistoryV2_: () => structuredClone(history),
@@ -2103,6 +2247,7 @@ describe('Apps Script contracts', () => {
           localDateV2_: () => '2026-07-15',
           itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
           savedOutfitExactCopyV2_: () => null,
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: emailUtilitiesFixture,
           MailApp: { sendEmail: () => { events.push('mail'); } },
           loadHistoryV2_: () => [],
@@ -2149,9 +2294,10 @@ describe('Apps Script contracts', () => {
           wardrobeFingerprint: 'wardrobe-v3-28', attemptCounts: {},
         }),
         loadPendingV2_: () => structuredClone(baselinePending),
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { scheduledEvents.push('feedback-history'); },
+        mergeEmailFeedbackIntoHistoryV2_: () => { scheduledEvents.push('feedback-history'); },
         itemMapV2_: (value: { items: Array<{ id: string }> }) => Object.fromEntries(value.items.map(item => [item.id, item])),
         savedOutfitExactCopyV2_: () => null,
+        feedbackLinkUrlV2_: () => 'https://example.com/feedback',
         MailApp: { sendEmail: () => { scheduledEvents.push('mail'); } },
         loadHistoryV2_: () => [],
         saveHistoryV2_: () => { scheduledEvents.push('sent-history'); },
@@ -2237,7 +2383,7 @@ describe('Apps Script contracts', () => {
           getBooleanPropertyV2_: () => false,
           loadJobStateV2_: () => structuredClone(state),
           loadPendingV2_: () => structuredClone(pendingValue),
-          mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('feedback-history'); },
+          mergeEmailFeedbackIntoHistoryV2_: () => { events.push('feedback-history'); },
           fetchDailyWeatherV2: () => {
             events.push('generation');
             throw new Error('drift recovery advanced into generation');
@@ -2588,7 +2734,7 @@ describe('Apps Script contracts', () => {
           setProperty: (key: string) => { events.push(`set:${key}`); },
         }),
         getBooleanPropertyV2_: () => false,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+        mergeEmailFeedbackIntoHistoryV2_: () => undefined,
         loadJobStateV2_: () => structuredClone(state),
         loadPendingV2_: () => structuredClone(stalePending),
         incrementAttemptV2_: () => undefined,
@@ -2632,7 +2778,7 @@ describe('Apps Script contracts', () => {
           setProperty: (key: string) => { events.push(`set:${key}`); },
         }),
         getBooleanPropertyV2_: () => false,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+        mergeEmailFeedbackIntoHistoryV2_: () => undefined,
         loadJobStateV2_: () => ({
           stage: 'bundle-ready',
           qualityPolicyVersion: 4,
@@ -2707,7 +2853,7 @@ describe('Apps Script contracts', () => {
             setProperty: (key: string) => { events.push(`set:${key}`); },
           }),
           getBooleanPropertyV2_: () => false,
-          mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('history-merge'); },
+          mergeEmailFeedbackIntoHistoryV2_: () => { events.push('history-merge'); },
           loadJobStateV2_: () => ({
             stage: 'bundle-ready',
             qualityPolicyVersion: 4,
@@ -2764,7 +2910,7 @@ describe('Apps Script contracts', () => {
           setProperty: (key: string) => { events.push(`set:${key}`); },
         }),
         getBooleanPropertyV2_: () => false,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => { events.push('history-merge'); },
+        mergeEmailFeedbackIntoHistoryV2_: () => { events.push('history-merge'); },
         loadJobStateV2_: () => ({
           stage: 'bundle-ready',
           qualityPolicyVersion: 4,
@@ -3662,7 +3808,7 @@ describe('Apps Script contracts', () => {
         localMinutesV2_: () => 405,
         getDailyPropertiesV2_: () => ({ getProperty: () => null }),
         getBooleanPropertyV2_: () => false,
-        mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+        mergeEmailFeedbackIntoHistoryV2_: () => undefined,
         loadJobStateV2_: () => { throw new Error('Unable to read JOB_STATE_FILE_ID_V2: private raw JSON'); },
         loadPendingV2_: () => { throw new Error('Unable to read PENDING_BUNDLE_FILE_ID_V2: private raw JSON'); },
         saveJobStateV2_: (value: Record<string, unknown>) => {
@@ -3696,7 +3842,7 @@ describe('Apps Script contracts', () => {
         LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
         assertFreshSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
         loadSnapshotV2_: () => ({ wardrobeFingerprint: 'wardrobe-v3' }),
-        mergeSnapshotFeedbackIntoHistoryV2_: () => undefined,
+        mergeEmailFeedbackIntoHistoryV2_: () => undefined,
         applySnapshotSettingsV2_: () => ({ timezone: 'UTC' }),
         getDailyConfigV2_: () => ({}),
         localDateV2_: () => '2026-07-15',
@@ -3988,6 +4134,35 @@ describe('Apps Script contracts', () => {
       snapshotAgeHours: null,
     });
     expect(JSON.stringify(result)).not.toContain('private');
+  });
+
+  it('reports FEEDBACK_SECRET and WEB_APP_URL presence booleans without ever exposing their values', () => {
+    // FEEDBACK_SECRET and WEB_APP_URL are read only at render time (Feedback.gs:118-121),
+    // so a missing property was previously discovered at 06:45. Inspect diagnostics should
+    // catch it ahead of time the same way modelsConfigured already does for the four model
+    // properties — reporting presence only, never the actual secret or URL.
+    const properties = {
+      getProperty: (key: string) => key === 'FEEDBACK_SECRET' ? 'super-secret-value-0123456789' : null,
+    };
+    const diagnostics = evaluateAppsScript<() => Record<string, unknown>>(
+      ['JobState.gs', 'Diagnostics.gs'],
+      'getDailyOutfitDiagnosticsV2',
+      {
+        DAILY_V2: { QUALITY_POLICY_VERSION: 4, ARCHETYPES: dailyArchetypes },
+        loadSnapshotV2_: () => { throw new Error('no snapshot'); },
+        validateStoredSnapshotV2: () => { throw new Error('no validation'); },
+        loadJobStateV2_: () => { throw new Error('no job state'); },
+        loadPendingV2_: () => { throw new Error('no pending'); },
+        getDailyPropertiesV2_: () => properties,
+      },
+    );
+
+    const result = diagnostics();
+    expect(result.feedbackConfigured).toEqual({
+      FEEDBACK_SECRET: true,
+      WEB_APP_URL: false,
+    });
+    expect(JSON.stringify(result)).not.toContain('super-secret-value-0123456789');
   });
 
   it('requires current policy, date, and wardrobe identity independently for job and selection diagnostics', () => {

@@ -4,7 +4,7 @@ import { categoryDefaultProfile, dailySlotForItem } from './itemProfile';
 import { publicDailySettings } from './settings';
 import { loadAtlasManifest, saveAtlasManifest } from './storage';
 import { getDailyThumbnail } from './thumbnailCache';
-import type { DailyClosetSnapshotV2, DailyFeedbackV2, DailyOutfitSettingsV2, DailySnapshotItemV2, DailySourceItem, DailyTasteSource } from './types';
+import type { DailyClosetSnapshotV2, DailyOutfitSettingsV2, DailySnapshotItemV2, DailySourceItem, DailyTasteSource } from './types';
 
 export interface SnapshotBuildProgress {
   phase: 'thumbnails' | 'atlases' | 'complete';
@@ -22,7 +22,6 @@ const categoryEntry = (item: DailySourceItem) => ({ item, slot: dailySlotForItem
 export const buildDailySnapshot = async (
   sourceItems: DailySourceItem[],
   tasteExamples: DailyTasteSource[],
-  feedback: DailyFeedbackV2[],
   settings: DailyOutfitSettingsV2,
   onProgress?: (progress: SnapshotBuildProgress) => void
 ): Promise<DailyClosetSnapshotV2> => {
@@ -70,7 +69,6 @@ export const buildDailySnapshot = async (
     items,
     atlasPages,
     tasteExamples: tasteExamples.filter(outfit => outfit.seedStylist !== false),
-    dailyFeedback: feedback,
     settings: publicDailySettings(settings)
   };
 };

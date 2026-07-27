@@ -10,26 +10,47 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 
    - `GEMINI_API_KEY`
    - `SYNC_SECRET` — at least 16 random characters, matching the browser setting
+   - `FEEDBACK_SECRET` — at least 16 random characters, distinct from `SYNC_SECRET`; signs the one-tap feedback links in the daily email
+   - `WEB_APP_URL` — the deployment's `/exec` URL, used to build feedback links
    - `RECIPIENT_EMAIL` — defaults to `kevincollinsturner@gmail.com`
    - `LOCATION_LABEL`, `LATITUDE`, `LONGITUDE`, `TIME_ZONE`
    - `DELIVERY_HOUR`, `DELIVERY_MINUTE`, `GENERATION_LEAD_MINUTES`
-   - `APP_URL` — optional read-only link back to the closet
    - `OPEN_METEO_API_KEY` — optional paid Open-Meteo key; when set, weather requests use `customer-api.open-meteo.com` with a per-key quota instead of the free per-IP endpoint
    - `DAILY_PLANNER_MODEL`, `DAILY_CRITIC_MODEL`, `DAILY_CURATOR_MODEL`, `DAILY_REPAIR_MODEL`
    - `DAILY_MODEL_TEMPERATURE` — optional; defaults to `0.9` for planners
    - `SEND_OPERATIONAL_ALERTS` — `true` or `false`
    - `SHADOW_MODE` — set `true` during the 3–5 morning rollout to generate and persist without sending
 
-   Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, `SEND_IN_PROGRESS_DATE_V2`, `LAST_ENCORE_DATE_V2`, and `DISLIKED_ENCORE_IDS_V2` are managed by the script. Do not pre-populate or routinely edit them.
+   Drive file IDs, job state, pending bundle ID, `LAST_SENT_DATE_V2`, `SEND_IN_PROGRESS_DATE_V2`, `LAST_ENCORE_DATE_V2`, `DISLIKED_ENCORE_IDS_V2`, and `EMAIL_FEEDBACK_FILE_ID_V2` are managed by the script. Do not pre-populate or routinely edit them. `DISLIKED_ENCORE_IDS_V2` has had no feed since this branch removed the in-app feedback path: a `disliked` signal on an Encore look was its only source, Encore looks carry no feedback links by design, and the ledger now stays `[]` permanently. Unsaving an outfit in the app is the way to retire a recurring Encore.
 
-4. Deploy as a Web app that executes as the owner. Copy its `/exec` URL into **Wardrobe → Daily email** in the React app.
+4. Deploy as a Web app that executes as the owner, with access set to **Anyone**. Anonymous access is already required for the React app's `doPost` calls, and the feedback links depend on it too. Copy its `/exec` URL into both **Wardrobe → Daily email** in the React app and the `WEB_APP_URL` Script Property. Once both `FEEDBACK_SECRET` and `WEB_APP_URL` are set, run the authenticated **Inspect diagnostics** action and confirm both keys read `true` under `feedbackConfigured` before moving on.
 5. Run `installDailyOutfitTrigger()` once from the Apps Script editor and approve Drive, external-request, email, and trigger scopes.
 6. In the React settings, run **Build visual inventory**, **Sync now**, **Validate server snapshot**, and **Generate test bundle** in order.
 7. Review the generated bundle without sending it. **Send test email** is a separate, opt-in action: obtain fresh confirmation immediately before using it, even if an earlier rollout discussion mentioned a test send.
 
+Redeploying matters for the feedback links specifically. The time-driven trigger runs HEAD, but the web app serves the *deployed* version, so `clasp push` alone leaves `doGet` unreachable and every link in the morning email dead. Run `clasp deploy -i <deploymentId>` to update the existing deployment in place and preserve the `/exec` URL — this is the one step whose omission silently produces an email full of dead links. Get `<deploymentId>` from `clasp deployments`, which lists every deployment for the project with its id and description; use the id of the existing web app deployment, not a newly created one. Pin clasp to v3.
+
+After deploying, send a test delivery and confirm the links render and report `Test delivery — not recorded`. Then confirm that a real morning email records a tap, and that the signal was drained into history: check the Apps Script execution log for the tap's `doGet` invocation and the next scheduler run's `mergeEmailFeedbackIntoHistoryV2_` drain, or read `virtual-closet-daily-v2-history.json` directly in Drive and confirm the entry for that date has a matching `feedback` array. **Inspect diagnostics** cannot show this: `getDailyOutfitDiagnosticsV2()` returns no `feedback`, `itemFeedbackSignals`, or `wornItemIds` field, and the runbook's own redaction rule forbids exposing candidate ids through diagnostics.
+
 ## Weather providers
 
 `fetchDailyWeatherV2()` returns a fresh same-day cached profile when one exists, then tries providers in order: Open-Meteo (free endpoint, or the customer endpoint when `OPEN_METEO_API_KEY` is set) and the National Weather Service (`api.weather.gov`, keyless, US coverage only). Open-Meteo's free tier limits by source IP, and Apps Script's `UrlFetchApp` egresses from Google's shared IP pool, so chronic HTTP 429 responses there are expected and are why the NWS fallback exists. Transport errors and 5xx responses get one in-run retry; 429 skips straight to the next provider. When every provider fails, the thrown error (and therefore the operational alert email) lists each provider's failure detail. The NWS path derives apparent temperature via NOAA heat-index/wind-chill formulas and represents hourly precipitation as a nominal 0.02 in when the precipitation probability is at least 50%, since its hourly feed omits amounts.
+
+## Outfit feedback
+
+Every generated look in the daily email carries three one-tap links: `LIKE`, `NOT FOR ME`, `WORE THIS`. Encore looks carry none, because saving an outfit is already the taste signal and unsaving it is the way to retire one.
+
+Each link is an HMAC-signed token naming exactly one `(localDate, candidateId, value)` triple, verified by `doGet` against `FEEDBACK_SECRET`. `doGet` serves feedback only; generation and sending remain `doPost` actions behind `SYNC_SECRET`. Every failure mode — bad signature, malformed payload, unknown verb, out-of-window date, missing parameters — renders one identical invalid-link page, so the endpoint reveals nothing to a prober.
+
+A tap upserts into `virtual-closet-daily-v2-email-feedback.json` and lands on a page confirming what was stored, with the other two verbs as one-tap corrections. Last write wins per `(localDate, candidateId)`.
+
+The store is a durable inbox rather than a direct history write. The daily email is sent before `finalizeSentBundleV2_` creates the history entry, so a tap in that window has nothing to attach to. `mergeEmailFeedbackIntoHistoryV2_()` drains the inbox at the start of each generation run: a signal whose history entry exists is merged and removed, and one whose entry does not yet exist stays queued for a later run. A signal naming a candidate absent from that date's looks is dropped rather than written.
+
+Tokens do not expire. Replay is bounded by `DAILY_V2.MAX_EMAIL_FEEDBACK_AGE_DAYS` (30), checked against the current local date without loading the wardrobe snapshot.
+
+Test deliveries render the links for layout parity, but their tokens carry a test flag: the landing page reports `Test delivery — not recorded` and writes nothing.
+
+`upsertEmailFeedbackV2_` is a read-modify-write with no `LockService` guard, and `doGet` takes none either. Its contention detector warns when a *differing* verb lands on the same `(localDate, candidateId)` within `DAILY_V2.FEEDBACK_CONTENTION_MS` (10000 ms) — enough to catch a link scanner that fetches the three links sequentially. It does not catch two requests executing in parallel: both read the store before either writes, neither sees the other's entry, and one write is lost with no warning at all. A quiet log is not proof that no contention happened. The same unguarded read-modify-write shape applies to the drain's own `saveEmailFeedbackV2_(retained)` at the end of `mergeEmailFeedbackIntoHistoryV2_()`: it is not only two taps that can race each other, a tap landing while a drain is mid-run can be clobbered by the drain's write of its own stale read of the store, same as two concurrent taps would clobber each other.
 
 ## Prerequisite — reviewed wardrobe profiles
 
@@ -51,7 +72,7 @@ Update the existing Apps Script deployment with every `.gs` file, including `Sel
 - Record how often selection uses `top2`, `top3`, `replan-1`, or `replan-2`, which archetypes were replanned, and each round's accepted/duplicate counts. Repeated targets and duplicate-only rounds are valid observations; partial selection always uses `replan-2`.
 - Check dynamic presentation for every generated cardinality. Email subjects and HTML/plain-text headings must say `Today's outfit`, `Today's 2 outfits`, or `Today's 3 outfits` from the generated recommendation count alone. The React preview must use the matching one-, two-, or three-column layout without an empty column. Only partial coverage renders the cause-neutral omitted-archetype sentence, and HTML/plain text must agree on both count and omission copy.
 - Encore is separate from generated coverage. When present, it appears after all generated cards in email and preview, does not change the one-to-three count or omissions, and keeps the static copy `One of yours, back in rotation for today's weather.` without model-generated rationale. When absent, no Encore heading, images, or blank section may render; HTML/plain-text presence must remain in parity.
-- Perform browser QA at desktop width and below `760px`, checking generated-count copy, configured archetype order, no empty column, Encore identity and feedback controls, imagery, single-column stacking, and horizontal overflow.
+- Perform browser QA at desktop width and below `760px`, checking generated-count copy, configured archetype order, no empty column, Encore identity, imagery, single-column stacking, and horizontal overflow. The in-app daily feedback controls were retired on the emailed-outfit-feedback branch; there is nothing left to check in the browser preview itself. Feedback links are email-only — verify them per the "Outfit feedback" section above, in the email, not the browser.
 - Keep `SHADOW_MODE=true` after the review. Set it to `false` only after the one-to-three rendering, optional Encore, diagnostics parity, two-round behavior, and fail-closed behavior pass review across the 3–5 morning shadow window and live delivery receives separate authorization. Leave the **Daily Email** toggle and trigger enabled throughout.
 
 For each morning, record critic floor clustering, `selection.path`, eligible counts, replanned archetypes and round counts, stage attempt counts, final generated count and coverage, repair use, and Encore cadence. The system intentionally sends no outfit email when weather, snapshot freshness, model, critic, curator, persistence, or deterministic quality gates fail. Shadow review does not authorize a test email: ask for fresh confirmation immediately before any future use of **Send test email**.

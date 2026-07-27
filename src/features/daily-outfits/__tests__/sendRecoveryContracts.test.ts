@@ -811,6 +811,7 @@ describe('resolved send recovery', () => {
           getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '', timezone: 'UTC' }),
           applySnapshotSettingsV2_: (value: unknown) => value,
           localDateV2_: () => '2026-07-15',
+          feedbackLinkUrlV2_: () => 'https://example.com/feedback',
           Utilities: utilities,
           MailApp: { sendEmail: () => { events.push('mail'); if (mailFails) throw new Error('mail failed'); } },
           loadHistoryV2_: () => [],

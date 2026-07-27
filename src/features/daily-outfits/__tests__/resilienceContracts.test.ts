@@ -240,18 +240,36 @@ describe('Daily V2 resilience contracts', () => {
     expect(lock.releaseLock).toHaveBeenCalledOnce();
   });
 
-  it('does not reorder or rewrite history when multiple synchronized feedback entries are byte-equal', () => {
-    const firstFeedback = { localDate: '2026-07-13', candidateId: 'easy-1', value: 'liked', createdAt: 1 };
-    const secondFeedback = { localDate: '2026-07-13', candidateId: 'easy-2', value: 'wore', createdAt: 2 };
-    const history = [{ localDate: '2026-07-13', feedback: [firstFeedback, secondFeedback] }];
+  it('does not rewrite history when the queued signals are already byte-equal, and does not reorder them', () => {
+    const signalA = { localDate: '2026-07-13', candidateId: 'easy-1', value: 'wore', createdAt: 2 };
+    const signalB = { localDate: '2026-07-13', candidateId: 'expressive-2', value: 'liked', createdAt: 3 };
+    const history = [{
+      localDate: '2026-07-13',
+      recommendations: [
+        { candidateId: 'easy-1', itemIds: ['a'] },
+        { candidateId: 'expressive-2', itemIds: ['b'] }
+      ],
+      feedback: [signalA, signalB]
+    }];
     const saveHistoryV2_ = vi.fn();
-    const merge = evaluateAppsScript<(snapshot: object) => boolean>(['Taste.gs'], 'mergeSnapshotFeedbackIntoHistoryV2_', {
+    const merge = evaluateAppsScript<() => boolean>(['Taste.gs', 'Feedback.gs'], 'mergeEmailFeedbackIntoHistoryV2_', {
+      DAILY_V2: { FEEDBACK_VALUES: ['wore', 'disliked', 'liked'], MAX_EMAIL_FEEDBACK_AGE_DAYS: 30 },
+      getDailyConfigV2_: () => ({ timezone: 'America/New_York' }),
+      localDateV2_: () => '2026-07-13',
+      shoeRotationCalendarOrdinalV2_: (localDate: string) =>
+        Math.floor(Date.UTC(
+          Number(localDate.slice(0, 4)),
+          Number(localDate.slice(5, 7)) - 1,
+          Number(localDate.slice(8, 10))
+        ) / 86400000),
       loadHistoryV2_: () => history,
       saveHistoryV2_,
+      loadEmailFeedbackV2_: () => [signalA, signalB],
+      saveEmailFeedbackV2_: vi.fn(),
       itemMapV2_: () => ({}),
     });
-    expect(merge({ dailyFeedback: [firstFeedback, secondFeedback] })).toBe(false);
+    expect(merge()).toBe(false);
     expect(saveHistoryV2_).not.toHaveBeenCalled();
-    expect(history[0].feedback).toEqual([firstFeedback, secondFeedback]);
+    expect(history[0].feedback).toEqual([signalA, signalB]);
   });
 });

@@ -465,6 +465,8 @@ describe('Encore email rendering', () => {
       },
       getDailyConfigV2_: () => ({ appUrl: '' }),
       validFullBundleReadyV2_: () => true,
+      feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+        `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
       console,
     },
   );
@@ -521,6 +523,8 @@ describe('Encore email rendering', () => {
         getDailyConfigV2_: () => ({ recipientEmail: 'safe@example.com', appUrl: '' }),
         applySnapshotSettingsV2_: (value: unknown) => value,
         validFullBundleReadyV2_: () => true,
+        feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+          `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
         MailApp: { sendEmail: (value: Record<string, unknown>) => deliveries.push(value) },
         console,
       },
@@ -800,14 +804,12 @@ describe('Encore bundle assembly and persistence', () => {
         }),
       },
     );
-    const withSnapshotDislike = {
-      ...snapshot,
-      dailyFeedback: [{
-        localDate: '2026-05-01', candidateId: 'encore:older', value: 'disliked',
-      }],
-    };
+    const historicalDislike = [{
+      localDate: '2026-05-01', recommendations: [],
+      feedback: [{ candidateId: 'encore:older', value: 'disliked' }],
+    }];
 
-    expect(selectForBundle(withSnapshotDislike, weather, []))
+    expect(selectForBundle(snapshot, weather, historicalDislike))
       .toEqual(expect.objectContaining({ outfitId: 'newer' }));
     expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:older"]');
 
@@ -840,12 +842,10 @@ describe('Encore bundle assembly and persistence', () => {
       },
     );
 
-    expect(selectForBundle({
-      ...snapshot,
-      dailyFeedback: [{
-        localDate: '2026-05-01', candidateId: 'encore:older', value: 'disliked',
-      }],
-    }, weather, [])).toBeNull();
+    expect(selectForBundle(snapshot, weather, [{
+      localDate: '2026-05-01', recommendations: [],
+      feedback: [{ candidateId: 'encore:older', value: 'disliked' }],
+    }])).toBeNull();
     expect(values.DISLIKED_ENCORE_IDS_V2).toBe('["encore:older"]');
   });
 
@@ -1258,6 +1258,8 @@ describe('Encore bundle assembly and persistence', () => {
         Utilities: { formatDate: () => 'Tuesday, July 14' },
         MailApp: { sendEmail: () => events.push('mail') },
         recordSentBundleV2_: () => events.push('history'),
+        feedbackLinkUrlV2_: (localDate: string, candidateId: string, value: string, testMode: boolean) =>
+          `https://example.com/feedback?fb=${localDate}-${candidateId}-${value}-${testMode ? 't' : 'l'}`,
       },
     );
 

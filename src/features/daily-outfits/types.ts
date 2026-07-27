@@ -64,15 +64,6 @@ export interface DailyAtlasPageV2 {
   fingerprint: string;
 }
 
-export interface DailyFeedbackV2 {
-  localDate: string;
-  candidateId: string;
-  value: 'liked' | 'disliked' | 'wore';
-  reason?: 'too-warm' | 'too-cold' | 'too-formal' | 'too-casual' | 'colors' | 'silhouette' | 'shoes' | 'repeat' | 'other';
-  note?: string;
-  createdAt: number;
-}
-
 export interface DailyClosetSnapshotV2 {
   version: 2;
   generatedAt: number;
@@ -88,7 +79,6 @@ export interface DailyClosetSnapshotV2 {
     note?: string;
     createdAt: number;
   }>;
-  dailyFeedback: DailyFeedbackV2[];
   settings: Omit<DailyOutfitSettingsV2, 'appsScriptUrl' | 'syncSecret'>;
 }
 
@@ -204,6 +194,7 @@ export interface DailyOutfitDiagnosticsV2 {
   attemptCounts: Record<string, number>;
   lastSentDate: string | null;
   modelsConfigured: Record<string, boolean>;
+  feedbackConfigured: Record<string, boolean>;
   snapshotAgeHours: number | null;
 }
 

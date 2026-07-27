@@ -60,3 +60,11 @@ function loadJobStateV2_() {
 function saveJobStateV2_(state) {
   return replaceJsonFileV2_('JOB_STATE_FILE_ID_V2', DAILY_V2.JOB_FILE, state);
 }
+
+function loadEmailFeedbackV2_() {
+  return getJsonFileByPropertyV2_('EMAIL_FEEDBACK_FILE_ID_V2', []);
+}
+
+function saveEmailFeedbackV2_(entries) {
+  return replaceJsonFileV2_('EMAIL_FEEDBACK_FILE_ID_V2', DAILY_V2.EMAIL_FEEDBACK_FILE, entries);
+}
