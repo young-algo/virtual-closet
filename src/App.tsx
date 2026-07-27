@@ -42,43 +42,65 @@ const loadDeletedIds = (key: string = DELETED_IDS_KEY): Set<string> => {
   }
 };
 
+// Read a stored array, or null if the key is absent or unreadable. Falling back
+// to the bundled manifest is destructive here — the sync effects below persist
+// whatever state we return, writing the manifest over the real closet — so an
+// unreadable payload is parked under a recovery key on the way out rather than
+// being dropped on the floor.
+const readStoredArray = (key: string): unknown[] | null => {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('expected an array');
+    return parsed;
+  } catch (e) {
+    console.error(`Failed to parse ${key} from localStorage`, e);
+    localStorage.setItem(`${key}__unreadable_${Date.now()}`, raw);
+    return null;
+  }
+};
+
+// Rows are validated one at a time so a single malformed entry costs only
+// itself. Anything without a string id would throw somewhere in the merges
+// below, and that throw used to cost the entire closet.
+const isStoredRecord = (value: unknown): value is { id: string } =>
+  typeof value === 'object' && value !== null && typeof (value as { id?: unknown }).id === 'string';
+
 function App() {
   const restoreInputRef = useRef<HTMLInputElement>(null);
   // Load clothing items state, merging localStorage with any new base manifest database items
   const [items, setItems] = useState<ClosetItem[]>(() => {
     const deletedIds = loadDeletedIds();
-    const savedItems = localStorage.getItem('closet_items');
+    const savedItems = readStoredArray('closet_items');
     if (savedItems) {
-      try {
-        let localItems: ClosetItem[] = JSON.parse(savedItems);
+      // Malformed rows drop out here; the count check below then treats the
+      // cleaned list as a change worth persisting.
+      let localItems = savedItems.filter(isStoredRecord) as ClosetItem[];
 
-        // Remove any base manifest items that have been deleted from the base database manifest
-        const baseManifestById = new Map((closetData as ClosetItem[]).map(item => [item.id, item]));
-        localItems = localItems.filter(item => {
-          // If it is a base item (doesn't start with 'user_'), it must exist in the base manifest
-          if (!item.id.startsWith('user_')) {
-            return baseManifestById.has(item.id);
-          }
-          return true;
-        });
-        localItems = fillManifestDailyProfiles(localItems, closetData as ClosetItem[]);
-
-        const localIds = new Set(localItems.map(item => item.id));
-
-        // Find any new items in the base database manifest (closetData) not yet in localStorage,
-        // skipping items the user has explicitly deleted
-        const newManifestItems = (closetData as ClosetItem[]).filter(
-          item => !localIds.has(item.id) && !deletedIds.has(item.id)
-        );
-        
-        const originalSavedCount = JSON.parse(savedItems).length;
-        if (newManifestItems.length > 0 || localItems.length !== originalSavedCount) {
-          return [...newManifestItems, ...localItems];
+      // Remove any base manifest items that have been deleted from the base database manifest
+      const baseManifestById = new Map((closetData as ClosetItem[]).map(item => [item.id, item]));
+      localItems = localItems.filter(item => {
+        // If it is a base item (doesn't start with 'user_'), it must exist in the base manifest
+        if (!item.id.startsWith('user_')) {
+          return baseManifestById.has(item.id);
         }
-        return localItems;
-      } catch (e) {
-        console.error('Failed to parse closet items from localStorage', e);
+        return true;
+      });
+      localItems = fillManifestDailyProfiles(localItems, closetData as ClosetItem[]);
+
+      const localIds = new Set(localItems.map(item => item.id));
+
+      // Find any new items in the base database manifest (closetData) not yet in localStorage,
+      // skipping items the user has explicitly deleted
+      const newManifestItems = (closetData as ClosetItem[]).filter(
+        item => !localIds.has(item.id) && !deletedIds.has(item.id)
+      );
+
+      if (newManifestItems.length > 0 || localItems.length !== savedItems.length) {
+        return [...newManifestItems, ...localItems];
       }
+      return localItems;
     }
     return (closetData as ClosetItem[]).filter(item => !deletedIds.has(item.id));
   });
@@ -87,82 +109,83 @@ function App() {
   // Sneakers have no upload pipeline: the manifest is the only source of new pairs.
   const [sneakers, setSneakers] = useState<SneakerItem[]>(() => {
     const deletedIds = loadDeletedIds(SNEAKER_DELETED_IDS_KEY);
-    const savedSneakers = localStorage.getItem(SNEAKER_ITEMS_KEY);
+    const savedSneakers = readStoredArray(SNEAKER_ITEMS_KEY);
     if (savedSneakers) {
-      try {
-        const localSneakers: SneakerItem[] = JSON.parse(savedSneakers);
-        const manifestMap = new Map((sneakerData as SneakerItem[]).map(item => [item.id, item]));
-        const mergedMap = new Map<string, SneakerItem>();
+      const localSneakers = savedSneakers.filter(isStoredRecord) as SneakerItem[];
+      const manifestMap = new Map((sneakerData as SneakerItem[]).map(item => [item.id, item]));
+      const mergedMap = new Map<string, SneakerItem>();
 
-        // Process localStorage sneakers, migrating legacy IDs and deduplicating
-        for (const item of localSneakers) {
-          const migratedId = SNEAKER_ID_MIGRATIONS[item.id] || item.id;
-          const base = manifestMap.get(migratedId);
-          if (base) {
-            mergedMap.set(migratedId, {
-              ...base,
-              name: item.name && item.name !== item.styleCode ? item.name : base.name,
-              color: item.color || base.color,
-              description: item.description || base.description,
-              image: item.image?.startsWith('data:') ? item.image : base.image,
-              imageTop: item.imageTop?.startsWith('data:') ? item.imageTop : base.imageTop
-            });
-          } else if (migratedId.startsWith('user_')) {
-            mergedMap.set(migratedId, { ...item, id: migratedId });
-          }
+      // Process localStorage sneakers, migrating legacy IDs and deduplicating
+      for (const item of localSneakers) {
+        const migratedId = SNEAKER_ID_MIGRATIONS[item.id] || item.id;
+        const base = manifestMap.get(migratedId);
+        if (base) {
+          mergedMap.set(migratedId, {
+            ...base,
+            // Every edited field wins over the manifest. This used to be a
+            // whitelist of five fields, which silently reverted brand and
+            // styleCode on every load — and would have done the same to any
+            // field added to SneakerItem later.
+            ...item,
+            id: migratedId,
+            // Two deliberate manifest-wins exceptions. Imagery: a local value
+            // only holds if the user uploaded it (a data: URL), so cache-busted
+            // manifest paths are still adopted on load. Name: legacy rows stored
+            // the style code as the name, so those defer to the manifest.
+            image: item.image?.startsWith('data:') ? item.image : base.image,
+            imageTop: item.imageTop?.startsWith('data:') ? item.imageTop : base.imageTop,
+            name: item.name && item.name !== item.styleCode ? item.name : base.name
+          });
+        } else if (migratedId.startsWith('user_')) {
+          mergedMap.set(migratedId, { ...item, id: migratedId });
         }
-
-        // Add any missing base manifest items not yet in localStorage
-        for (const item of (sneakerData as SneakerItem[])) {
-          if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
-            mergedMap.set(item.id, item);
-          }
-        }
-
-        const result = Array.from(mergedMap.values());
-        return fillManifestDailyProfiles(result, sneakerData as SneakerItem[]);
-      } catch (e) {
-        console.error('Failed to parse sneakers from localStorage', e);
       }
+
+      // Add any missing base manifest items not yet in localStorage
+      for (const item of (sneakerData as SneakerItem[])) {
+        if (!mergedMap.has(item.id) && !deletedIds.has(item.id)) {
+          mergedMap.set(item.id, item);
+        }
+      }
+
+      const result = Array.from(mergedMap.values());
+      return fillManifestDailyProfiles(result, sneakerData as SneakerItem[]);
     }
     return (sneakerData as SneakerItem[]).filter(item => !deletedIds.has(item.id));
   });
 
   // Load packed items state with localStorage persistence
   const [packedItems, setPackedItems] = useState<ClosetItem[]>(() => {
-    const savedPacked = localStorage.getItem('closet_packed_items');
+    const savedPacked = readStoredArray('closet_packed_items');
     if (savedPacked) {
-      try {
-        const rawPackedIds: string[] = JSON.parse(savedPacked);
-        const packedIds = rawPackedIds.map(id => SNEAKER_ID_MIGRATIONS[id] || id);
-        // Map saved IDs back to our active items state, across both closets
-        const savedItems = localStorage.getItem('closet_items');
-        const activeItems: ClosetItem[] = savedItems ? JSON.parse(savedItems) : closetData;
-        const savedSneakers = localStorage.getItem(SNEAKER_ITEMS_KEY);
-        const activeSneakers: ClosetItem[] = savedSneakers ? JSON.parse(savedSneakers) : sneakerData;
-        return [...activeItems, ...activeSneakers].filter(item => packedIds.includes(item.id));
-      } catch (e) {
-        console.error('Failed to parse packed items from localStorage', e);
-      }
+      const packedIds = savedPacked
+        .filter((id): id is string => typeof id === 'string')
+        .map(id => SNEAKER_ID_MIGRATIONS[id] || id);
+      // Map saved IDs back to our active items state, across both closets
+      const activeItems = (readStoredArray('closet_items') ?? closetData)
+        .filter(isStoredRecord) as ClosetItem[];
+      const activeSneakers = (readStoredArray(SNEAKER_ITEMS_KEY) ?? sneakerData)
+        .filter(isStoredRecord) as ClosetItem[];
+      return [...activeItems, ...activeSneakers].filter(item => packedIds.includes(item.id));
     }
     const defaultPackedIds = appDefaults.packedItemIds as string[];
     return [...(closetData as ClosetItem[]), ...(sneakerData as SneakerItem[])]
       .filter(item => defaultPackedIds.includes(item.id));
   });
 
-  // Load saved outfits with localStorage persistence
+  // Load saved outfits with localStorage persistence. An empty-but-readable
+  // list is honored — deleting every outfit has to stick, so only a missing or
+  // unreadable key falls back to the bundled lookbook.
   const [outfits, setOutfits] = useState<Outfit[]>(() => {
-    const savedOutfits = localStorage.getItem('closet_outfits');
+    const savedOutfits = readStoredArray('closet_outfits');
     if (savedOutfits) {
-      try {
-        const parsedOutfits: Outfit[] = JSON.parse(savedOutfits);
-        return parsedOutfits.map(outfit => ({
+      return savedOutfits
+        .filter((outfit): outfit is Outfit =>
+          isStoredRecord(outfit) && Array.isArray((outfit as Outfit).itemIds))
+        .map(outfit => ({
           ...outfit,
           itemIds: outfit.itemIds.map(id => SNEAKER_ID_MIGRATIONS[id] || id)
         }));
-      } catch (e) {
-        console.error('Failed to parse outfits from localStorage', e);
-      }
     }
     return outfitData as Outfit[];
   });
@@ -442,7 +465,7 @@ function App() {
           letterSpacing: '0.32em',
           textTransform: 'uppercase'
         }}>
-          Wardrobe
+          Wardrobe OS
         </h1>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
