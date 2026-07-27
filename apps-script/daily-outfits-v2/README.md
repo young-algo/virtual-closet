@@ -28,7 +28,18 @@ This directory is the private scheduled sidecar for the Virtual Closet. It does 
 6. In the React settings, run **Build visual inventory**, **Sync now**, **Validate server snapshot**, and **Generate test bundle** in order.
 7. Review the generated bundle without sending it. **Send test email** is a separate, opt-in action: obtain fresh confirmation immediately before using it, even if an earlier rollout discussion mentioned a test send.
 
-Redeploying matters for the feedback links specifically. The time-driven trigger runs HEAD, but the web app serves the *deployed* version, so `clasp push` alone leaves `doGet` unreachable and every link in the morning email dead. Run `clasp deploy -i <deploymentId>` to update the existing deployment in place and preserve the `/exec` URL — this is the one step whose omission silently produces an email full of dead links. Get `<deploymentId>` from `clasp deployments`, which lists every deployment for the project with its id and description; use the id of the existing web app deployment, not a newly created one. Pin clasp to v3.
+Redeploying matters for the feedback links specifically. The time-driven trigger runs HEAD, but the web app serves the *deployed* version, so `clasp push` alone leaves `doGet` unreachable and every link in the morning email dead. Pin clasp to v3 and redeploy in two steps, which preserves the `/exec` URL the app is configured with:
+
+```
+npx --yes @google/clasp@3 create-version "<description>"
+npx --yes @google/clasp@3 update-deployment <deploymentId> --versionNumber <N>
+```
+
+Get `<deploymentId>` from `list-deployments`, which lists every deployment with its id and current version; use the id of the existing web app deployment, not a newly created one. Creating a deployment without targeting that id mints a new URL the app is not pointing at.
+
+Use `--versionNumber`, never `-v`. Lowercase `-v` is clasp's global `--version` flag: it prints the clasp version, exits successfully, and leaves the deployment untouched. Because it fails silently, always re-run `list-deployments` afterward and confirm the version advanced. A deployment left on the old version serves an email whose links all resolve to code that cannot handle them.
+
+To confirm `doGet` is live without sending mail, `curl -sL` the `/exec` URL with no query parameters. The response embeds the rendered page in its `userHtml` field — a working deployment returns the `This link isn't valid` page — and the runtime's `functionNames` list shows whether `doGet` is registered.
 
 After deploying, send a test delivery and confirm the links render and report `Test delivery — not recorded`. Then confirm that a real morning email records a tap, and that the signal was drained into history: check the Apps Script execution log for the tap's `doGet` invocation and the next scheduler run's `mergeEmailFeedbackIntoHistoryV2_` drain, or read `virtual-closet-daily-v2-history.json` directly in Drive and confirm the entry for that date has a matching `feedback` array. **Inspect diagnostics** cannot show this: `getDailyOutfitDiagnosticsV2()` returns no `feedback`, `itemFeedbackSignals`, or `wornItemIds` field, and the runbook's own redaction rule forbids exposing candidate ids through diagnostics.
 
