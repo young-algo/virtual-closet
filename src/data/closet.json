@@ -1,5 +1,80 @@
 [
   {
+    "id": "item_kids_of_immigrants_support_your_friends_hoodie",
+    "name": "Kids of Immigrants Support Your Friends Hoodie",
+    "brand": "Kids of Immigrants",
+    "category": "Hoodies",
+    "color": "Black",
+    "image": "/closet/item_kids_of_immigrants_support_your_friends_hoodie.jpg",
+    "description": "Black pullover hoodie featuring \"SUPPORT YOUR FRIENDS\" printed on the chest in blue and yellow typography, with a kangaroo pocket, drawstring hood, and signature brand patch.",
+    "dailyProfile": {
+      "silhouette": "relaxed",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "yellow",
+        "blue",
+        "brown"
+      ],
+      "patternIntensity": 1,
+      "formality": 1,
+      "warmth": 3,
+      "breathability": 2,
+      "windProtection": 1,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1785177781898
+    }
+  },
+  {
+    "id": "item_nike_club_long_sleeve_polo",
+    "name": "Nike Club Long-Sleeve Polo",
+    "brand": "Nike",
+    "category": "Polos",
+    "color": "Navy",
+    "image": "/closet/item_nike_club_long_sleeve_polo.jpg",
+    "description": "A classic long-sleeve polo shirt in navy blue, featuring a traditional collar, a two-button placket, ribbed cuffs, and the iconic Nike logo embroidered in white on the left chest.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "white"
+      ],
+      "patternIntensity": 0,
+      "formality": 2,
+      "warmth": 2,
+      "breathability": 3,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1785172423675
+    }
+  },
+  {
+    "id": "item_nike_trail_running_shorts",
+    "name": "Nike Trail Running Shorts",
+    "brand": "Nike",
+    "category": "Shorts",
+    "color": "Lime",
+    "image": "/closet/item_nike_trail_running_shorts.jpg",
+    "description": "Lightweight running shorts in vibrant light lime green with an elastic waistband, patterned drawstring, and subtle Nike Trail logo graphic near the lower left hem.",
+    "dailyProfile": {
+      "silhouette": "regular",
+      "secondaryColorFamily": "unknown",
+      "accentColors": [
+        "teal",
+        "grey"
+      ],
+      "patternIntensity": 0,
+      "formality": 1,
+      "warmth": 1,
+      "breathability": 5,
+      "windProtection": 0,
+      "source": "ai-inferred",
+      "confidence": 0.75,
+      "updatedAt": 1785172428299
+    }
+  },
+  {
     "id": "user_1783385585982",
     "name": "Supreme Paint Splatter Zip Up Hooded Sweatshirt",
     "brand": "Supreme",
