@@ -41,6 +41,7 @@ describe('PackingList PDF export', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     vi.useRealTimers();
     container.remove();
@@ -60,6 +61,8 @@ describe('PackingList PDF export', () => {
       );
     });
 
+    const checkbox = container.querySelector('button')!;
+    await act(async () => checkbox.click());
     const button = Array.from(container.querySelectorAll('button'))
       .find(value => value.textContent?.includes('Export PDF'))!;
     await act(async () => button.click());
@@ -71,7 +74,7 @@ describe('PackingList PDF export', () => {
     expect(exportPackingListPdf).toHaveBeenCalledWith({
       tripName: 'Vacation Trip',
       items: packedItems,
-      physicallyPackedIds: [],
+      physicallyPackedIds: ['shirt-1'],
     });
 
     await act(async () => vi.advanceTimersByTime(2000));
@@ -79,7 +82,34 @@ describe('PackingList PDF export', () => {
     await act(async () => root.unmount());
   });
 
+  it('starts only one export when activated twice before React rerenders', async () => {
+    const pending = deferred();
+    vi.mocked(exportPackingListPdf).mockReturnValue(pending.promise);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PackingList
+          packedItems={packedItems}
+          onRemoveItem={() => undefined}
+          onClearList={() => undefined}
+        />,
+      );
+    });
+
+    const button = Array.from(container.querySelectorAll('button'))
+      .find(value => value.textContent?.includes('Export PDF'))!;
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+
+    expect(exportPackingListPdf).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve());
+    await act(async () => root.unmount());
+  });
+
   it('shows an accessible error when generation fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.mocked(exportPackingListPdf).mockRejectedValue(new Error('save failed'));
     const root = createRoot(container);
     await act(async () => {
@@ -99,6 +129,65 @@ describe('PackingList PDF export', () => {
     expect(container.querySelector('[role="status"]')?.textContent)
       .toContain('Could not create the PDF. Please try again.');
     expect(button.disabled).toBe(false);
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to export packing list PDF',
+      expect.any(Error),
+    );
+    await act(async () => root.unmount());
+  });
+
+  it('does not schedule a reset after a pending export settles post-unmount', async () => {
+    const pending = deferred();
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    vi.mocked(exportPackingListPdf).mockReturnValue(pending.promise);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PackingList
+          packedItems={packedItems}
+          onRemoveItem={() => undefined}
+          onClearList={() => undefined}
+        />,
+      );
+    });
+
+    const button = Array.from(container.querySelectorAll('button'))
+      .find(value => value.textContent?.includes('Export PDF'))!;
+    await act(async () => button.click());
+    await act(async () => root.unmount());
+    await act(async () => pending.resolve());
+
+    expect(setTimeoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('retains generation failure feedback after the packing list becomes empty', async () => {
+    const pending = deferred();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(exportPackingListPdf).mockReturnValue(pending.promise);
+    const root = createRoot(container);
+    const render = (items = packedItems) => (
+      <PackingList
+        packedItems={items}
+        onRemoveItem={() => undefined}
+        onClearList={() => undefined}
+      />
+    );
+    await act(async () => {
+      root.render(render());
+    });
+
+    const button = Array.from(container.querySelectorAll('button'))
+      .find(value => value.textContent?.includes('Export PDF'))!;
+    await act(async () => button.click());
+    await act(async () => root.render(render([])));
+    await act(async () => pending.reject(new Error('save failed')));
+
+    expect(container.querySelector('[role="status"]')?.textContent)
+      .toContain('Could not create the PDF. Please try again.');
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to export packing list PDF',
+      expect.any(Error),
+    );
     await act(async () => root.unmount());
   });
 });

@@ -16,12 +16,18 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
   const [physicallyPacked, setPhysicallyPacked] = useState<string[]>([]);
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
   const resetExportTimerRef = useRef<number | null>(null);
+  const exportInFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  useEffect(() => () => {
-    if (resetExportTimerRef.current !== null) {
-      window.clearTimeout(resetExportTimerRef.current);
-    }
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (resetExportTimerRef.current !== null) {
+        window.clearTimeout(resetExportTimerRef.current);
+      }
+    };
   }, []);
 
   const togglePhysicallyPacked = (id: string) => {
@@ -31,10 +37,11 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
   };
 
   const handleExportPdf = async () => {
-    if (exportStatus === 'preparing') return;
+    if (exportInFlightRef.current) return;
     if (resetExportTimerRef.current !== null) {
       window.clearTimeout(resetExportTimerRef.current);
     }
+    exportInFlightRef.current = true;
     setExportStatus('preparing');
     try {
       await exportPackingListPdf({
@@ -42,14 +49,20 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
         items: packedItems,
         physicallyPackedIds: physicallyPacked,
       });
+      if (!isMountedRef.current) return;
       setExportStatus('downloaded');
       resetExportTimerRef.current = window.setTimeout(() => {
-        setExportStatus('idle');
+        if (isMountedRef.current) {
+          setExportStatus('idle');
+        }
         resetExportTimerRef.current = null;
       }, 2000);
     } catch (error) {
+      if (!isMountedRef.current) return;
       console.error('Failed to export packing list PDF', error);
       setExportStatus('error');
+    } finally {
+      exportInFlightRef.current = false;
     }
   };
 
@@ -375,19 +388,19 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
               </div>
             </div>
           )}
-          {exportStatus === 'error' && (
-            <p
-              role="status"
-              style={{
-                color: 'var(--error)',
-                fontSize: '0.75rem',
-                lineHeight: 1.4,
-              }}
-            >
-              Could not create the PDF. Please try again.
-            </p>
-          )}
         </div>
+      )}
+      {exportStatus === 'error' && (
+        <p
+          role="status"
+          style={{
+            color: 'var(--error)',
+            fontSize: '0.75rem',
+            lineHeight: 1.4,
+          }}
+        >
+          Could not create the PDF. Please try again.
+        </p>
       )}
     </aside>
   );
