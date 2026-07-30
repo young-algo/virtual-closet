@@ -7,14 +7,33 @@ import {
   planPackingPdfPages,
   type PackingPdfItem,
 } from './packingPdfLayout';
+import { drawPackingPdfText } from './packingPdfText';
 
 type ImageNormalizer = (source: string) => Promise<string>;
 
 const IMAGE_SIZE = 360;
+const IMAGE_NORMALIZATION_CONCURRENCY = 3;
 
 export const normalizeImageToJpeg = (source: string): Promise<string> =>
   new Promise((resolve, reject) => {
     const image = new Image();
+    const cleanup = () => {
+      image.onload = null;
+      image.onerror = null;
+      try {
+        image.src = '';
+      } catch {
+        // The handlers are already detached, which is the critical release.
+      }
+    };
+    const resolveAndCleanup = (value: string) => {
+      cleanup();
+      resolve(value);
+    };
+    const rejectAndCleanup = (error: unknown) => {
+      cleanup();
+      reject(error);
+    };
     image.decoding = 'async';
     image.onload = () => {
       try {
@@ -23,7 +42,7 @@ export const normalizeImageToJpeg = (source: string): Promise<string> =>
         canvas.height = IMAGE_SIZE;
         const context = canvas.getContext('2d');
         if (!context) {
-          reject(new Error('Canvas is unavailable'));
+          rejectAndCleanup(new Error('Canvas is unavailable'));
           return;
         }
 
@@ -39,27 +58,40 @@ export const normalizeImageToJpeg = (source: string): Promise<string> =>
           width,
           height,
         );
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
+        resolveAndCleanup(canvas.toDataURL('image/jpeg', 0.82));
       } catch (error) {
-        reject(error);
+        rejectAndCleanup(error);
       }
     };
-    image.onerror = () => reject(new Error(`Could not load image: ${source}`));
-    image.src = source;
+    image.onerror = () => rejectAndCleanup(new Error(`Could not load image: ${source}`));
+    try {
+      image.src = source;
+    } catch (error) {
+      rejectAndCleanup(error);
+    }
   });
 
 export const loadPackingItemImages = async (
   items: PackingPdfItem[],
   normalizer: ImageNormalizer = normalizeImageToJpeg,
 ): Promise<Map<string, string | null>> => {
-  const resolved = await Promise.all(
-    items.map(async item => {
+  const resolved: Array<readonly [string, string | null]> = new Array(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
       try {
-        return [item.id, await normalizer(item.image)] as const;
+        resolved[index] = [item.id, await normalizer(item.image)] as const;
       } catch {
-        return [item.id, null] as const;
+        resolved[index] = [item.id, null] as const;
       }
-    }),
+    }
+  };
+  const workerCount = Math.min(IMAGE_NORMALIZATION_CONCURRENCY, items.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, () => worker()),
   );
   return new Map(resolved);
 };
@@ -117,9 +149,15 @@ export const exportPackingListPdf = async ({
     doc.setTextColor(30, 29, 26);
 
     if (pageIndex === 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(24);
-      doc.text(title, MARGIN_X, 52);
+      drawPackingPdfText(doc, {
+        text: title,
+        x: MARGIN_X,
+        y: 52,
+        maxWidth: PAGE_WIDTH - MARGIN_X * 2,
+        fontSize: 24,
+        fontStyle: 'bold',
+        color: [30, 29, 26],
+      });
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.setTextColor(105, 102, 94);
@@ -127,17 +165,27 @@ export const exportPackingListPdf = async ({
       doc.setDrawColor(197, 193, 182);
       doc.line(MARGIN_X, 92, PAGE_WIDTH - MARGIN_X, 92);
     } else {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(105, 102, 94);
-      doc.text(title, MARGIN_X, 34);
+      drawPackingPdfText(doc, {
+        text: title,
+        x: MARGIN_X,
+        y: 34,
+        maxWidth: PAGE_WIDTH - MARGIN_X * 2,
+        fontSize: 9,
+        fontStyle: 'normal',
+        color: [105, 102, 94],
+      });
     }
 
     for (const heading of page.headings) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(85, 82, 74);
-      doc.text(heading.category.toUpperCase(), MARGIN_X, heading.y + 11);
+      drawPackingPdfText(doc, {
+        text: heading.category.toUpperCase(),
+        x: MARGIN_X,
+        y: heading.y + 11,
+        maxWidth: PAGE_WIDTH - MARGIN_X * 2,
+        fontSize: 9,
+        fontStyle: 'bold',
+        color: [85, 82, 74],
+      });
     }
 
     for (const card of page.cards) {
@@ -152,11 +200,17 @@ export const exportPackingListPdf = async ({
 
       const textX = imageX + IMAGE_BOX + 12;
       drawCheck(doc, textX, card.y + 18, packingItemIsChecked(card.item.id, packedIds));
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(36, 35, 31);
-      const lines = doc.splitTextToSize(card.item.name, CARD_WIDTH - IMAGE_BOX - 38);
-      doc.text(lines.slice(0, 4), textX, card.y + 44);
+      drawPackingPdfText(doc, {
+        text: card.item.name,
+        x: textX,
+        y: card.y + 44,
+        maxWidth: CARD_WIDTH - IMAGE_BOX - 38,
+        maxLines: 4,
+        lineHeight: 12,
+        fontSize: 10,
+        fontStyle: 'normal',
+        color: [36, 35, 31],
+      });
     }
 
     doc.setFont('helvetica', 'normal');

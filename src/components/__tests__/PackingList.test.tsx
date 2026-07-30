@@ -3,11 +3,20 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PackingList from '../PackingList';
-import { exportPackingListPdf } from '../../features/packing/packingPdf';
 
-vi.mock('../../features/packing/packingPdf', () => ({
+const packingPdfModule = vi.hoisted(() => ({
+  beforeResolve: vi.fn<() => Promise<void>>(async () => undefined),
   exportPackingListPdf: vi.fn(),
 }));
+
+vi.mock('../../features/packing/packingPdf', async () => {
+  await packingPdfModule.beforeResolve();
+  return {
+    exportPackingListPdf: packingPdfModule.exportPackingListPdf,
+  };
+});
+
+const exportPackingListPdf = packingPdfModule.exportPackingListPdf;
 
 const packedItems = [{
   id: 'shirt-1',
@@ -45,6 +54,36 @@ describe('PackingList PDF export', () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     container.remove();
+  });
+
+  it('does not start generation when unmounted during lazy module loading', async () => {
+    const moduleLoad = deferred();
+    packingPdfModule.beforeResolve.mockReturnValue(moduleLoad.promise);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PackingList
+          packedItems={packedItems}
+          onRemoveItem={() => undefined}
+          onClearList={() => undefined}
+        />,
+      );
+    });
+
+    const button = Array.from(container.querySelectorAll('button'))
+      .find(value => value.textContent?.includes('Export PDF'))!;
+    await act(async () => button.click());
+    expect(button.textContent).toContain('Preparing PDF');
+    expect(button.disabled).toBe(true);
+    expect(packingPdfModule.beforeResolve).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.unmount());
+    await act(async () => {
+      moduleLoad.resolve();
+      await Promise.resolve();
+    });
+
+    expect(exportPackingListPdf).not.toHaveBeenCalled();
   });
 
   it('disables the action while preparing and reports a completed download', async () => {
@@ -189,5 +228,59 @@ describe('PackingList PDF export', () => {
       expect.any(Error),
     );
     await act(async () => root.unmount());
+  });
+
+  it('keeps successful completion visible while clear confirmation is open', async () => {
+    const pending = deferred();
+    vi.mocked(exportPackingListPdf).mockReturnValue(pending.promise);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PackingList
+          packedItems={packedItems}
+          onRemoveItem={() => undefined}
+          onClearList={() => undefined}
+        />,
+      );
+    });
+
+    const exportButton = Array.from(container.querySelectorAll('button'))
+      .find(value => value.textContent?.includes('Export PDF'))!;
+    const clearButton = container.querySelector<HTMLButtonElement>(
+      'button[title="Clear packing list"]',
+    )!;
+    await act(async () => exportButton.click());
+    await act(async () => clearButton.click());
+    expect(container.textContent).toContain('Are you sure you want to clear your suitcase?');
+
+    await act(async () => pending.resolve());
+
+    expect(container.textContent).toContain('Downloaded');
+    await act(async () => root.unmount());
+  });
+
+  it('clears an already-scheduled success reset when unmounted', async () => {
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    vi.mocked(exportPackingListPdf).mockResolvedValue(undefined);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <PackingList
+          packedItems={packedItems}
+          onRemoveItem={() => undefined}
+          onClearList={() => undefined}
+        />,
+      );
+    });
+
+    const exportButton = Array.from(container.querySelectorAll('button'))
+      .find(value => value.textContent?.includes('Export PDF'))!;
+    await act(async () => exportButton.click());
+    expect(exportButton.textContent).toContain('Downloaded');
+
+    await act(async () => root.unmount());
+
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(expect.anything());
   });
 });

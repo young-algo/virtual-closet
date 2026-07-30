@@ -18,8 +18,9 @@ export const packingPdfFilename = (tripName: string): string => {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  const boundedSlug = slug.slice(0, 80).replace(/-+$/g, '');
 
-  return slug ? `${slug}-packing-list.pdf` : 'packing-list.pdf';
+  return boundedSlug ? `${boundedSlug}-packing-list.pdf` : 'packing-list.pdf';
 };
 
 export const groupPackingItems = (

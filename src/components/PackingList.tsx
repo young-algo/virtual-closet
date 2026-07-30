@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Trash2, Check, Download, AlertCircle } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
-import { exportPackingListPdf } from '../features/packing/packingPdf';
 
 type ExportStatus = 'idle' | 'preparing' | 'downloaded' | 'error';
 
@@ -38,17 +37,20 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
 
   const handleExportPdf = async () => {
     if (exportInFlightRef.current) return;
+    const exportSnapshot = {
+      tripName,
+      items: [...packedItems],
+      physicallyPackedIds: [...physicallyPacked],
+    };
     if (resetExportTimerRef.current !== null) {
       window.clearTimeout(resetExportTimerRef.current);
     }
     exportInFlightRef.current = true;
     setExportStatus('preparing');
     try {
-      await exportPackingListPdf({
-        tripName,
-        items: packedItems,
-        physicallyPackedIds: physicallyPacked,
-      });
+      const { exportPackingListPdf } = await import('../features/packing/packingPdf');
+      if (!isMountedRef.current) return;
+      await exportPackingListPdf(exportSnapshot);
       if (!isMountedRef.current) return;
       setExportStatus('downloaded');
       resetExportTimerRef.current = window.setTimeout(() => {
@@ -400,6 +402,18 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
           }}
         >
           Could not create the PDF. Please try again.
+        </p>
+      )}
+      {exportStatus === 'downloaded' && (totalItems === 0 || showClearConfirm) && (
+        <p
+          role="status"
+          style={{
+            color: 'var(--accent-primary)',
+            fontSize: '0.75rem',
+            lineHeight: 1.4,
+          }}
+        >
+          Downloaded
         </p>
       )}
     </aside>

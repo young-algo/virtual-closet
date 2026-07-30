@@ -27,6 +27,11 @@ describe('packingPdfFilename', () => {
   it('falls back when the trip name has no usable characters', () => {
     expect(packingPdfFilename(' / ! ')).toBe('packing-list.pdf');
   });
+
+  it('caps a long filename slug before appending the packing-list suffix', () => {
+    expect(packingPdfFilename('A'.repeat(200)))
+      .toBe(`${'a'.repeat(80)}-packing-list.pdf`);
+  });
 });
 
 describe('groupPackingItems', () => {
