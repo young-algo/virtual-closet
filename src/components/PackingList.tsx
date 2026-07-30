@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { Trash2, Check, Share2, AlertCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Trash2, Check, Download, AlertCircle } from 'lucide-react';
 import type { ClosetItem } from './ClosetGrid';
+import { exportPackingListPdf } from '../features/packing/packingPdf';
+
+type ExportStatus = 'idle' | 'preparing' | 'downloaded' | 'error';
 
 interface PackingListProps {
   packedItems: ClosetItem[];
@@ -11,8 +14,15 @@ interface PackingListProps {
 export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveItem, onClearList }) => {
   const [tripName, setTripName] = useState('Vacation Trip');
   const [physicallyPacked, setPhysicallyPacked] = useState<string[]>([]);
-  const [copied, setCopied] = useState(false);
+  const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
+  const resetExportTimerRef = useRef<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  useEffect(() => () => {
+    if (resetExportTimerRef.current !== null) {
+      window.clearTimeout(resetExportTimerRef.current);
+    }
+  }, []);
 
   const togglePhysicallyPacked = (id: string) => {
     setPhysicallyPacked(prev =>
@@ -20,16 +30,27 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
     );
   };
 
-  const handleExportList = () => {
-    const header = `Packing List: ${tripName}\n\n`;
-    const body = packedItems.map(item => {
-      const isPhysicallyPacked = physicallyPacked.includes(item.id) ? '[x]' : '[ ]';
-      return `${isPhysicallyPacked} ${item.name} (${item.brand} / ${item.color})`;
-    }).join('\n');
-
-    navigator.clipboard.writeText(header + (body || 'No items added yet.'));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleExportPdf = async () => {
+    if (exportStatus === 'preparing') return;
+    if (resetExportTimerRef.current !== null) {
+      window.clearTimeout(resetExportTimerRef.current);
+    }
+    setExportStatus('preparing');
+    try {
+      await exportPackingListPdf({
+        tripName,
+        items: packedItems,
+        physicallyPackedIds: physicallyPacked,
+      });
+      setExportStatus('downloaded');
+      resetExportTimerRef.current = window.setTimeout(() => {
+        setExportStatus('idle');
+        resetExportTimerRef.current = null;
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to export packing list PDF', error);
+      setExportStatus('error');
+    }
   };
 
   // Group packed items by category
@@ -246,7 +267,8 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
           {!showClearConfirm ? (
             <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
               <button
-                onClick={handleExportList}
+                onClick={handleExportPdf}
+                disabled={exportStatus === 'preparing'}
                 className="tap-target"
                 style={{
                   flex: 1,
@@ -257,7 +279,8 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                   color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   fontWeight: 500,
-                  cursor: 'pointer',
+                  cursor: exportStatus === 'preparing' ? 'wait' : 'pointer',
+                  opacity: exportStatus === 'preparing' ? 0.65 : 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -265,8 +288,14 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                   transition: 'var(--transition-fast)'
                 }}
               >
-                {copied ? <Check size={16} style={{ color: 'var(--accent-primary)' }} /> : <Share2 size={16} />}
-                {copied ? 'Copied!' : 'Export List'}
+                {exportStatus === 'downloaded'
+                  ? <Check size={16} style={{ color: 'var(--accent-primary)' }} />
+                  : <Download size={16} />}
+                {exportStatus === 'preparing'
+                  ? 'Preparing PDF…'
+                  : exportStatus === 'downloaded'
+                    ? 'Downloaded'
+                    : 'Export PDF'}
               </button>
 
               <button
@@ -345,6 +374,18 @@ export const PackingList: React.FC<PackingListProps> = ({ packedItems, onRemoveI
                 </button>
               </div>
             </div>
+          )}
+          {exportStatus === 'error' && (
+            <p
+              role="status"
+              style={{
+                color: 'var(--error)',
+                fontSize: '0.75rem',
+                lineHeight: 1.4,
+              }}
+            >
+              Could not create the PDF. Please try again.
+            </p>
           )}
         </div>
       )}
