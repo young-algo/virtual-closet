@@ -17,28 +17,32 @@ export const normalizeImageToJpeg = (source: string): Promise<string> =>
     const image = new Image();
     image.decoding = 'async';
     image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = IMAGE_SIZE;
-      canvas.height = IMAGE_SIZE;
-      const context = canvas.getContext('2d');
-      if (!context) {
-        reject(new Error('Canvas is unavailable'));
-        return;
-      }
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = IMAGE_SIZE;
+        canvas.height = IMAGE_SIZE;
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('Canvas is unavailable'));
+          return;
+        }
 
-      context.fillStyle = '#f1efe8';
-      context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
-      const scale = Math.min(IMAGE_SIZE / image.naturalWidth, IMAGE_SIZE / image.naturalHeight);
-      const width = image.naturalWidth * scale;
-      const height = image.naturalHeight * scale;
-      context.drawImage(
-        image,
-        (IMAGE_SIZE - width) / 2,
-        (IMAGE_SIZE - height) / 2,
-        width,
-        height,
-      );
-      resolve(canvas.toDataURL('image/jpeg', 0.82));
+        context.fillStyle = '#f1efe8';
+        context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+        const scale = Math.min(IMAGE_SIZE / image.naturalWidth, IMAGE_SIZE / image.naturalHeight);
+        const width = image.naturalWidth * scale;
+        const height = image.naturalHeight * scale;
+        context.drawImage(
+          image,
+          (IMAGE_SIZE - width) / 2,
+          (IMAGE_SIZE - height) / 2,
+          width,
+          height,
+        );
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      } catch (error) {
+        reject(error);
+      }
     };
     image.onerror = () => reject(new Error(`Could not load image: ${source}`));
     image.src = source;
